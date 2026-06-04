@@ -1,0 +1,5 @@
+export const CASE_STATUS = {
+  ACTIVE: "ACTIVE",
+  EXECUTION: "EXECUTION",
+  CLOSED: "CLOSED",
+};

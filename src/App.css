@@ -1,0 +1,254 @@
+:root {
+  --primary: #2c3e50;
+  --primary-dark: #1f2d3a;
+
+  --wood: #6b4f3b;
+  --wood-dark: #4a3426;
+
+  --gold: #b08d57;
+
+  --background: #f5f7fb;
+  --card-bg: #ffffff;
+
+  --text-main: #2b2b2b;
+  --text-light: #666;
+
+  --border: #e6e6e6;
+}
+
+/* =========================
+   GLOBAL RESET + RTL CORE
+========================= */
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  font-family: Arial, sans-serif;
+
+  background: var(--background);
+  color: var(--text-main);
+
+  overflow-x: hidden;
+
+  /* 🔥 أهم تعديل في المشروع كله */
+  direction: rtl;
+  text-align: right;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+img {
+  max-width: 100%;
+}
+
+/* =========================
+   APP LAYOUT FIX
+========================= */
+
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+
+  /* RTL support */
+  flex-direction: row;
+}
+
+.main-area {
+  flex: 1;
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+
+  transition: 0.3s ease;
+}
+
+.page-content {
+  padding: 20px;
+  flex: 1;
+
+  background: var(--background);
+}
+
+/* =========================
+   CARD SYSTEM
+========================= */
+
+.card {
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 20px;
+
+  border-right: 5px solid var(--wood);
+
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+
+  transition: 0.2s;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+}
+
+/* =========================
+   HEADINGS
+========================= */
+
+h1, h2, h3 {
+  color: var(--wood-dark);
+  margin-top: 0;
+}
+
+/* =========================
+   BUTTON SYSTEM (GLOBAL FIX)
+========================= */
+
+button {
+  border: none;
+  cursor: pointer;
+  transition: 0.2s;
+  font-family: inherit;
+}
+
+.btn-primary {
+  background: var(--wood);
+  color: white;
+  padding: 10px 16px;
+  border-radius: 8px;
+}
+
+.btn-primary:hover {
+  background: var(--wood-dark);
+}
+
+.btn-secondary {
+  background: var(--primary);
+  color: white;
+  padding: 10px 16px;
+  border-radius: 8px;
+}
+
+.btn-secondary:hover {
+  background: var(--primary-dark);
+}
+
+/* =========================
+   TABLE SYSTEM (FIXED RTL)
+========================= */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+}
+
+th {
+  background: var(--primary);
+  color: white;
+  text-align: right;
+}
+
+td {
+  text-align: right;
+}
+
+th, td {
+  padding: 12px;
+  border: 1px solid var(--border);
+}
+
+/* =========================
+   INPUT SYSTEM
+========================= */
+
+input, select, textarea {
+  width: 100%;
+  padding: 10px;
+
+  border: 1px solid var(--border);
+  border-radius: 8px;
+
+  font-family: inherit;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--wood);
+}
+
+/* =========================
+   PROFILE PAGE
+========================= */
+
+.profile-page {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.profile-title {
+  margin-bottom: 20px;
+  font-size: 24px;
+}
+
+.profile-card {
+  background: var(--card-bg);
+  border-radius: 14px;
+  padding: 20px;
+
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  border-right: 5px solid var(--wood);
+}
+
+.profile-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-row:last-child {
+  border-bottom: none;
+}
+
+.profile-row span {
+  color: var(--text-light);
+  font-size: 14px;
+}
+
+.profile-row strong {
+  color: var(--text-main);
+}
+
+.profile-row small {
+  font-size: 12px;
+  word-break: break-all;
+  color: var(--text-light);
+}
+
+/* =========================
+   RESPONSIVE
+========================= */
+
+@media (max-width: 768px) {
+  .page-content {
+    padding: 12px;
+  }
+
+  h1 { font-size: 1.7rem; }
+  h2 { font-size: 1.3rem; }
+
+  table {
+    display: block;
+    overflow-x: auto;
+  }
+}

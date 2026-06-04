@@ -1,0 +1,52 @@
+.topbar {
+  height: 60px;
+  width: 100%;
+  background: #ffffff;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 0 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-icon {
+  color: #555;
+}
+
+.username-btn {
+  background: none;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  font-weight: bold;
+  color: #222;
+}
+
+.username-btn:hover {
+  color: #007bff;
+}
+
+.role-badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  color: white;
+}
+
+.role-badge.admin {
+  background: #dc3545;
+}
+
+.role-badge.lawyer {
+  background: #007bff;
+}
+
+.role-badge.client {
+  background: #28a745;
+}
