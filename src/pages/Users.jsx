@@ -20,13 +20,14 @@ export default function Users() {
   const [search, setSearch] = useState("");
 
   // =====================
-  // حماية الصفحة
+  // حماية الصفحة (FIXED)
   // =====================
   if (!userData) {
     return <p style={{ padding: 20 }}>جاري التحقق...</p>;
   }
 
-  if (userData.role !== "admin") {
+  // 🔥 FIX: بدل role === admin فقط
+  if (!userData.isOfficeAdmin) {
     return (
       <p style={{ padding: 20, color: "red", fontWeight: "bold" }}>
         🚫 غير مسموح بالدخول
@@ -59,7 +60,7 @@ export default function Users() {
 
       setUsers(data);
     } catch (error) {
-      console.error(error);
+      console.error("Fetch Users Error:", error);
       alert("حدث خطأ أثناء تحميل المستخدمين");
     } finally {
       setLoading(false);
@@ -95,7 +96,9 @@ export default function Users() {
     try {
       await deleteDoc(doc(db, "users", id));
 
-      setUsers((prev) => prev.filter((u) => u.id !== id));
+      setUsers((prev) =>
+        prev.filter((u) => u.id !== id)
+      );
     } catch (error) {
       console.error(error);
       alert("خطأ أثناء حذف المستخدم");

@@ -35,7 +35,7 @@ export default function Sidebar({ open = true }) {
         <Item to="/" icon="📊" label="لوحة التحكم" />
       </PermissionGate>
 
-      {/* 🔔 NOTIFICATIONS (قبل القضايا مباشرة) */}
+      {/* 🔔 NOTIFICATIONS */}
       <Link
         to="/notifications"
         style={{
@@ -43,16 +43,12 @@ export default function Sidebar({ open = true }) {
           alignItems: "center",
           justifyContent: open ? "flex-start" : "center",
           gap: open ? "10px" : "0",
-
           padding: "12px",
           marginBottom: "6px",
-
           borderRadius: "8px",
           textDecoration: "none",
-
           color: hasNotifications ? "#ff4d4f" : "white",
           background: hasNotifications ? "#3a1f1f" : "transparent",
-
           fontSize: "14px",
           transition: "0.2s",
         }}
@@ -80,6 +76,9 @@ export default function Sidebar({ open = true }) {
           </>
         )}
       </Link>
+
+      {/* 💬 CHAT SYSTEM (UPDATED) */}
+      <Item to="/chat" icon="💬" label="الرسائل" />
 
       {/* ⚖️ CASES */}
       <PermissionGate permission="cases">

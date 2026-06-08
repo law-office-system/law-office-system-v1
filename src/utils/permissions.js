@@ -7,6 +7,8 @@ export const ROLES = {
 export const PERMISSIONS = {
   dashboard: [ROLES.ADMIN, ROLES.LAWYER],
 
+  users: [ROLES.ADMIN],
+
   cases: [ROLES.ADMIN, ROLES.LAWYER],
 
   addCase: [ROLES.ADMIN, ROLES.LAWYER],
@@ -17,11 +19,7 @@ export const PERMISSIONS = {
 
   archive: [ROLES.ADMIN, ROLES.LAWYER],
 
-  caseDetails: [
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.CLIENT,
-  ],
+  caseDetails: [ROLES.ADMIN, ROLES.LAWYER, ROLES.CLIENT],
 
   addSession: [ROLES.ADMIN, ROLES.LAWYER],
 
@@ -31,5 +29,28 @@ export const PERMISSIONS = {
 
   finance: [ROLES.ADMIN],
 
-  users: [ROLES.ADMIN],
+  profile: [ROLES.ADMIN, ROLES.LAWYER, ROLES.CLIENT],
+
+  chat: [ROLES.ADMIN, ROLES.LAWYER, ROLES.CLIENT],
 };
+
+/* =========================
+   🔐 canAccess FUNCTION
+========================= */
+export function canAccess(pageKey, userRole) {
+  if (!userRole || !pageKey) return false;
+
+  const role = userRole.trim();
+
+  // 👑 super admin bypass
+  if (role === "super_admin") return true;
+
+  const allowed = PERMISSIONS?.[pageKey];
+
+  if (!Array.isArray(allowed)) {
+    console.warn(`Missing permissions for: ${pageKey}`);
+    return false;
+  }
+
+  return allowed.includes(role);
+}

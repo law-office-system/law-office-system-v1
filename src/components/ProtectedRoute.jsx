@@ -1,6 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { canAccess } from "../utils/auth";
+import { canAccess } from "../utils/permissions";
 
 export default function ProtectedRoute({
   children,
@@ -9,41 +9,59 @@ export default function ProtectedRoute({
 }) {
   const { user, userData, loading } = useAuth();
 
-  // ================= LOADING =================
+  // 🔵 تحميل auth
   if (loading) {
-    return <p>⏳ جاري التحميل...</p>;
+    return (
+      <div style={{ padding: 20 }}>
+        ⏳ جاري تحميل النظام...
+      </div>
+    );
   }
 
-  // ================= NOT LOGGED IN =================
+  // 🔴 غير مسجل دخول
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  // ================= WAIT UNTIL USERDATA READY =================
-  if (!userData || !userData.role) {
-    return <p>⏳ جاري تحميل بيانات المستخدم...</p>;
+  // 🟡 لو user موجود لكن البيانات لم تصل بعد
+  if (!userData) {
+    return (
+      <div style={{ padding: 20 }}>
+        ⏳ جاري تحميل بيانات المستخدم...
+        <br />
+        <small>إذا استمرت هذه الرسالة، هناك مشكلة في Firestore users</small>
+      </div>
+    );
+  }
+
+  // 🟡 حماية إضافية
+  if (!userData.role) {
+    return (
+      <div style={{ padding: 20 }}>
+        ⏳ جاري تجهيز الصلاحيات...
+      </div>
+    );
   }
 
   const role = userData.role;
 
-  // ================= SUPER ADMIN =================
+  // 👑 Super Admin فقط
   if (superOnly && role !== "super_admin") {
-    return (
-      <div style={{ padding: 20 }}>
-        <h2>🚫 هذه الصفحة خاصة بالسوبر أدمن</h2>
-        <p>صلاحيتك: {role}</p>
-      </div>
-    );
+    return <div style={{ padding: 20 }}>🚫 Super Admin Only</div>;
   }
 
-  // ================= NORMAL ACCESS =================
-  if (!superOnly && page && !canAccess(page, role)) {
-    return (
-      <div style={{ padding: 20 }}>
-        <h2>🚫 ليس لديك صلاحية</h2>
-        <p>صلاحيتك: {role}</p>
-      </div>
-    );
+  // 🔐 صلاحيات
+  if (!superOnly && page) {
+    const allowed = canAccess(page, role);
+
+    if (!allowed) {
+      return (
+        <div style={{ padding: 20 }}>
+          🚫 ليس لديك صلاحية
+          <div>Role: {role}</div>
+        </div>
+      );
+    }
   }
 
   return children;

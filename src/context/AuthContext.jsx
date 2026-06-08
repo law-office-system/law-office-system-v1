@@ -16,22 +16,24 @@ export function AuthProvider({ children }) {
     const unsubAuth = onAuthStateChanged(auth, async (u) => {
       setLoading(true);
 
-      // ================= NOT LOGGED IN =================
-      if (!u) {
-        setUser(null);
-        setUserData(null);
-        setLoading(false);
-        return;
-      }
-
-      setUser(u);
-
-      const ref = doc(db, "users", u.uid);
-
       try {
-        // ================= CHECK USER EXISTS =================
+        // 🔴 no user
+        if (!u) {
+          setUser(null);
+          setUserData(null);
+          setLoading(false);
+          return;
+        }
+
+        setUser(u);
+
+        const ref = doc(db, "users", u.uid);
+
         const snap = await getDoc(ref);
 
+        console.log("USER DOC EXISTS:", snap.exists());
+
+        // 🔵 create user if not exists
         if (!snap.exists()) {
           await setDoc(ref, {
             uid: u.uid,
@@ -43,42 +45,57 @@ export function AuthProvider({ children }) {
           });
         }
 
-        // ================= REALTIME USER DATA =================
-        unsubscribeFirestore = onSnapshot(ref, (docSnap) => {
-          if (!docSnap.exists()) {
+        unsubscribeFirestore = onSnapshot(
+          ref,
+          (docSnap) => {
+            console.log("USER SNAPSHOT:", docSnap.data());
+
+            if (!docSnap.exists()) {
+              setUserData({
+                uid: u.uid,
+                role: "client",
+                officeId: null,
+                officeStatus: "active",
+                isOfficeAdmin: false,
+              });
+              setLoading(false);
+              return;
+            }
+
+            const data = docSnap.data();
+
+            setUserData({
+              uid: u.uid,
+              ...data,
+              role: data.role || "client",
+              officeId: data.officeId || null,
+              officeStatus: data.officeStatus || "active",
+              isOfficeAdmin:
+                data.role === "admin" ||
+                data.role === "lawyer",
+            });
+
+            setLoading(false);
+          },
+          (error) => {
+            console.error("SNAPSHOT ERROR:", error);
+
             setUserData({
               uid: u.uid,
               role: "client",
               officeId: null,
               officeStatus: "active",
+              isOfficeAdmin: false,
             });
 
             setLoading(false);
-            return;
           }
-
-          const data = docSnap.data();
-
-          setUserData({
-            uid: u.uid,
-            ...data,
-            role: data.role || "client",
-            officeId: data.officeId || null,
-            officeStatus: data.officeStatus || "active",
-          });
-
-          setLoading(false);
-        });
+        );
       } catch (err) {
-        console.error("AuthContext Error:", err);
+        console.error("AUTH CONTEXT ERROR:", err);
 
-        setUserData({
-          uid: u.uid,
-          role: "client",
-          officeId: null,
-          officeStatus: "active",
-        });
-
+        setUser(null);
+        setUserData(null);
         setLoading(false);
       }
     });
@@ -89,7 +106,6 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  // ================= LOGOUT =================
   const logout = async () => {
     await signOut(auth);
   };

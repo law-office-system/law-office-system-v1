@@ -35,7 +35,7 @@ export default function Login() {
       if (role === "super_admin") {
         navigate("/super-admin");
       } else if (role === "admin") {
-        navigate("/dashboard");
+        navigate("/");
       } else if (role === "lawyer") {
         navigate("/cases");
       } else {
