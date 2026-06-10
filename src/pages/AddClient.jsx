@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { db } from "../firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import Button from "../components/ui/Button";
 
 export default function AddClient() {
-  const { userData } = useAuth(); // 🔥 توحيد Auth
+  const { userData } = useAuth(); 
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
@@ -14,6 +15,8 @@ export default function AddClient() {
     address: "",
     phone1: "",
     phone2: "",
+    powerType: "رسمي عام قضايا", // النوع الافتراضي الأكثر شيوعاً
+    customPowerType: "",         // في حال اختيار نوع آخر وكتابته يدوياً
     powerNumber: "",
     powerLetter: "",
     powerYear: "",
@@ -29,50 +32,58 @@ export default function AddClient() {
     }));
   };
 
-  // ================= SUBMIT (MULTI-TENANT FIX) =================
+  // ================= SUBMIT (MULTI-TENANT & POWER TYPE FIXED) =================
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!userData?.officeId) {
-      return alert("لا يوجد مكتب مرتبط بالمستخدم");
+      return alert("عفواً، لا يوجد مكتب مرتبط بحسابك الحالي.");
     }
+
+    if (!form.fullName.trim()) {
+      return alert("يرجى إدخال الاسم الرباعي للموكل.");
+    }
+
+    // تحديد نوع التوكيل النهائي بناءً على القائمة المنسدلة
+    const finalPowerType = form.powerType === "other" 
+      ? form.customPowerType.trim() 
+      : form.powerType;
 
     try {
       setLoading(true);
-
       const clientId = crypto.randomUUID();
 
       await setDoc(doc(db, "clientProfiles", clientId), {
         uid: clientId,
 
         // ================= BASIC DATA =================
-        fullName: form.fullName,
-        nationalId: form.nationalId,
-        address: form.address,
-        phone1: form.phone1,
-        phone2: form.phone2,
+        fullName: form.fullName.trim(),
+        nationalId: form.nationalId.trim(),
+        address: form.address.trim(),
+        phone1: form.phone1.trim(),
+        phone2: form.phone2.trim(),
 
         // ================= POWER OF ATTORNEY =================
         powerOfAttorney: {
-          number: form.powerNumber,
-          letter: form.powerLetter,
-          year: form.powerYear,
-          office: form.powerOffice,
+          type: finalPowerType || "غير محدد", // تخزين نوع التوكيل بدقة
+          number: form.powerNumber.trim(),
+          letter: form.powerLetter.trim(),
+          year: form.powerYear.trim(),
+          office: form.powerOffice.trim(),
         },
 
-        // ================= MULTI-TENANT (IMPORTANT) =================
+        // ================= MULTI-TENANT =================
         officeId: userData.officeId,
 
-        createdAt: new Date().toISOString(),
+        createdAt: serverTimestamp(),
         createdBy: userData?.uid || null,
       });
 
-      alert("✔ تم حفظ الموكل بنجاح");
-
+      alert("✔ تم حفظ الموكل بنجاح وبناء ملفه المركزي.");
       navigate("/clients");
     } catch (err) {
       console.error("Add client error:", err);
-      alert("حدث خطأ أثناء الحفظ");
+      alert("حدث خطأ أثناء حفظ ملف الموكل: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -80,121 +91,198 @@ export default function AddClient() {
 
   return (
     <div style={styles.page}>
-      <h2>👤 إضافة موكل جديد</h2>
+      
+      {/* HEADER TITLE */}
+      <div style={styles.headerCard}>
+        <h2 style={styles.pageTitle}>👤 إضافة موكل جديد بالمنظومة</h2>
+        <p style={styles.pageSubtitle}>تأسيس الملف التعريفي المركزي للموكل، وإدراج بيانات الاتصال والتوكيلات الرسمية.</p>
+      </div>
 
-      <form style={styles.card} onSubmit={handleSubmit}>
-        <input
-          name="fullName"
-          placeholder="الاسم الرباعي"
-          onChange={handleChange}
-          style={styles.input}
-        />
+      {/* COMPREHENSIVE REGISTRATION FORM */}
+      <form style={styles.formBox} onSubmit={handleSubmit}>
+        
+        <h3 style={styles.sectionTitle}>📋 البيانات الأساسية والشخصية</h3>
+        
+        <div style={styles.row}>
+          <div style={{ ...styles.field, flex: 2 }}>
+            <label style={styles.label}>الاسم الرباعي للموكل *</label>
+            <input
+              name="fullName"
+              type="text"
+              required
+              placeholder="أدخل الاسم رباعي كاملاً كما في بطاقة الرقم القومي"
+              value={form.fullName}
+              onChange={handleChange}
+              style={styles.textInput}
+            />
+          </div>
 
-        <input
-          name="nationalId"
-          placeholder="الرقم القومي"
-          onChange={handleChange}
-          style={styles.input}
-        />
+          <div style={styles.field}>
+            <label style={styles.label}>الرقم القومي (14 رقم)</label>
+            <input
+              name="nationalId"
+              type="text"
+              maxLength={14}
+              placeholder="29800000000000"
+              value={form.nationalId}
+              onChange={handleChange}
+              style={styles.textInput}
+            />
+          </div>
+        </div>
 
-        <input
-          name="address"
-          placeholder="العنوان"
-          onChange={handleChange}
-          style={styles.input}
-        />
+        <div style={styles.row}>
+          <div style={{ ...styles.field, flex: 2 }}>
+            <label style={styles.label}>محل الإقامة / العنوان الحالي</label>
+            <input
+              name="address"
+              type="text"
+              placeholder="المحافظة، المركز، الشارع، ورقم العقار"
+              value={form.address}
+              onChange={handleChange}
+              style={styles.textInput}
+            />
+          </div>
 
-        <input
-          name="phone1"
-          placeholder="رقم الهاتف 1"
-          onChange={handleChange}
-          style={styles.input}
-        />
+          <div style={styles.field}>
+            <label style={styles.label}>رقم الهاتف الأساسي</label>
+            <input
+              name="phone1"
+              type="tel"
+              placeholder="01000000000"
+              value={form.phone1}
+              onChange={handleChange}
+              style={styles.textInput}
+            />
+          </div>
 
-        <input
-          name="phone2"
-          placeholder="رقم الهاتف 2"
-          onChange={handleChange}
-          style={styles.input}
-        />
+          <div style={styles.field}>
+            <label style={styles.label}>رقم الهاتف البديل (إن وجد)</label>
+            <input
+              name="phone2"
+              type="tel"
+              placeholder="01200000000"
+              value={form.phone2}
+              onChange={handleChange}
+              style={styles.textInput}
+            />
+          </div>
+        </div>
 
-        <hr />
+        <hr style={styles.divider} />
 
-        <h3>📄 بيانات التوكيل</h3>
+        <h3 style={styles.sectionTitle}>📄 بيانات التوكيل القضائي الرسمي</h3>
 
-        <input
-          name="powerNumber"
-          placeholder="رقم التوكيل"
-          onChange={handleChange}
-          style={styles.input}
-        />
+        <div style={styles.row}>
+          <div style={styles.field}>
+            <label style={styles.label}>نوع التوكيل</label>
+            <select
+              name="powerType"
+              value={form.powerType}
+              onChange={handleChange}
+              style={styles.selectInput}
+            >
+              <option value="رسمي عام قضايا">⚖️ رسمي عام قضايا</option>
+              <option value="رسمي عام في القضايا والإدارة">🏢 رسمي عام قضايا وإدارة</option>
+              <option value="توكيل خاص بالمرور">🚗 توكيل خاص (مرور)</option>
+              <option value="توكيل خاص بقضية محددة">📌 توكيل خاص بقضية</option>
+              <option value="رسمي خاص بالبيع والنفس">💰 رسمي خاص (بيع ونفس)</option>
+              <option value="other">✍️ نوع آخر (كتابة يدوية)...</option>
+            </select>
+          </div>
 
-        <input
-          name="powerLetter"
-          placeholder="حرف التوكيل"
-          onChange={handleChange}
-          style={styles.input}
-        />
+          {/* يظهر هذا الحقل فقط عند اختيار "نوع آخر" من القائمة */}
+          {form.powerType === "other" && (
+            <div style={styles.field}>
+              <label style={styles.label}>اكتب نوع التوكيل يدوياً *</label>
+              <input
+                name="customPowerType"
+                type="text"
+                required
+                placeholder="مثال: توكيل خاص بالبنوك"
+                value={form.customPowerType}
+                onChange={handleChange}
+                style={styles.textInput}
+              />
+            </div>
+          )}
 
-        <input
-          name="powerYear"
-          placeholder="سنة التوكيل"
-          onChange={handleChange}
-          style={styles.input}
-        />
+          <div style={styles.field}>
+            <label style={styles.label}>رقم التوكيل</label>
+            <input
+              name="powerNumber"
+              type="text"
+              placeholder="مثال: 1234"
+              value={form.powerNumber}
+              onChange={handleChange}
+              style={styles.textInput}
+            />
+          </div>
 
-        <input
-          name="powerOffice"
-          placeholder="مكتب التوثيق"
-          onChange={handleChange}
-          style={styles.input}
-        />
+          <div style={styles.field}>
+            <label style={styles.label}>حرف التوكيل</label>
+            <input
+              name="powerLetter"
+              type="text"
+              placeholder="مثال: أ / ب / ج"
+              value={form.powerLetter}
+              onChange={handleChange}
+              style={styles.textInput}
+            />
+          </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          style={styles.btn}
-        >
-          {loading ? "جاري الحفظ..." : "حفظ الموكل"}
-        </button>
+          <div style={styles.field}>
+            <label style={styles.label}>سنة التوكيل</label>
+            <input
+              name="powerYear"
+              type="text"
+              maxLength={4}
+              placeholder="2026"
+              value={form.powerYear}
+              onChange={handleChange}
+              style={styles.textInput}
+            />
+          </div>
+
+          <div style={{ ...styles.field, flex: 1.5 }}>
+            <label style={styles.label}>مكتب توثيق الشهر العقاري</label>
+            <input
+              name="powerOffice"
+              type="text"
+              placeholder="مثال: توثيق بندر الفيوم"
+              value={form.powerOffice}
+              onChange={handleChange}
+              style={styles.textInput}
+            />
+          </div>
+        </div>
+
+        {/* ACTIONS BAR */}
+        <div style={styles.actionRow}>
+          <Button variant="primary" type="submit" disabled={loading} style={styles.saveBtn}>
+            {loading ? "💾 جاري تأسيس وحفظ الملف..." : "👤 اعتماد وتأسيس ملف الموكل"}
+          </Button>
+        </div>
+
       </form>
     </div>
   );
 }
 
-/* ================= STYLES ================= */
-
+/* ================= COMPREHENSIVE LUXURY STYLES ================= */
 const styles = {
-  page: {
-    padding: 20,
-    direction: "rtl",
-    background: "#f5f7fb",
-    minHeight: "100vh",
-  },
-
-  card: {
-    background: "#fff",
-    padding: 20,
-    borderRadius: 12,
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
-    maxWidth: 600,
-  },
-
-  input: {
-    padding: 10,
-    borderRadius: 8,
-    border: "1px solid #ddd",
-  },
-
-  btn: {
-    padding: 10,
-    background: "#2c3e50",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8,
-    cursor: "pointer",
-    fontWeight: "600",
-  },
+  page: { padding: 20, direction: "rtl", background: "#f5f7fb", minHeight: "100vh", fontFamily: "Segoe UI, Tahoma" },
+  headerCard: { background: "#ffffff", padding: "16px", borderRadius: "12px", border: "1px solid #e2e8f0", marginBottom: "15px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" },
+  pageTitle: { margin: "0 0 4px 0", fontSize: "20px", color: "#1e293b" },
+  pageSubtitle: { margin: 0, fontSize: "13px", color: "#64748b" },
+  formBox: { background: "#fff", padding: 20, borderRadius: 12, marginBottom: 15, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" },
+  sectionTitle: { margin: "0 0 15px 0", fontSize: "15px", color: "#475569", fontWeight: "600", borderRight: "4px solid #2c3e50", paddingRight: "8px" },
+  row: { display: "flex", gap: 12, flexWrap: "wrap", marginBottom: "15px", alignItems: "flex-end" },
+  field: { flex: 1, minWidth: "160px", display: "flex", flexDirection: "column", gap: "5px" },
+  label: { fontSize: "12px", fontWeight: "600", color: "#64748b" },
+  textInput: { padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none", fontSize: "13px", width: "100%", boxSizing: "border-box" },
+  selectInput: { padding: "9.5px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none", fontSize: "13px", background: "#fff", width: "100%", boxSizing: "border-box" },
+  divider: { border: "none", borderTop: "1px dashed #e2e8f0", margin: "20px 0" },
+  actionRow: { display: "flex", justifyContent: "flex-end", marginTop: "25px" },
+  saveBtn: { padding: "12px 30px", fontWeight: "600", fontSize: "14px", minWidth: "220px" }
 };

@@ -1,13 +1,9 @@
 import { useEffect, useState } from "react";
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-} from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { parseDate } from "../utils/date";
 import Card from "../components/ui/Card";
 
 export default function Cases() {
@@ -23,6 +19,9 @@ export default function Cases() {
 
   const { userData } = useAuth();
   const navigate = useNavigate();
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
   /* ================= RESPONSIVE DETECTION ================= */
   useEffect(() => {
@@ -71,7 +70,6 @@ export default function Cases() {
         );
 
         const snap = await getDocs(q);
-
         const map = {};
 
         snap.docs.forEach((d) => {
@@ -87,32 +85,63 @@ export default function Cases() {
     loadClients();
   }, [userData]);
 
-  const getClientName = (id) =>
-    clientsMap[id]?.fullName ||
-    clientsMap[id]?.name ||
-    "موكل غير معروف";
+  /* =================🛡️ دالة مستقرة تقرأ المعرف النصي أو كائن الموكل المطور ================= */
+  const getClientName = (clientItem) => {
+    if (!clientItem) return "موكل غير معروف";
+    // إذا كان الموكل مخزناً كنص (النظام القديم) أو كائن يحتوي على id (النظام الجديد)
+    const id = typeof clientItem === "object" ? clientItem.id : clientItem;
+    return clientsMap[id]?.fullName || clientsMap[id]?.name || "موكل غير معروف";
+  };
 
-  /* ================= FILTER ================= */
+  /* ================= دالة استخراج وتنسيق أقرب جلسة مستقبلية فقط ================= */
+  const getUpcomingSessionString = (sessions) => {
+    if (!Array.isArray(sessions) || sessions.length === 0) return "";
+
+    const upcomingSessions = sessions
+      .map(s => parseDate(s.nextSessionDate || s.date))
+      .filter(dateObj => dateObj && dateObj >= today);
+
+    if (upcomingSessions.length === 0) return "";
+
+    upcomingSessions.sort((a, b) => a - b);
+    const nextDate = upcomingSessions[0];
+
+    const yyyy = nextDate.getFullYear();
+    const mm = String(nextDate.getMonth() + 1).padStart(2, "0");
+    const dd = String(nextDate.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  /* ================= FILTER & SEARCH PROCESSING ================= */
   const filtered = cases.filter((c) => {
-    const text = search.toLowerCase();
+    const text = search.toLowerCase().trim();
 
-    const caseNumber =
-      `${c.caseYear || ""}/${c.caseSerial || ""}`.toLowerCase();
+    const caseNumber = `${c.caseYear || ""}/${c.caseSerial || c.caseNumber || ""}`.toLowerCase();
+    const courtName = (c.court || "").toLowerCase();
+    const caseTypeStr = (c.caseType || "").toLowerCase();
 
-    const clientNames = (c.clients || [])
-      .map((id) => getClientName(id))
+    // استخراج أسماء الموكلين للبحث النصي
+    const clientNamesStr = (c.clients || [])
+      .map((item) => getClientName(item))
       .join(" ")
       .toLowerCase();
 
-    const opponentNames = (c.opponents || [])
-      .map((x) => (typeof x === "object" ? x.name : x))
+    // استخراج أسماء الخصوم وعناوينهم للبحث
+    const opponentNamesStr = (c.opponents || [])
+      .map((x) => (typeof x === "object" ? `${x.name || ""} ${x.address || ""}` : x))
       .join(" ")
       .toLowerCase();
+
+    // 📅 استخراج التاريخ الموحد للجلسة المستقبلية للبحث به
+    const upcomingSessionDateStr = getUpcomingSessionString(c.sessions);
 
     const searchMatch =
       caseNumber.includes(text) ||
-      clientNames.includes(text) ||
-      opponentNames.includes(text);
+      clientNamesStr.includes(text) ||
+      opponentNamesStr.includes(text) ||
+      courtName.includes(text) ||
+      caseTypeStr.includes(text) ||
+      upcomingSessionDateStr.includes(text); // تفعيل البحث بالتاريخ
 
     const statusMatch =
       statusFilter === "ALL" || c.status === statusFilter;
@@ -130,190 +159,177 @@ export default function Cases() {
   const types = [...new Set(cases.map((c) => c.caseType).filter(Boolean))];
 
   return (
-    <div style={styles.page}>
+    <div style={{ ...styles.page, direction: "rtl" }}>
 
-      {/* HEADER */}
+      {/* HEADER & CONTROLS */}
       <div style={styles.card}>
-        <h1>📊 القضايا</h1>
-
+        <h1 style={{ margin: "0 0 10px 0", fontSize: "22px", color: "#1e3a8a" }}>📊 أرشيف وجدول كافة القضايا</h1>
+        
         <input
-          placeholder="ابحث..."
+          placeholder="ابحث برقم القضية، الموكل، الخصم، المحكمة، أو تاريخ الجلسة القادمة (YYYY-MM-DD)..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={styles.search}
         />
 
         <div style={styles.filters}>
-          <select onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="ALL">كل الحالات</option>
-            <option value="ACTIVE">نشطة</option>
-            <option value="EXECUTION">تنفيذ</option>
-            <option value="CLOSED">منتهية</option>
+          <select onChange={(e) => setStatusFilter(e.target.value)} style={styles.select}>
+            <option value="ALL">كل الحالات القانونية</option>
+            <option value="ACTIVE">قضايا نشطة / متداولة</option>
+            <option value="EXECUTION">قضايا قيد التنفيذ</option>
+            <option value="CLOSED">قضايا منتهية / مؤرشفة</option>
           </select>
 
-          <select onChange={(e) => setCourtFilter(e.target.value)}>
-            <option value="ALL">كل المحاكم</option>
+          <select onChange={(e) => setCourtFilter(e.target.value)} style={styles.select}>
+            <option value="ALL">كل المحاكم المختصة</option>
             {courts.map((c, i) => (
-              <option key={i}>{c}</option>
+              <option key={i} value={c}>{c}</option>
             ))}
           </select>
 
-          <select onChange={(e) => setTypeFilter(e.target.value)}>
-            <option value="ALL">كل الأنواع</option>
+          <select onChange={(e) => setTypeFilter(e.target.value)} style={styles.select}>
+            <option value="ALL">كل أنواع الدعاوى</option>
             {types.map((t, i) => (
-              <option key={i}>{t}</option>
+              <option key={i} value={t}>{t}</option>
             ))}
           </select>
         </div>
       </div>
 
-      {/* ================= MOBILE ================= */}
+      {/* ================= MOBILE VIEW ================= */}
       {isMobile ? (
         <div style={styles.grid}>
-          {filtered.map((c) => (
-            <Card key={c.id}>
-              <Link to={`/case/${c.id}`} style={styles.link}>
-                ⚖ {c.caseYear}/{c.caseSerial}
-              </Link>
+          {filtered.length === 0 ? (
+            <p style={styles.noData}>لا توجد دعاوى مطابقة لخيارات البحث الفعلي.</p>
+          ) : (
+            filtered.map((c) => {
+              const sessionStr = getUpcomingSessionString(c.sessions);
+              return (
+                <Card key={c.id}>
+                  <div style={{ marginBottom: "8px" }}>
+                    <Link to={`/case/${c.id}`} style={styles.link}>
+                      ⚖️ ق رقم: {c.caseSerial || c.caseNumber || "بدون رقم"} / {c.caseYear || "-"}
+                    </Link>
+                  </div>
 
-              <p>📌 النوع: {c.caseType || "-"}</p>
-              <p>🏛 المحكمة: {c.court || "-"}</p>
-              <p>⚖ الحالة: {c.status || "-"}</p>
+                  <p style={styles.mobileText}>📌 <strong>النوع:</strong> {c.caseType || "-"}</p>
+                  <p style={styles.mobileText}>🏛️ <strong>المحكمة:</strong> {c.court || "-"}</p>
+                  <p style={styles.mobileText}>💼 <strong>الحالة:</strong> {c.status === "ACTIVE" ? "نشطة" : c.status === "EXECUTION" ? "تنفيذ" : "منتهية"}</p>
 
-              <p>
-                👤 الموكلين:{" "}
-                {(c.clients || [])
-                  .map((id) => getClientName(id))
-                  .join(", ") || "-"}
-              </p>
+                  <p style={styles.mobileText}>
+                    👤 <strong>الموكلين:</strong>{" "}
+                    {(c.clients || []).map((item) => getClientName(item)).join(", ") || "-"}
+                  </p>
 
-              <p>
-                ⚔ الخصوم:{" "}
-                {(c.opponents || [])
-                  .map((x) =>
-                    typeof x === "object" ? x.name : x
-                  )
-                  .join(", ") || "-"}
-              </p>
-            </Card>
-          ))}
+                  <p style={styles.mobileText}>
+                    ⚔️ <strong>الخصوم:</strong>{" "}
+                    {(c.opponents || []).map((x) => typeof x === "object" ? x.name : x).join(", ") || "-"}
+                  </p>
+
+                  {sessionStr && (
+                    <p style={{ ...styles.mobileText, color: "#b45309", fontWeight: "600" }}>
+                      📅 <strong>رول الجلسة:</strong> <span style={{ background: "#fef3c7", padding: "2px 6px", borderRadius: "4px", fontFamily: "monospace" }}>{sessionStr}</span>
+                    </p>
+                  )}
+                </Card>
+              );
+            })
+          )}
         </div>
       ) : (
-        /* ================= DESKTOP ================= */
-        <div style={styles.card}>
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th>رقم</th>
-                <th>النوع</th>
-                <th>المحكمة</th>
-                <th>الحالة</th>
-                <th>الموكلين</th>
-                <th>الخصوم</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filtered.map((c) => (
-                <tr
-                  key={c.id}
-                  onClick={() => navigate(`/case/${c.id}`)}
-                >
-                  <td>
-                    <Link to={`/case/${c.id}`} style={styles.link}>
-                      {c.caseYear}/{c.caseSerial}
-                    </Link>
-                  </td>
-
-                  <td>{c.caseType || "-"}</td>
-                  <td>{c.court || "-"}</td>
-                  <td>{c.status || "-"}</td>
-
-                  <td>
-                    {(c.clients || []).map((id, i) => (
-                      <span key={i} style={styles.tag}>
-                        {getClientName(id)}
-                      </span>
-                    ))}
-                  </td>
-
-                  <td>
-                    {(c.opponents || []).map((x, i) => (
-                      <span key={i} style={styles.tagDanger}>
-                        {typeof x === "object" ? x.name : x}
-                      </span>
-                    ))}
-                  </td>
+        /* ================= DESKTOP VIEW ================= */
+        <div style={styles.cardTable}>
+          {filtered.length === 0 ? (
+            <p style={styles.noData}>لا توجد دعاوى مطابقة لخيارات البحث الفعلي.</p>
+          ) : (
+            <table style={styles.table}>
+              <thead>
+                <tr style={styles.thRow}>
+                  <th style={styles.th}>رقم السجل القضائي</th>
+                  <th style={styles.th}>نوع الدعوى</th>
+                  <th style={styles.th}>المحكمة المقيدة بها</th>
+                  <th style={styles.th}>الحالة</th>
+                  <th style={styles.th}>الموكلين والصفة</th>
+                  <th style={styles.th}>الخصوم المقابلين</th>
+                  <th style={styles.th}>ميعاد أقرب جلسة</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+
+              <tbody>
+                {filtered.map((c) => {
+                  const sessionStr = getUpcomingSessionString(c.sessions);
+                  return (
+                    <tr key={c.id} onClick={() => navigate(`/case/${c.id}`)} style={styles.tr}>
+                      <td style={styles.td}>
+                        <Link to={`/case/${c.id}`} style={styles.link}>
+                          {c.caseSerial || c.caseNumber || "بدون رقم"} / {c.caseYear || "-"}
+                        </Link>
+                      </td>
+
+                      <td style={styles.td}>{c.caseType || "-"}</td>
+                      <td style={styles.td}>{c.court || "-"}</td>
+                      <td style={styles.td}>
+                        <span style={{
+                          padding: "4px 8px", borderRadius: "6px", fontSize: "12px", fontWeight: "600",
+                          background: c.status === "CLOSED" ? "#ffe0e0" : c.status === "EXECUTION" ? "#fff7e0" : "#e0f7e9",
+                          color: c.status === "CLOSED" ? "#dc2626" : c.status === "EXECUTION" ? "#f59e0b" : "#16a34a"
+                        }}>
+                          {c.status === "ACTIVE" ? "نشطة" : c.status === "EXECUTION" ? "تنفيذ" : "منتهية"}
+                        </span>
+                      </td>
+
+                      <td style={styles.td}>
+                        {(c.clients || []).map((item, i) => (
+                          <span key={i} style={styles.tag}>
+                            {getClientName(item)}
+                          </span>
+                        ))}
+                      </td>
+
+                      <td style={styles.td}>
+                        {(c.opponents || []).map((x, i) => (
+                          <span key={i} style={styles.tagDanger}>
+                            {typeof x === "object" ? x.name : x}
+                          </span>
+                        ))}
+                      </td>
+
+                      <td style={{ ...styles.td, fontFamily: "monospace", fontWeight: "600", color: "#b45309" }}>
+                        {sessionStr ? (
+                          <span style={{ background: "#fef3c7", padding: "3px 6px", borderRadius: "4px" }}>{sessionStr}</span>
+                        ) : (
+                          <span style={{ color: "#94a3b8", fontWeight: "normal" }}>-</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-/* ================= STYLES ================= */
-
+/* ================= MODERNIZED COMPREHENSIVE STYLES ================= */
 const styles = {
-  page: {
-    padding: 16,
-    background: "#f5f7fb",
-    minHeight: "100vh",
-  },
-
-  card: {
-    background: "#fff",
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    borderRight: "5px solid #6b4f3b",
-  },
-
-  search: {
-    width: "100%",
-    padding: 10,
-    marginTop: 10,
-  },
-
-  filters: {
-    display: "flex",
-    gap: 10,
-    flexWrap: "wrap",
-    marginTop: 10,
-  },
-
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-  },
-
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-    gap: 12,
-  },
-
-  link: {
-    fontWeight: "bold",
-    textDecoration: "none",
-    color: "#2c3e50",
-  },
-
-  tag: {
-    background: "#eaf2ff",
-    padding: "4px 8px",
-    borderRadius: 12,
-    fontSize: 12,
-    marginRight: 4,
-  },
-
-  tagDanger: {
-    background: "#ffe6e6",
-    padding: "4px 8px",
-    borderRadius: 12,
-    fontSize: 12,
-    marginRight: 4,
-  },
+  page: { padding: "16px", background: "#f5f7fb", minHeight: "100vh", fontFamily: "Segoe UI, Tahoma" },
+  card: { background: "#fff", padding: "16px", borderRadius: "12px", marginBottom: "12px", borderRight: "5px solid #1e3a8a", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" },
+  cardTable: { background: "#fff", padding: "16px", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", overflowX: "auto" },
+  search: { width: "100%", padding: "11px", borderRadius: "8px", border: "1px solid #cbd5e1", boxSizing: "border-box", outline: "none", fontSize: "14px" },
+  filters: { display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "12px" },
+  select: { padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", color: "#334155", fontSize: "13px", fontWeight: "500" },
+  table: { width: "100%", borderCollapse: "collapse", textAlign: "right" },
+  thRow: { borderBottom: "2px solid #e2e8f0" },
+  th: { padding: "12px 10px", fontSize: "14px", color: "#475569", fontWeight: "600" },
+  tr: { borderBottom: "1px solid #f1f5f9", cursor: "pointer", transition: "background 0.2s" },
+  td: { padding: "12px 10px", fontSize: "14px", color: "#334155" },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "14px" },
+  link: { fontWeight: "bold", textDecoration: "none", color: "#2563eb" },
+  mobileText: { margin: "6px 0", fontSize: "13px", color: "#334155" },
+  noData: { textAlign: "center", color: "#64748b", padding: "20px", fontSize: "14px", margin: 0 },
+  tag: { background: "#eaf2ff", padding: "4px 8px", borderRadius: "6px", fontSize: "12px", marginRight: "4px", color: "#1e40af", fontWeight: "500", display: "inline-block", marginBottom: "3px" },
+  tagDanger: { background: "#ffe6e6", padding: "4px 8px", borderRadius: "6px", fontSize: "12px", marginRight: "4px", color: "#b91c1c", fontWeight: "500", display: "inline-block", marginBottom: "3px" },
 };
