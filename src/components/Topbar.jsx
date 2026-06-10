@@ -1,53 +1,49 @@
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { FaUserCircle, FaBars } from "react-icons/fa";
+import { FaUserCircle, FaBars, FaSignOutAlt, FaBuilding } from "react-icons/fa";
 
 export default function Topbar({ open, setOpen }) {
   const { user, userData, logout } = useAuth();
   const navigate = useNavigate();
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
-  if (!user) {
-    return <div style={styles.noUser}>NO USER FOUND</div>;
-  }
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  if (!user) return null;
 
   return (
     <div style={styles.topbar}>
-
-      {/* LEFT */}
+      {/* جهة اليمين */}
       <div style={styles.left}>
-        <button
-          onClick={() => setOpen(!open)}
-          style={styles.menuBtn}
-        >
-          <FaBars />
+        <button onClick={() => setOpen(!open)} style={styles.menuBtn}>
+          <FaBars size={20} />
         </button>
-
-        <button onClick={logout} style={styles.logoutBtn}>
-          🚪 خروج
-        </button>
+        {!isMobile && <h3 style={styles.brandTitle}>نظام إدارة المكتب</h3>}
       </div>
 
-      {/* RIGHT */}
+      {/* جهة اليسار */}
       <div style={styles.right}>
-
-        <FaUserCircle size={22} style={{ color: "#555" }} />
-
-        {/* 🏢 زر المكتب */}
-        <button
-          onClick={() => navigate("/office")}
-          style={styles.username}
-        >
-          🏢 {userData?.officeName || "المكتب"}
+        <button onClick={() => navigate("/office")} style={styles.officeBtn}>
+          <FaBuilding size={14} /> 
+          {!isMobile && (userData?.officeName || "المكتب")}
         </button>
 
-        <span style={styles.role(userData?.role)}>
-          {userData?.role === "admin"
-            ? "👑 Admin"
-            : userData?.role === "lawyer"
-            ? "⚖️ Lawyer"
-            : "👤 Client"}
-        </span>
+        {!isMobile && (
+          <span style={styles.role(userData?.role)}>
+            {userData?.role === "admin" ? "👑 Admin" : userData?.role === "lawyer" ? "⚖️ Lawyer" : "👤 Client"}
+          </span>
+        )}
 
+        <div style={styles.divider} />
+
+        <button onClick={logout} style={styles.logoutBtn}>
+          <FaSignOutAlt /> {!isMobile && "خروج"}
+        </button>
       </div>
     </div>
   );
@@ -55,68 +51,37 @@ export default function Topbar({ open, setOpen }) {
 
 const styles = {
   topbar: {
-    height: 60,
-    width: "100%",
+    height: 65,
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: "0 16px",
+    padding: "0 15px", // تقليل البادنج قليلاً للموبايل
     background: "#fff",
-    borderBottom: "1px solid #eee",
+    borderBottom: "1px solid #e2e8f0",
+    boxShadow: "0 2px 4px rgba(0,0,0,0.02)",
     direction: "rtl",
   },
-
-  left: {
-    display: "flex",
-    gap: 10,
-    alignItems: "center",
+  left: { display: "flex", alignItems: "center", gap: "10px" },
+  right: { display: "flex", alignItems: "center", gap: "8px" },
+  
+  menuBtn: { background: "none", border: "none", cursor: "pointer", color: "#64748b", padding: "5px" },
+  brandTitle: { fontSize: "15px", fontWeight: "600", color: "#1e293b", margin: 0 },
+  
+  officeBtn: { 
+    background: "#f1f5f9", border: "none", padding: "6px 10px", 
+    borderRadius: "20px", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px", fontSize: "13px"
   },
+  
+  divider: { width: "1px", height: "20px", background: "#e2e8f0" },
 
-  right: {
-    display: "flex",
-    gap: 12,
-    alignItems: "center",
-  },
-
-  menuBtn: {
-    background: "transparent",
-    border: "none",
-    cursor: "pointer",
-  },
-
-  logoutBtn: {
-    background: "#e74c3c",
-    color: "#fff",
-    border: "none",
-    padding: "6px 10px",
-    borderRadius: 6,
-    cursor: "pointer",
-  },
-
-  username: {
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    fontWeight: "bold",
-    fontSize: 14,
+  logoutBtn: { 
+    background: "#fee2e2", color: "#dc2626", border: "none", 
+    padding: "6px 10px", borderRadius: "8px", cursor: "pointer",
+    display: "flex", alignItems: "center", gap: "5px", fontWeight: "500", fontSize: "13px"
   },
 
   role: (role) => ({
-    padding: "4px 10px",
-    borderRadius: 12,
-    fontSize: 12,
-    color: "#fff",
-    background:
-      role === "admin"
-        ? "#dc3545"
-        : role === "lawyer"
-        ? "#007bff"
-        : "#28a745",
+    padding: "4px 8px", borderRadius: "12px", fontSize: "10px", color: "#fff",
+    background: role === "admin" ? "#dc2626" : role === "lawyer" ? "#2563eb" : "#16a34a",
   }),
-
-  noUser: {
-    padding: 10,
-    textAlign: "center",
-    background: "orange",
-  },
 };

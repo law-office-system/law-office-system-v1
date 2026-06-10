@@ -4,16 +4,13 @@ import { auth } from "../firebase";
 import PermissionGate from "./PermissionGate";
 import useNotifications from "../hooks/useNotifications";
 
-export default function Sidebar({ open = true }) {
+export default function Sidebar({ open }) {
   const location = useLocation();
   const navigate = useNavigate();
-
   const { hasNotifications, count } = useNotifications();
 
   const isActive = (path) =>
-    path === "/"
-      ? location.pathname === "/"
-      : location.pathname.startsWith(path);
+    path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -28,56 +25,24 @@ export default function Sidebar({ open = true }) {
   );
 
   return (
-    <div style={styles.sidebar(open)}>
-
+    <div style={styles.sidebar}>
       {/* 📊 DASHBOARD */}
       <PermissionGate permission="dashboard">
         <Item to="/" icon="📊" label="لوحة التحكم" />
       </PermissionGate>
 
       {/* 🔔 NOTIFICATIONS */}
-      <Link
-        to="/notifications"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: open ? "flex-start" : "center",
-          gap: open ? "10px" : "0",
-          padding: "12px",
-          marginBottom: "6px",
-          borderRadius: "8px",
-          textDecoration: "none",
-          color: hasNotifications ? "#ff4d4f" : "white",
-          background: hasNotifications ? "#3a1f1f" : "transparent",
-          fontSize: "14px",
-          transition: "0.2s",
-        }}
-      >
-        <span style={{ fontSize: "18px" }}>🔔</span>
-
+      <Link to="/notifications" style={styles.link(isActive("/notifications"), open)}>
+        <span style={styles.icon}>🔔</span>
         {open && (
-          <>
+          <div style={styles.notificationRow}>
             <span>التنبيهات</span>
-
-            {hasNotifications && (
-              <span
-                style={{
-                  marginRight: "auto",
-                  background: "red",
-                  color: "white",
-                  borderRadius: "12px",
-                  padding: "2px 6px",
-                  fontSize: "12px",
-                }}
-              >
-                {count}
-              </span>
-            )}
-          </>
+            {hasNotifications && <span style={styles.badge}>{count}</span>}
+          </div>
         )}
       </Link>
 
-      {/* 💬 CHAT SYSTEM (UPDATED) */}
+      {/* 💬 CHAT */}
       <Item to="/chat" icon="💬" label="الرسائل" />
 
       {/* ⚖️ CASES */}
@@ -99,97 +64,58 @@ export default function Sidebar({ open = true }) {
         <Item to="/finance" icon="💰" label="المالية" />
       </PermissionGate>
 
-      {/* 👥 USERS */}
-      <PermissionGate permission="users">
-        <Item to="/users" icon="👥" label="المستخدمين" />
-      </PermissionGate>
-
-      {/* 👤 PROFILE */}
-      <Item to="/profile" icon="👤" label="حسابي" />
-
-      {/* 🚪 LOGOUT */}
-      <div style={styles.logoutWrapper}>
-        <button onClick={handleLogout} style={styles.logout}>
+      {/* 👤 PROFILE & LOGOUT */}
+      <div style={styles.bottomSection}>
+        <Item to="/profile" icon="👤" label="حسابي" />
+        <button onClick={handleLogout} style={styles.logout(open)}>
           <span>🚪</span>
-          {open && <span>تسجيل الخروج</span>}
+          {open && <span>خروج</span>}
         </button>
       </div>
-
     </div>
   );
 }
 
-/* =========================
-   STYLES
-========================= */
-
 const styles = {
-  sidebar: (open) => ({
-    width: open ? 240 : 70,
-    height: "100vh",
-    background: "#1f2a36",
-
+  sidebar: {
+    height: "100%",
     display: "flex",
     flexDirection: "column",
-
     padding: "10px",
     boxSizing: "border-box",
-
-    transition: "width 0.3s ease",
-
-    overflowX: "hidden",
     overflowY: "auto",
-
-    flexShrink: 0,
-  }),
-
+    overflowX: "hidden",
+  },
   link: (active, open) => ({
     display: "flex",
     alignItems: "center",
     justifyContent: open ? "flex-start" : "center",
     gap: open ? "10px" : "0",
-
     padding: "12px",
-    marginBottom: "6px",
-
+    marginBottom: "4px",
     borderRadius: "8px",
     textDecoration: "none",
-
-    color: "white",
-    background: active ? "#34495e" : "transparent",
-
+    color: active ? "#fff" : "#94a3b8",
+    background: active ? "#334155" : "transparent",
     fontSize: "14px",
-
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    minWidth: 0,
-
     transition: "0.2s",
   }),
-
-  icon: {
-    fontSize: "18px",
-  },
-
-  logoutWrapper: {
-    marginTop: "auto",
-  },
-
-  logout: {
+  icon: { fontSize: "18px" },
+  notificationRow: { display: "flex", alignItems: "center", justifyContent: "space-between", flex: 1 },
+  badge: { background: "#ef4444", color: "white", borderRadius: "12px", padding: "2px 8px", fontSize: "10px" },
+  bottomSection: { marginTop: "auto", borderTop: "1px solid #334155", paddingTop: "10px" },
+  logout: (open) => ({
     width: "100%",
     padding: "12px",
-
-    background: "#c0392b",
-    color: "white",
-
+    background: "transparent",
+    color: "#f87171",
     border: "none",
     borderRadius: "8px",
-
     cursor: "pointer",
-
     display: "flex",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: open ? "flex-start" : "center",
     gap: "10px",
-  },
+    fontSize: "14px",
+  }),
 };

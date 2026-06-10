@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getStorage } from "firebase/storage";
-import { initializeFirestore } from "firebase/firestore";
+import { initializeFirestore, enableIndexedDbPersistence } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAZJvLlt05-fQK9ix4A_4qjY_y79mDfaNU",
@@ -14,10 +14,21 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// 🔥 مهم جدًا: بدون cache
+// تهيئة Firestore
 export const db = initializeFirestore(app, {
   ignoreUndefinedProperties: true,
   experimentalForceLongPolling: true,
+});
+
+// تفعيل التخزين المؤقت (Persistence) للعمل بدون إنترنت
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code === 'failed-precondition') {
+    // خطأ: المتصفح مفتوح في أكثر من تبويب في نفس الوقت
+    console.warn("Persistence failed: Multiple tabs are open.");
+  } else if (err.code === 'unimplemented') {
+    // خطأ: المتصفح لا يدعم هذه الميزة
+    console.warn("Persistence is not supported in this browser.");
+  }
 });
 
 export const auth = getAuth(app);
