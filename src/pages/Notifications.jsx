@@ -1,44 +1,52 @@
 import { useEffect, useState } from "react";
 import { db } from "../firebase";
-import {
-  collection,
-  onSnapshot,
-  query,
-  where,
-  orderBy,
-  doc,
-  updateDoc,
-} from "firebase/firestore";
+import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { generateNotifications } from "../utils/generateNotifications";
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState([]);
+  const [clientsMap, setClientsMap] = useState({});
   const { userData } = useAuth();
 
-  // ================= تحميل التنبيهات مع فلترة المكاتب =================
+  // 1. جلب الموكلين لإنشاء خريطة (Map) للأسماء
+  useEffect(() => {
+    if (!userData?.officeId) return;
+    const fetchClients = async () => {
+      const q = query(collection(db, "clientProfiles"), where("officeId", "==", userData.officeId));
+      const snap = await getDocs(q);
+      const map = {};
+      snap.docs.forEach(d => { map[d.id] = d.data(); });
+      setClientsMap(map);
+    };
+    fetchClients();
+  }, [userData]);
+
+  // 2. جلب القضايا وتوليد التنبيهات
   useEffect(() => {
     if (!userData?.officeId) return;
 
     const q = query(
-      collection(db, "notifications"),
-      where("officeId", "==", userData.officeId),
-      orderBy("createdAt", "desc")
+      collection(db, "cases"),
+      where("officeId", "==", userData.officeId)
     );
 
     const unsub = onSnapshot(q, (snap) => {
-      setNotifications(
-        snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-      );
+      const cases = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const generated = generateNotifications(cases);
+      setNotifications(generated);
     });
 
     return () => unsub();
   }, [userData]);
 
-  // ================= وظيفة "تحديد كمقروء" =================
-  const markAsRead = async (id, e) => {
-    e.preventDefault(); // لمنع الانتقال للرابط عند الضغط على زر
-    await updateDoc(doc(db, "notifications", id), { read: true });
+  // دالة البحث عن اسم الموكل من الخريطة
+  const getClientDisplay = (clientItem) => {
+    if (!clientItem) return "موكل";
+    // إذا كان الموكل معرفاً (String) أو كائناً يحتوي على id
+    const id = typeof clientItem === "object" ? clientItem.id : clientItem;
+    return clientsMap[id]?.fullName || clientsMap[id]?.name || "موكل";
   };
 
   const getColor = (type) => (type === "late" ? "#dc2626" : type === "today" ? "#2563eb" : "#f59e0b");
@@ -47,20 +55,20 @@ export default function Notifications() {
   return (
     <div style={styles.page}>
       <div style={styles.header}>
-        <h2>🔔 تنبيهات المكتب</h2>
+        <h2>🔔 تنبيهات المكتب اللحظية</h2>
       </div>
 
       {notifications.length === 0 ? (
         <div style={styles.empty}>لا توجد تنبيهات حالياً في أجندة المكتب.</div>
       ) : (
         <div style={styles.list}>
-          {notifications.map((n) => (
+          {notifications.map((n, index) => (
             <Link
-              key={n.id}
+              key={index}
               to={`/case/${n.caseId}`}
               style={{
                 ...styles.card,
-                background: n.read ? "#f9fafb" : getBg(n.type),
+                background: getBg(n.type),
                 borderRight: `6px solid ${getColor(n.type)}`,
               }}
             >
@@ -70,14 +78,16 @@ export default function Notifications() {
                   {n.type === "today" && "📅 "}
                   {n.message}
                 </div>
-                <div style={styles.meta}>⚖ رقم القضية: {n.caseNumber || "-"}</div>
+                
+                <div style={styles.meta}>
+                  <span>⚖ رقم القضية: {n.caseNumber}</span>
+                  {n.caseData?.court && <span style={styles.divider}> | 🏛 {n.caseData.court}</span>}
+                  {/* هنا نستخدم الدالة التي تطابق الـ ID بالاسم */}
+                  {n.caseData?.clients && n.caseData.clients.length > 0 && (
+                    <span style={styles.divider}> | 👤 {getClientDisplay(n.caseData.clients[0])}</span>
+                  )}
+                </div>
               </div>
-              
-              {!n.read && (
-                <button onClick={(e) => markAsRead(n.id, e)} style={styles.readBtn}>
-                  ✓
-                </button>
-              )}
             </Link>
           ))}
         </div>
@@ -86,7 +96,6 @@ export default function Notifications() {
   );
 }
 
-/* ================= STYLES ================= */
 const styles = {
   page: { padding: 20, direction: "rtl", background: "#f5f7fb", minHeight: "100vh" },
   header: { marginBottom: 20 },
@@ -101,17 +110,9 @@ const styles = {
     color: "#1f2937",
     boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
   },
-  content: { display: "flex", flexDirection: "column" },
+  content: { display: "flex", flexDirection: "column", gap: "4px" },
   message: { fontWeight: "bold", fontSize: 15 },
-  meta: { fontSize: 12, opacity: 0.6, marginTop: 4 },
+  meta: { fontSize: 12, color: "#64748b" },
+  divider: { marginRight: "8px" },
   empty: { padding: 40, textAlign: "center", background: "#fff", borderRadius: 10, color: "#6b7280" },
-  readBtn: {
-    background: "transparent",
-    border: "1px solid #94a3b8",
-    borderRadius: "50%",
-    width: 25,
-    height: 25,
-    cursor: "pointer",
-    fontSize: 12,
-  }
 };

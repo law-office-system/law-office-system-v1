@@ -23,8 +23,7 @@ export const generateNotifications = (cases) => {
 
     /* 🔴 متأخرة */
     if (lastDate) {
-      const diffDays =
-        (now - lastDate) / (1000 * 60 * 60 * 24);
+      const diffDays = (now - lastDate) / (1000 * 60 * 60 * 24);
 
       const hasNewSession = sessions.some(
         (s) => parseDate(s.date) > lastDate
@@ -34,8 +33,9 @@ export const generateNotifications = (cases) => {
         notifications.push({
           type: "late",
           caseId: c.id,
-          caseNumber: c.caseNumber,
+          caseNumber: c.caseNumber || (c.caseSerial ? `${c.caseSerial}/${c.caseYear}` : "-"),
           message: "⚠ لا يوجد متابعة بعد آخر جلسة",
+          caseData: c // تم إضافة كائن القضية كاملاً هنا
         });
       }
     }
@@ -51,8 +51,9 @@ export const generateNotifications = (cases) => {
         notifications.push({
           type: "today",
           caseId: c.id,
-          caseNumber: c.caseNumber,
+          caseNumber: c.caseNumber || (c.caseSerial ? `${c.caseSerial}/${c.caseYear}` : "-"),
           message: "🟡 جلسة اليوم",
+          caseData: c // تم إضافة كائن القضية كاملاً هنا
         });
       }
 
@@ -61,8 +62,9 @@ export const generateNotifications = (cases) => {
         notifications.push({
           type: "soon",
           caseId: c.id,
-          caseNumber: c.caseNumber,
+          caseNumber: c.caseNumber || (c.caseSerial ? `${c.caseSerial}/${c.caseYear}` : "-"),
           message: "🟠 جلسة خلال 24 ساعة",
+          caseData: c // تم إضافة كائن القضية كاملاً هنا
         });
       }
     });
