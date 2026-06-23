@@ -10,30 +10,32 @@ export default function NotificationBell() {
       style={{
         position: "relative",
         fontSize: "22px",
-        color: hasNotifications ? "red" : "#333",
+        color: hasNotifications ? "#dc2626" : "#374151",
         textDecoration: "none",
       }}
     >
       🔔
 
-      {hasNotifications && (
+      {count > 0 && (
         <span
           style={{
             position: "absolute",
-            top: "-5px",
-            right: "-8px",
-            background: "red",
-            color: "white",
-            borderRadius: "50%",
-            width: "18px",
+            top: "-6px",
+            right: "-10px",
+            background: "#dc2626",
+            color: "#fff",
+            borderRadius: "999px",
+            minWidth: "18px",
             height: "18px",
-            fontSize: "12px",
+            fontSize: "11px",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            fontWeight: "bold",
+            padding: "0 4px",
           }}
         >
-          {count}
+          {count > 99 ? "99+" : count}
         </span>
       )}
     </Link>

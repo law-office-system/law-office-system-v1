@@ -4,6 +4,7 @@ import { CASE_STATUS } from "../constants/caseStatus";
 export const generateNotifications = (cases) => {
   const now = new Date();
   const notifications = [];
+  const seen = new Set(); // منع التكرار
 
   const activeCases = cases.filter(
     (c) =>
@@ -20,23 +21,29 @@ export const generateNotifications = (cases) => {
     );
 
     const lastDate = parseDate(sorted[0].date);
+    const caseId = c.id;
 
-    /* 🔴 متأخرة */
+    // 🔴 متأخرة
     if (lastDate) {
       const diffDays = (now - lastDate) / (1000 * 60 * 60 * 24);
 
-      const hasNewSession = sessions.some(
-        (s) => parseDate(s.date) > lastDate
-      );
+      if (diffDays > 3) {
+        const key = `${caseId}-late`;
 
-      if (diffDays > 1 && !hasNewSession) {
-        notifications.push({
-          type: "late",
-          caseId: c.id,
-          caseNumber: c.caseNumber || (c.caseSerial ? `${c.caseSerial}/${c.caseYear}` : "-"),
-          message: "⚠ لا يوجد متابعة بعد آخر جلسة",
-          caseData: c // تم إضافة كائن القضية كاملاً هنا
-        });
+        if (!seen.has(key)) {
+          seen.add(key);
+
+          notifications.push({
+            id: key,
+            type: "late",
+            caseId,
+            caseNumber:
+              c.caseNumber ||
+              (c.caseSerial ? `${c.caseSerial}/${c.caseYear}` : "-"),
+            message: "⚠ لا يوجد متابعة بعد آخر جلسة",
+            caseData: c,
+          });
+        }
       }
     }
 
@@ -45,27 +52,46 @@ export const generateNotifications = (cases) => {
       if (!d) return;
 
       const diff = (d - now) / (1000 * 60 * 60 * 24);
+      const isToday = d.toDateString() === now.toDateString();
 
-      /* 🟡 اليوم */
-      if (d.toDateString() === now.toDateString()) {
-        notifications.push({
-          type: "today",
-          caseId: c.id,
-          caseNumber: c.caseNumber || (c.caseSerial ? `${c.caseSerial}/${c.caseYear}` : "-"),
-          message: "🟡 جلسة اليوم",
-          caseData: c // تم إضافة كائن القضية كاملاً هنا
-        });
+      // 🟡 اليوم
+      if (isToday) {
+        const key = `${caseId}-${s.date}-today`;
+
+        if (!seen.has(key)) {
+          seen.add(key);
+
+          notifications.push({
+            id: key,
+            type: "today",
+            caseId,
+            caseNumber:
+              c.caseNumber ||
+              (c.caseSerial ? `${c.caseSerial}/${c.caseYear}` : "-"),
+            message: "🟡 جلسة اليوم",
+            caseData: c,
+          });
+        }
       }
 
-      /* 🟠 خلال 24 ساعة */
+      // 🟠 خلال 24 ساعة
       if (diff > 0 && diff <= 1) {
-        notifications.push({
-          type: "soon",
-          caseId: c.id,
-          caseNumber: c.caseNumber || (c.caseSerial ? `${c.caseSerial}/${c.caseYear}` : "-"),
-          message: "🟠 جلسة خلال 24 ساعة",
-          caseData: c // تم إضافة كائن القضية كاملاً هنا
-        });
+        const key = `${caseId}-${s.date}-soon`;
+
+        if (!seen.has(key)) {
+          seen.add(key);
+
+          notifications.push({
+            id: key,
+            type: "soon",
+            caseId,
+            caseNumber:
+              c.caseNumber ||
+              (c.caseSerial ? `${c.caseSerial}/${c.caseYear}` : "-"),
+            message: "🟠 جلسة خلال 24 ساعة",
+            caseData: c,
+          });
+        }
       }
     });
   });
