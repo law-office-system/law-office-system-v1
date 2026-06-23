@@ -24,7 +24,7 @@ import OfficeRoomsManagement from "./pages/OfficeRoomsManagement";
 import Finance from "./pages/Finance";
 import CaseFinance from "./pages/CaseFinance";
 
-import LandingPage from "./pages/LandingPage";
+import Home from "./pages/Home";
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -225,8 +225,8 @@ export default function App() {
               element={<OfficeRoomsManagement />}
             />
 
-            <Route path="/landing" element={<LandingPage />} />
-            
+            <Route path="/home" element={<Home />} />
+
             {/* PROFILE */}
             <Route
               path="profile"
