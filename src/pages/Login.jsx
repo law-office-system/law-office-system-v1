@@ -1,8 +1,13 @@
 import { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
 import { useNavigate, Link } from "react-router-dom";
 import { auth, db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
+
+import {
+  signInWithEmailAndPassword,
+  setPersistence,
+  browserLocalPersistence,
+} from "firebase/auth";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -18,6 +23,11 @@ export default function Login() {
 
     try {
       setLoading(true);
+
+      await setPersistence(
+        auth,
+        browserLocalPersistence
+      );
 
       const result = await signInWithEmailAndPassword(
         auth,
@@ -54,7 +64,13 @@ export default function Login() {
     <div style={page}>
       <div style={card}>
         <h2>⚖️ تسجيل الدخول</h2>
-        <p style={{ marginBottom: 15, color: "#cbd5e1" }}>
+
+        <p
+          style={{
+            marginBottom: 15,
+            color: "#cbd5e1",
+          }}
+        >
           نظام إدارة مكتب المحاماة
         </p>
 
@@ -74,11 +90,21 @@ export default function Login() {
             style={input}
           />
 
-          <button type="submit" disabled={loading} style={button}>
-            {loading ? "جاري الدخول..." : "تسجيل الدخول"}
+          <button
+            type="submit"
+            disabled={loading}
+            style={button}
+          >
+            {loading
+              ? "جاري الدخول..."
+              : "تسجيل الدخول"}
           </button>
 
-          {error && <p style={errorStyle}>{error}</p>}
+          {error && (
+            <p style={errorStyle}>
+              {error}
+            </p>
+          )}
         </form>
 
         <p style={footer}>
@@ -99,7 +125,8 @@ const page = {
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
-  background: "linear-gradient(135deg, #0f172a, #1e293b, #334155)",
+  background:
+    "linear-gradient(135deg, #0f172a, #1e293b, #334155)",
   direction: "rtl",
   padding: 20,
 };

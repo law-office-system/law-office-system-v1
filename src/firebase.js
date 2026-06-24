@@ -38,11 +38,16 @@ export const auth = getAuth(app);
 // ================= STORAGE =================
 export const storage = getStorage(app);
 
-// ================= MESSAGING (SAFE MODE) =================
+// ================= MESSAGING =================
 export let messaging = null;
 
 isSupported().then((supported) => {
   if (supported) {
     messaging = getMessaging(app);
+    console.log("✅ Firebase Messaging Ready");
+  } else {
+    console.warn("⚠️ Firebase Messaging not supported");
   }
 });
+
+export default app;

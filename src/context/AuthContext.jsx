@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db } from "../firebase";
 import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
+import { enablePushNotifications } from "../utils/pushNotifications";
 
 const AuthContext = createContext();
 
@@ -14,10 +15,15 @@ export function AuthProvider({ children }) {
     let unsubscribeFirestore = null;
 
     const unsubAuth = onAuthStateChanged(auth, async (u) => {
+      console.log(
+        "AUTH STATE:",
+        u ? "LOGGED IN" : "LOGGED OUT"
+      );
+
       setLoading(true);
 
       try {
-        // 🔴 no user
+        // لا يوجد مستخدم مسجل دخول
         if (!u) {
           setUser(null);
           setUserData(null);
@@ -33,7 +39,7 @@ export function AuthProvider({ children }) {
 
         console.log("USER DOC EXISTS:", snap.exists());
 
-        // 🔵 create user if not exists
+        // إنشاء سجل المستخدم إذا لم يكن موجوداً
         if (!snap.exists()) {
           await setDoc(ref, {
             uid: u.uid,
@@ -58,11 +64,18 @@ export function AuthProvider({ children }) {
                 officeStatus: "active",
                 isOfficeAdmin: false,
               });
+
               setLoading(false);
               return;
             }
 
             const data = docSnap.data();
+
+            console.log("FCM CHECK", {
+              permission: Notification.permission,
+              hasToken: !!data.fcmToken,
+              fcmToken: data.fcmToken,
+            });
 
             setUserData({
               uid: u.uid,
@@ -74,6 +87,18 @@ export function AuthProvider({ children }) {
                 data.role === "admin" ||
                 data.role === "lawyer",
             });
+
+            // ================= PUSH NOTIFICATIONS =================
+            if (
+              Notification.permission !== "denied" &&
+              !data.fcmToken
+            ) {
+              console.log(
+                "🚀 Calling enablePushNotifications"
+              );
+
+              enablePushNotifications(u.uid);
+            }
 
             setLoading(false);
           },
@@ -94,15 +119,17 @@ export function AuthProvider({ children }) {
       } catch (err) {
         console.error("AUTH CONTEXT ERROR:", err);
 
-        setUser(null);
-        setUserData(null);
+        // لا نمسح المستخدم عند الخطأ المؤقت
         setLoading(false);
       }
     });
 
     return () => {
+      if (unsubscribeFirestore) {
+        unsubscribeFirestore();
+      }
+
       unsubAuth();
-      if (unsubscribeFirestore) unsubscribeFirestore();
     };
   }, []);
 

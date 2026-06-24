@@ -11,11 +11,13 @@ import { useAuth } from "../context/AuthContext";
 
 export default function useNotifications() {
   const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
   const { userData } = useAuth();
 
   useEffect(() => {
     if (!userData?.officeId) {
       setNotifications([]);
+      setLoading(false);
       return;
     }
 
@@ -32,45 +34,32 @@ export default function useNotifications() {
       }));
 
       setNotifications(data);
+      setLoading(false);
     });
 
     return () => unsub();
   }, [userData?.officeId]);
 
-  // 🟢 NEW: فلترة ذكية حسب صلاحية الإشعار
-  const validNotifications = useMemo(() => {
-    const now = new Date();
+  // ✅ بدون فلترة زمنية
+  const allNotifications = notifications;
 
-    return notifications.filter((n) => {
-      const created = n.createdAt?.toDate?.() || new Date(n.createdAt);
-      if (!created) return true;
-
-      // 🔴 late: ينتهي بعد 48 ساعة
-      if (n.type === "late") {
-        const diffDays = (now - created) / (1000 * 60 * 60 * 24);
-        return diffDays < 2;
-      }
-
-      // 🟡 today: ينتهي بنهاية اليوم
-      if (n.type === "today") {
-        return created.toDateString() === now.toDateString();
-      }
-
-      // 🟠 soon: ينتهي بعد 24 ساعة
-      if (n.type === "soon") {
-        const diffHours = (now - created) / (1000 * 60 * 60);
-        return diffHours < 24;
-      }
-
-      return true;
-    });
-  }, [notifications]);
-
-  const unreadCount = validNotifications.filter((n) => !n.isRead).length;
+  // ✅ حساب العدادات
+  const unreadCount = allNotifications.filter((n) => !n.isRead).length;
+  const lateCount = allNotifications.filter((n) => n.type === "late").length;
+  const todayCount = allNotifications.filter((n) => n.type === "today").length;
+  const soonCount = allNotifications.filter((n) => n.type === "soon").length;
+  const newCount = allNotifications.filter((n) => n.type === "new").length;
 
   return {
-    notifications: validNotifications,
+    notifications: allNotifications,
+    loading,
     count: unreadCount,
     hasNotifications: unreadCount > 0,
+    unreadCount,
+    lateCount,
+    todayCount,
+    soonCount,
+    newCount,
+    totalCount: allNotifications.length,
   };
 }
