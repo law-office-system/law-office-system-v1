@@ -32,6 +32,9 @@ export const PERMISSIONS = {
   profile: [ROLES.ADMIN, ROLES.LAWYER, ROLES.CLIENT],
 
   chat: [ROLES.ADMIN, ROLES.LAWYER, ROLES.CLIENT],
+
+  // ✅ NEW: Office rooms management
+  officeRooms: [ROLES.ADMIN, ROLES.LAWYER],
 };
 
 /* =========================

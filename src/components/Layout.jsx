@@ -7,6 +7,9 @@ import Topbar from "./Topbar";
 // الصفحات العامة اللي مفيش Sidebar/Topbar فيها
 const PUBLIC_PAGES = ["/", "/home", "/login", "/register", "/super-login"];
 
+// ✅ صفحات الدردشة اللي مفيش Sidebar عام فيها (عشان ChatSidebar يتحكم لوحده)
+const CHAT_PAGES = ["/chat", "/rooms", "/shared-rooms"];
+
 export default function Layout() {
   const [open, setOpen] = useState(() => {
     const saved = localStorage.getItem("sidebarOpen");
@@ -22,11 +25,17 @@ export default function Layout() {
     return PUBLIC_PAGES.includes(location.pathname);
   }, [location.pathname]);
 
+  // ✅ تحقق هل الصفحة الحالية صفحة دردشة؟
+  const isChatPage = useMemo(() => {
+    return CHAT_PAGES.some(path => location.pathname.startsWith(path));
+  }, [location.pathname]);
+
   // 🎯 Sidebar يظهر فقط لو:
   // 1. مش صفحة عامة
-  // 2. المستخدم مسجل دخول
-  // 3. عنده officeId
-  const showSidebar = !isPublicPage && user && userData?.officeId;
+  // 2. مش صفحة دردشة (ChatSidebar يتحكم لوحده)
+  // 3. المستخدم مسجل دخول
+  // 4. عنده officeId
+  const showSidebar = !isPublicPage && !isChatPage && user && userData?.officeId;
   const showTopbar = !isPublicPage && user;
 
   useEffect(() => {
@@ -47,12 +56,12 @@ export default function Layout() {
 
   return (
     <div style={styles.container}>
-      {/* Sidebar يظهر فقط للمستخدمين المسجلين داخل مكتب */}
+      {/* Sidebar العام يظهر فقط للمستخدمين المسجلين داخل مكتب ولسه صفحة دردشة */}
       {showSidebar && (
         <Sidebar open={open} setOpen={setOpen} isMobile={isMobile} />
       )}
 
-      <div style={styles.contentArea(showSidebar, isMobile, open)}>
+      <div style={styles.contentArea(showSidebar, isMobile, open, isChatPage)}>
         {/* Topbar يظهر فقط للمستخدمين المسجلين */}
         {showTopbar && (
           <Topbar open={open} setOpen={setOpen} isMobile={isMobile} />
@@ -73,14 +82,17 @@ const styles = {
     overflow: "hidden",
     direction: "rtl",
   },
-  contentArea: (showSidebar, isMobile, open) => ({
+  contentArea: (showSidebar, isMobile, open, isChatPage) => ({
     display: "flex",
     flexDirection: "column",
     flex: 1,
     transition: "margin 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
-    marginRight: showSidebar 
-      ? (isMobile ? 0 : (open ? "260px" : "72px"))
-      : 0,
+    // ✅ لو صفحة دردشة، مفيش margin (ChatSidebar يتحكم لوحده)
+    marginRight: isChatPage 
+      ? 0 
+      : (showSidebar 
+          ? (isMobile ? 0 : (open ? "260px" : "72px"))
+          : 0),
     minWidth: 0,
   }),
   main: (isMobile, showTopbar) => ({

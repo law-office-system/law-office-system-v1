@@ -45,6 +45,10 @@ export default function ProtectedRoute({
 
   const role = userData.role;
 
+  // ✅ DEBUG: Log page prop
+  console.log("🔐 ProtectedRoute page prop:", page);
+  console.log("🔐 ProtectedRoute user role:", role);
+
   // 👑 Super Admin فقط
   if (superOnly && role !== "super_admin") {
     return <div style={{ padding: 20 }}>🚫 Super Admin Only</div>;
@@ -52,15 +56,14 @@ export default function ProtectedRoute({
 
   // 🔐 صلاحيات
   if (!superOnly && page) {
+    console.log("🔐 Checking canAccess for page:", page, "role:", role);
     const allowed = canAccess(page, role);
 
+    console.log("🔐 canAccess result:", allowed);
+
     if (!allowed) {
-      return (
-        <div style={{ padding: 20 }}>
-          🚫 ليس لديك صلاحية
-          <div>Role: {role}</div>
-        </div>
-      );
+      console.log("❌ Access denied, redirecting to /dashboard");
+      return <Navigate to="/dashboard" replace />;
     }
   }
 

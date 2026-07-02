@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Gavel, Plus, Search, Scale, AlertTriangle, 
   CheckCircle2, Clock, Calendar, FileText, ChevronDown, Landmark, Bell
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { collection, query, onSnapshot, deleteDoc, doc, updateDoc, getDoc, getDocs, where, documentId } from 'firebase/firestore';
+import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, getDoc, documentId } from 'firebase/firestore';
 import JudgmentCard from '../components/case/JudgmentCard';
 import JudgmentForm from '../components/case/JudgmentForm';
 
@@ -43,7 +43,9 @@ const categoryConfig = {
 };
 
 export default function Judgments() {
-  const { user } = useAuth();
+  const { user, userData } = useAuth();
+  const officeId = userData?.officeId;
+
   const [judgments, setJudgments] = useState([]);
   const [casesMap, setCasesMap] = useState({});
   const [clientNamesCache, setClientNamesCache] = useState({});
@@ -56,20 +58,38 @@ export default function Judgments() {
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
-  useEffect(() => {
-    const q = query(collection(db, 'judgments'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+  // ✅ Fetch judgments with officeId filter (getDocs instead of onSnapshot)
+  const fetchJudgments = useCallback(async () => {
+    if (!officeId) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const q = query(
+        collection(db, 'judgments'),
+        where('officeId', '==', officeId)
+      );
+      const snapshot = await getDocs(q);
       const data = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
       data.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
       setJudgments(data);
+    } catch (err) {
+      console.error('Error fetching judgments:', err);
+    } finally {
       setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
+    }
+  }, [officeId]);
 
+  useEffect(() => {
+    fetchJudgments();
+  }, [fetchJudgments]);
+
+  // Fetch case data for judgments
   useEffect(() => {
     const uniqueCaseIds = [...new Set(judgments.map(j => j.caseId).filter(Boolean))];
     const fetchCases = async () => {
@@ -89,6 +109,7 @@ export default function Judgments() {
     if (uniqueCaseIds.length > 0) fetchCases();
   }, [judgments]);
 
+  // Fetch client names
   useEffect(() => {
     if (Object.keys(casesMap).length === 0) return;
     const fetchClientNames = async () => {
@@ -116,12 +137,27 @@ export default function Judgments() {
   }, [casesMap]);
 
   const handleDelete = async (id) => {
-    try { await deleteDoc(doc(db, 'judgments', id)); } catch (err) { alert('حدث خطأ أثناء الحذف'); }
+    if (!window.confirm('هل أنت متأكد من الحذف؟')) return;
+    try {
+      await deleteDoc(doc(db, 'judgments', id));
+      setJudgments(prev => prev.filter(j => j.id !== id));
+    } catch (err) {
+      alert('حدث خطأ أثناء الحذف');
+    }
   };
 
   const handleToggleFollowUp = async (id, currentStatus) => {
-    try { await updateDoc(doc(db, 'judgments', id), { needsFollowUp: !currentStatus, updatedAt: new Date() }); } 
-    catch (err) { alert('حدث خطأ أثناء التحديث'); }
+    try {
+      await updateDoc(doc(db, 'judgments', id), { 
+        needsFollowUp: !currentStatus, 
+        updatedAt: new Date() 
+      });
+      setJudgments(prev => prev.map(j => 
+        j.id === id ? { ...j, needsFollowUp: !currentStatus, updatedAt: new Date() } : j
+      ));
+    } catch (err) {
+      alert('حدث خطأ أثناء التحديث');
+    }
   };
 
   const getClientName = (caseData) => {
@@ -225,13 +261,18 @@ export default function Judgments() {
             <p style={styles.headerSubtitle}>إدارة ومتابعة جميع الأحكام والقرارات</p>
           </div>
         </div>
-        {isAdmin && (
-          <button onClick={() => { setEditingJudgment(null); setShowForm(true); }} style={styles.addBtn}
-            onMouseEnter={(e) => { e.currentTarget.style.background = '#b45309'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = '#d97706'; e.currentTarget.style.transform = 'translateY(0)'; }}>
-            <Plus size={18} /> إضافة حكم
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={fetchJudgments} style={{ ...styles.addBtn, background: '#374151' }}>
+            🔄 تحديث
           </button>
-        )}
+          {isAdmin && (
+            <button onClick={() => { setEditingJudgment(null); setShowForm(true); }} style={styles.addBtn}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#b45309'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = '#d97706'; e.currentTarget.style.transform = 'translateY(0)'; }}>
+              <Plus size={18} /> إضافة حكم
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={styles.statsGrid} className="judgments-stats-grid">
@@ -289,7 +330,7 @@ export default function Judgments() {
         </>
       )}
 
-      {showForm && <JudgmentForm caseId={editingJudgment?.caseId || 'general'} judgment={editingJudgment} onClose={() => { setShowForm(false); setEditingJudgment(null); }} />}
+      {showForm && <JudgmentForm caseId={editingJudgment?.caseId || 'general'} judgment={editingJudgment} onClose={() => { setShowForm(false); setEditingJudgment(null); }} onSuccess={fetchJudgments} />}
     </div>
   );
 }

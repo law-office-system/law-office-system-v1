@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { useAuth } from "./context/AuthContext";
 
 import Layout from "./components/Layout";
@@ -40,14 +40,15 @@ import ClientProfile from "./pages/ClientProfile";
 
 import Profile from "./pages/Profile";
 import OfficeInfo from "./pages/OfficeInfo";
-import Notifications from "./pages/Notifications"; // ✅ أضفنا الإشعارات
+import Notifications from "./pages/Notifications";
 
 /* ================= CHAT ================= */
 import Chat from "./pages/Chat";
-import OfficeConnections from "./pages/OfficeConnections";
 import SharedRooms from "./pages/SharedRooms";
 import SharedRoomChat from "./pages/SharedRoomChat";
+import OfficeConnections from "./pages/OfficeConnections";
 
+import './styles/chat-animations.css';
 /* ================= AUTH ================= */
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -58,68 +59,85 @@ import {
   collection,
   query,
   where,
-  onSnapshot,
   getDocs,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
 import "./App.css";
 
-/* ================= REAL-TIME SYNC COMPONENT ================= */
+/* ================= REAL-TIME SYNC COMPONENT (OPTIMIZED) ================= */
 function NotificationSync() {
   const { userData } = useAuth();
+  const intervalRef = useRef(null);
+  const lastSyncRef = useRef(0);
+  const isSyncingRef = useRef(false);
 
   const checkAndSync = useCallback(async () => {
     if (!userData?.officeId) return;
+    if (isSyncingRef.current) return; // ✅ prevent concurrent syncs
 
+    // ✅ debounce: max once per 2 minutes
+    const now = Date.now();
+    if (now - lastSyncRef.current < 2 * 60 * 1000) return;
+
+    isSyncingRef.current = true;
     console.log("⏰ Running scheduled notification check...");
 
-    const casesQuery = query(
-      collection(db, "cases"),
-      where("officeId", "==", userData.officeId)
-    );
+    try {
+      const casesQuery = query(
+        collection(db, "cases"),
+        where("officeId", "==", userData.officeId)
+      );
 
-    const snapshot = await getDocs(casesQuery);
-    const cases = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-
-    await syncNotifications(cases, userData.officeId);
-  }, [userData?.officeId]);
-
-  useEffect(() => {
-    if (!userData?.officeId) return;
-
-    checkAndSync();
-
-    const casesQuery = query(
-      collection(db, "cases"),
-      where("officeId", "==", userData.officeId)
-    );
-
-    const unsubscribe = onSnapshot(casesQuery, (snapshot) => {
+      const snapshot = await getDocs(casesQuery);
       const cases = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
 
-      syncNotifications(cases, userData.officeId);
-    });
+      await syncNotifications(cases, [], [], userData.officeId);
+      lastSyncRef.current = Date.now();
+    } catch (err) {
+      console.error("❌ Notification sync failed:", err.message);
+    } finally {
+      isSyncingRef.current = false;
+    }
+  }, [userData?.officeId]);
 
-    const interval = setInterval(checkAndSync, 5 * 60 * 1000);
+  useEffect(() => {
+    if (!userData?.officeId) return;
+
+    // ✅ Sync once on mount
+    checkAndSync();
+
+    // ✅ Interval every 10 minutes (not 5), skip if hidden
+    const startInterval = () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = setInterval(() => {
+        if (!document.hidden) {
+          checkAndSync();
+        }
+      }, 10 * 60 * 1000);
+    };
+
+    startInterval();
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         console.log("👁️ App visible, checking notifications...");
         checkAndSync();
+      } else {
+        // ✅ pause interval when hidden
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
       }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      unsubscribe();
-      clearInterval(interval);
+      if (intervalRef.current) clearInterval(intervalRef.current);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [userData?.officeId, checkAndSync]);
@@ -170,18 +188,14 @@ export default function App() {
         <NotificationSync />
         <Routes>
 
-          {/* ================= PUBLIC ROUTES (بدون Layout) ================= */}
+          {/* ================= PUBLIC ROUTES ================= */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/super-login" element={<SuperAdminLogin />} />
-
-          {/* صفحة الهبوط — برا Layout */}
           <Route path="/home" element={<Home />} />
 
-          {/* ================= MAIN LAYOUT (مع Sidebar/Topbar) ================= */}
+          {/* ================= MAIN LAYOUT ================= */}
           <Route path="/" element={<Layout />}>
-
-            {/* الصفحة الرئيسية */}
             <Route index element={<HomeRedirect />} />
 
             {/* DASHBOARD */}
@@ -213,7 +227,6 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="clients/add"
               element={
@@ -222,11 +235,7 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
-            <Route
-              path="clients/:id"
-              element={<ClientProfile />}
-            />
+            <Route path="clients/:id" element={<ClientProfile />} />
 
             {/* ROOM MEMBERS */}
             <Route
@@ -247,7 +256,6 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="add-case"
               element={
@@ -256,7 +264,6 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="edit/:id"
               element={
@@ -265,7 +272,6 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="case/:id"
               element={
@@ -274,7 +280,6 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="active-cases"
               element={
@@ -283,7 +288,6 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="archive"
               element={
@@ -292,7 +296,6 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="judgments"
               element={
@@ -301,7 +304,6 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="admin-tasks"
               element={
@@ -310,7 +312,6 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="add-session/:id"
               element={
@@ -319,7 +320,6 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="add-stage/:id"
               element={
@@ -338,7 +338,6 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="case-finance/:id"
               element={
@@ -357,10 +356,13 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="office/rooms"
-              element={<OfficeRoomsManagement />}
+              element={
+                <ProtectedRoute page="officeRooms">
+                  <OfficeRoomsManagement />
+                </ProtectedRoute>
+              }
             />
 
             {/* PROFILE */}
@@ -373,7 +375,7 @@ export default function App() {
               }
             />
 
-            {/* CHAT */}
+            {/* CHAT - Internal Rooms */}
             <Route
               path="chat"
               element={
@@ -382,7 +384,6 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="rooms/:roomId"
               element={
@@ -391,7 +392,6 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="rooms/:roomId/admin"
               element={
@@ -401,7 +401,7 @@ export default function App() {
               }
             />
 
-            {/* SHARED ROOMS */}
+            {/* SHARED ROOMS - Inter-Office Chat */}
             <Route
               path="shared-rooms"
               element={
@@ -410,7 +410,6 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="shared-rooms/:id"
               element={
@@ -430,7 +429,7 @@ export default function App() {
               }
             />
 
-            {/* ✅ NOTIFICATIONS — جوه Layout */}
+            {/* NOTIFICATIONS */}
             <Route
               path="notifications"
               element={

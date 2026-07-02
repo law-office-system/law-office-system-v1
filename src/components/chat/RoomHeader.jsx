@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom"; // استيراد useNavigate
+import { useNavigate } from "react-router-dom";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../../firebase";
+import { Menu, Users, Settings } from "lucide-react";
 
-export default function RoomHeader({ room, currentUser }) {
+export default function RoomHeader({ room, userData, onMenuToggle, isSidebarOpen, isMobile }) {
   const [membersCount, setMembersCount] = useState(0);
-  const navigate = useNavigate(); // تهيئة أداة التنقل
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!room?.id) return;
@@ -16,71 +17,172 @@ export default function RoomHeader({ room, currentUser }) {
 
   if (!room) return null;
 
-  // دالة التنقل لصفحة الإدارة
   const handleNavigateToAdmin = () => {
     navigate(`/rooms/${room.id}/admin`);
   };
 
+  const handleMenuClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof onMenuToggle === 'function') {
+      onMenuToggle();
+    }
+  };
+
+  const isShared = room.officeA !== undefined;
+  const isOfficeA = room.officeA === userData?.officeId;
+  const otherOfficeName = isOfficeA ? room.officeBName : room.officeAName;
+  const displayName = isShared 
+    ? (otherOfficeName || room.name || "غرفة مشتركة")
+    : (room.name || "غرفة محادثة");
+
   return (
-    <div style={styles.header}>
-      <div style={styles.info}>
-        <div style={styles.avatar}>
-          {room.name?.charAt(0).toUpperCase()}
+    <div style={{
+      padding: "16px 24px",
+      background: "#1e293b",
+      borderBottom: "1px solid #334155",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      position: "relative",
+      zIndex: 10,
+      height: "80px",
+      boxSizing: "border-box",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+        {/* ✅ زر القائمة - يظهر على الموبايل */}
+        <button
+          type="button"
+          onClick={handleMenuClick}
+          style={{
+            background: "none",
+            border: "none",
+            color: "#94a3b8",
+            cursor: "pointer",
+            padding: "8px",
+            borderRadius: "8px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "all 0.2s",
+            outline: "none",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+            e.currentTarget.style.color = "#f8fafc";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.color = "#94a3b8";
+          }}
+          title={isSidebarOpen ? "إخفاء القائمة" : "إظهار القائمة"}
+        >
+          <Menu size={20} />
+        </button>
+
+        {/* Avatar */}
+        <div style={{
+          width: "44px",
+          height: "44px",
+          borderRadius: "12px",
+          background: isShared
+            ? "linear-gradient(135deg, #3b82f6, #2563eb)"
+            : "linear-gradient(135deg, #e94560, #c73e54)",
+          color: "#fff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: "18px",
+          fontWeight: "bold",
+          flexShrink: 0,
+        }}>
+          {isShared ? "🤝" : displayName.charAt(0).toUpperCase()}
         </div>
+
+        {/* Info */}
         <div>
-          <h2 style={styles.roomName}># {room.name}</h2>
-          <div style={styles.meta}>
-            <span style={styles.statusDot}>●</span> {membersCount} أعضاء
+          <h2 style={{
+            margin: 0,
+            fontSize: "16px",
+            color: "#f8fafc",
+            fontWeight: "600",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}>
+            {displayName}
+            {isShared && (
+              <span style={{
+                fontSize: "11px",
+                padding: "2px 8px",
+                background: "rgba(59, 130, 246, 0.15)",
+                color: "#60a5fa",
+                borderRadius: "6px",
+                fontWeight: "500",
+              }}>
+                مشتركة
+              </span>
+            )}
+          </h2>
+          <div style={{
+            fontSize: "13px",
+            color: "#64748b",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            marginTop: "4px",
+          }}>
+            <Users size={14} />
+            <span>{membersCount} أعضاء</span>
+            <span style={{ color: "#475569" }}>•</span>
+            <span style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+              color: "#10b981",
+            }}>
+              <span style={{
+                width: "6px",
+                height: "6px",
+                borderRadius: "50%",
+                background: "#10b981",
+                display: "inline-block",
+              }} />
+              نشط
+            </span>
           </div>
         </div>
       </div>
-      
-      <div style={styles.actions}>
-        <button 
-          style={styles.actionBtn} 
+
+      {/* Actions */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <button
           onClick={handleNavigateToAdmin}
-          title="إدارة أعضاء الغرفة"
-          type="button"
+          style={{
+            padding: "8px 16px",
+            background: "rgba(233, 69, 96, 0.1)",
+            border: "1px solid rgba(233, 69, 96, 0.2)",
+            borderRadius: "8px",
+            color: "#e94560",
+            cursor: "pointer",
+            fontSize: "13px",
+            fontWeight: "500",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            transition: "all 0.2s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(233, 69, 96, 0.2)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "rgba(233, 69, 96, 0.1)";
+          }}
         >
-          ⚙️
+          <Settings size={14} />
+          إدارة
         </button>
       </div>
     </div>
   );
 }
-
-const styles = {
-  header: { 
-    padding: "15px 25px", 
-    background: "#fff", 
-    borderBottom: "1px solid #eee", 
-    display: "flex", 
-    justifyContent: "space-between", 
-    alignItems: "center",
-    position: "relative",
-    zIndex: 10
-  },
-  info: { display: "flex", alignItems: "center", gap: "15px" },
-  avatar: { 
-    width: "45px", height: "45px", borderRadius: "12px", 
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", 
-    color: "#fff", display: "flex", alignItems: "center", 
-    justifyContent: "center", fontSize: "18px", fontWeight: "bold" 
-  },
-  roomName: { margin: 0, fontSize: "18px", color: "#2d3436" },
-  meta: { fontSize: "12px", color: "#636e72", display: "flex", alignItems: "center", marginTop: "4px" },
-  statusDot: { color: "#00b894", fontSize: "10px", marginRight: "5px" },
-  actions: { display: "flex", alignItems: "center" },
-  actionBtn: { 
-    border: "none", 
-    background: "#f8f9fa", 
-    padding: "10px 15px", 
-    borderRadius: "8px", 
-    cursor: "pointer",
-    fontSize: "18px",
-    transition: "background 0.2s",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center"
-  }
-};

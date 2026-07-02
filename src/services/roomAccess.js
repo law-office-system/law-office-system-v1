@@ -1,16 +1,22 @@
-import { collection, query, where, getDocs, onSnapshot } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  onSnapshot,
+} from "firebase/firestore";
 import { db } from "../firebase";
 
 /**
  * 🔐 جلب بيانات عضوية المستخدم في غرفة واحدة
  */
-export const getRoomMember = async (roomId, userId) => {
-  if (!roomId || !userId) return null;
+export const getRoomMember = async (roomId, uid) => {
+  if (!roomId || !uid) return null;
 
   const q = query(
     collection(db, "roomMembers"),
     where("roomId", "==", roomId),
-    where("userId", "==", userId)
+    where("uid", "==", uid)
   );
 
   const snap = await getDocs(q);
@@ -25,16 +31,17 @@ export const getRoomMember = async (roomId, userId) => {
 /**
  * 🧠 المصدر الموحد للصلاحيات (Single Source of Truth)
  */
-export const getRoomAccess = async (roomId, userId) => {
-  const member = await getRoomMember(roomId, userId);
+export const getRoomAccess = async (roomId, uid) => {
+  const member = await getRoomMember(roomId, uid);
   const role = member?.role || null;
 
   return {
     exists: !!member,
     role: role,
     isMember: !!member,
-    isAdmin: role === "admin" || role === "owner", // الأونر والأدمن يملكون صلاحيات التحكم
+    isAdmin: role === "admin" || role === "owner",
     isOwner: role === "owner",
+    canSend: member?.canSend !== false,
     raw: member,
   };
 };
@@ -42,29 +49,51 @@ export const getRoomAccess = async (roomId, userId) => {
 /**
  * 📡 الاستماع الفوري لغرف المستخدم (لـ Sidebar)
  */
-export const listenUserRooms = (userId, cb) => {
-  if (!userId) return null;
+export const listenUserRooms = (uid, cb) => {
+  if (!uid) return null;
 
   const q = query(
     collection(db, "roomMembers"),
-    where("userId", "==", userId)
+    where("uid", "==", uid)
   );
 
   return onSnapshot(q, (snap) => {
     const roomIds = snap.docs.map(doc => doc.data().roomId);
-    
-    // جلب الغرف المتاحة بناءً على الـ roomIds
+
     if (roomIds.length === 0) {
       cb([]);
       return;
     }
 
-    // ملاحظة: إذا كان لديك عدد غرف كبير جداً (>10)، يفضل تقسيم الاستعلام
-    const roomsQuery = query(collection(db, "rooms"), where("__name__", "in", roomIds));
-    
-    return onSnapshot(roomsQuery, (roomSnap) => {
-      const rooms = roomSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      cb(rooms);
+    // تقسيم الاستعلام إذا كان عدد الغرف كبير
+    const batchSize = 10;
+    const batches = [];
+    for (let i = 0; i < roomIds.length; i += batchSize) {
+      batches.push(roomIds.slice(i, i + batchSize));
+    }
+
+    const rooms = [];
+    let completed = 0;
+
+    batches.forEach(batch => {
+      const roomsQuery = query(
+        collection(db, "rooms"), 
+        where("__name__", "in", batch)
+      );
+
+      onSnapshot(roomsQuery, (roomSnap) => {
+        const batchRooms = roomSnap.docs.map(doc => ({ 
+          id: doc.id, 
+          ...doc.data(),
+          type: 'internal'
+        }));
+        rooms.push(...batchRooms);
+        completed++;
+
+        if (completed === batches.length) {
+          cb(rooms);
+        }
+      });
     });
   });
 };
@@ -72,20 +101,24 @@ export const listenUserRooms = (userId, cb) => {
 /**
  * 👑 التحقق من صلاحية العضوية (لـ Chat.jsx)
  */
-export const listenRoomRole = (roomId, userId, cb) => {
-  if (!roomId || !userId) return null;
+export const listenRoomRole = (roomId, uid, cb) => {
+  if (!roomId || !uid) return null;
 
   const q = query(
     collection(db, "roomMembers"),
     where("roomId", "==", roomId),
-    where("userId", "==", userId)
+    where("uid", "==", uid)
   );
 
   return onSnapshot(q, (snap) => {
     if (snap.empty) {
       cb(null);
     } else {
-      cb(snap.docs[0].data().role);
+      const data = snap.docs[0].data();
+      cb({
+        role: data.role,
+        canSend: data.canSend !== false,
+      });
     }
   });
 };
