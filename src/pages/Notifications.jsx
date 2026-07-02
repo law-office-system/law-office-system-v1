@@ -1,224 +1,619 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { Link, useNavigate } from "react-router-dom";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { useAuth } from "../context/AuthContext";  // ← NEW
 import useNotifications from "../hooks/useNotifications";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
+import { RefreshCw, Filter, Gavel, Calendar, ClipboardList } from "lucide-react";
 
-// ================= مكون شارة نوع الإشعار =================
+/* ===========================
+      شارة نوع الإشعار
+=========================== */
+
+const TYPE_CONFIG = {
+  late: {
+    label: "جلسة متأخرة",
+    emoji: "🔴",
+    bg: "#fef2f2",
+    color: "#991b1b",
+    border: "#fecaca",
+    sidebar: "#dc2626",
+    icon: Calendar,
+  },
+  admin_task: {
+    label: "عمل إداري متأخر",
+    emoji: "🟠",
+    bg: "#fff7ed",
+    color: "#9a3412",
+    border: "#fed7aa",
+    sidebar: "#f97316",
+    icon: ClipboardList,
+  },
+  judgment: {
+    label: "حكم يحتاج متابعة",
+    emoji: "🟣",
+    bg: "#faf5ff",
+    color: "#7e22ce",
+    border: "#e9d5ff",
+    sidebar: "#a855f7",
+    icon: Gavel,
+  },
+};
+
 function TypeBadge({ type }) {
-  const styles = {
-    late: { bg: "#fef2f2", color: "#991b1b", border: "#fecaca", icon: "🔴", label: "متأخرة" },
-    today: { bg: "#fffbeb", color: "#92400e", border: "#fcd34d", icon: "🟡", label: "اليوم" },
-    soon: { bg: "#eff6ff", color: "#1e40af", border: "#bfdbfe", icon: "🔜", label: "قريباً" },
-    new: { bg: "#f0fdf4", color: "#166534", border: "#bbf7d0", icon: "✨", label: "جديد" },
-    default: { bg: "#f9fafb", color: "#374151", border: "#e5e7eb", icon: "📌", label: "عام" },
-  };
-
-  const style = styles[type] || styles.default;
+  const config = TYPE_CONFIG[type] || TYPE_CONFIG.late;
+  const Icon = config.icon;
 
   return (
     <span
       style={{
-        background: style.bg,
-        color: style.color,
-        border: `1px solid ${style.border}`,
-        padding: "4px 12px",
-        borderRadius: 20,
-        fontSize: "clamp(11px, 2.5vw, 13px)",
-        fontWeight: "700",
-        whiteSpace: "nowrap",
         display: "inline-flex",
         alignItems: "center",
-        gap: 4,
+        gap: 6,
+        background: config.bg,
+        color: config.color,
+        border: `1px solid ${config.border}`,
+        borderRadius: 30,
+        padding: "5px 12px",
+        fontWeight: 700,
+        fontSize: 13,
       }}
     >
-      {style.icon} {style.label}
+      <Icon size={14} />
+      <span>{config.label}</span>
     </span>
   );
 }
 
-// ================= مكون وقت الإشعار =================
+/* ===========================
+        منذ متى
+=========================== */
+
 function TimeAgo({ timestamp }) {
   const date = timestamp?.toDate?.() || new Date(timestamp);
+
   if (!date || isNaN(date)) return null;
 
   const now = new Date();
-  const diffMs = now - date;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
+  const diff = now - date;
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
 
-  let result, color;
-  if (diffMins < 1) { result = "الآن"; color = "#059669"; }
-  else if (diffMins < 60) { result = `منذ ${diffMins} دقيقة`; color = "#059669"; }
-  else if (diffHours < 24) { result = `منذ ${diffHours} ساعة`; color = "#059669"; }
-  else if (diffDays < 7) { result = `منذ ${diffDays} يوم`; color = "#d97706"; }
-  else { result = date.toLocaleDateString("ar-EG"); color = "#9ca3af"; }
+  let text = "";
+  let color = "#64748b";
+
+  if (mins < 1) {
+    text = "الآن";
+    color = "#16a34a";
+  } else if (mins < 60) {
+    text = `منذ ${mins} دقيقة`;
+    color = "#16a34a";
+  } else if (hours < 24) {
+    text = `منذ ${hours} ساعة`;
+    color = "#2563eb";
+  } else if (days < 7) {
+    text = `منذ ${days} يوم`;
+    color = "#d97706";
+  } else {
+    text = date.toLocaleDateString("ar-EG");
+  }
 
   return (
-    <span style={{ fontSize: "clamp(11px, 2.5vw, 12px)", color, fontWeight: 500 }}>
-      🕐 {result}
+    <span
+      style={{
+        color,
+        fontWeight: 600,
+        fontSize: 13,
+        whiteSpace: "nowrap",
+      }}
+    >
+      🕐 {text}
     </span>
   );
 }
 
-export default function Notifications() {
-  const navigate = useNavigate();
-  const [filter, setFilter] = useState("all");
-  const { notifications, count, hasNotifications } = useNotifications();
+/* ===========================
+      بطاقة الإشعار
+=========================== */
 
-  const markAsRead = async (id) => {
-    await updateDoc(doc(db, "notifications", id), { isRead: true });
+function NotificationCard({ n, onMarkRead, onDelete, isMobile }) {
+  const navigate = useNavigate();
+  const isRead = n.isReadBy?.[n.currentUserId];
+  const config = TYPE_CONFIG[n.type] || TYPE_CONFIG.late;
+
+  const handleDecision = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigate(`/case/${n.caseId}?action=recordDecision&sessionDate=${n.sessionDate || ""}`);
   };
 
-  const markAllAsRead = async () => {
-    const unread = notifications.filter((n) => !n.isRead);
-    await Promise.all(
-      unread.map((n) => updateDoc(doc(db, "notifications", n.id), { isRead: true }))
-    );
+  const handleDelete = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onDelete(n.id, e);
+  };
+
+  const showDecisionButton = n.type === "late";
+
+  return (
+    <Link
+      to={`/case/${n.caseId}`}
+      onClick={() => onMarkRead(n.id)}
+      style={{
+        textDecoration: "none",
+        color: "inherit",
+        display: "block",
+        marginBottom: isMobile ? 12 : 16,
+      }}
+    >
+      <Card
+        style={{
+          padding: 0,
+          overflow: "hidden",
+          borderRadius: isMobile ? 14 : 18,
+          background: isRead ? "#ffffff" : config.bg,
+          border: isRead
+            ? "1px solid #e2e8f0"
+            : `1px solid ${config.border}`,
+          boxShadow: isRead
+            ? "0 4px 14px rgba(0,0,0,.05)"
+            : `0 8px 24px ${config.sidebar}18`,
+          transition: ".25s",
+        }}
+      >
+        <div style={{ display: "flex" }}>
+          {/* الشريط الجانبي */}
+          <div
+            style={{
+              width: isMobile ? 4 : 6,
+              background: config.sidebar,
+              flexShrink: 0,
+            }}
+          />
+
+          <div style={{ flex: 1, padding: isMobile ? 14 : 18, minWidth: 0 }}>
+            {/* الصف الأول */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                flexWrap: "wrap",
+                gap: 8,
+                marginBottom: isMobile ? 12 : 15,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <TypeBadge type={n.type} />
+
+                {!isRead && (
+                  <span
+                    style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: "50%",
+                      background: config.sidebar,
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
+              </div>
+
+              <TimeAgo timestamp={n.createdAt} />
+            </div>
+
+            {/* اسم الموكل */}
+            {n.clientNames?.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: isMobile ? 10 : 12,
+                  fontSize: isMobile ? 15 : 17,
+                  fontWeight: 700,
+                  color: "#0f172a",
+                  wordBreak: "break-word",
+                }}
+              >
+                👤 {n.clientNames.join(" ، ")}
+              </div>
+            )}
+
+            {/* بيانات القضية */}
+            <div
+              style={{
+                display: "flex",
+                gap: isMobile ? 6 : 10,
+                flexWrap: "wrap",
+                marginBottom: isMobile ? 12 : 15,
+              }}
+            >
+              <span style={{ ...infoChipStyle, fontSize: isMobile ? 12 : 13 }}>
+                ⚖️ {n.caseNumber}
+              </span>
+
+              {n.court && (
+                <span style={{ ...infoChipStyle, fontSize: isMobile ? 12 : 13 }}>
+                  🏛️ {n.court}
+                </span>
+              )}
+
+              {n.caseType && (
+                <span style={{ ...infoChipStyle, fontSize: isMobile ? 12 : 13 }}>
+                  📂 {n.caseType}
+                </span>
+              )}
+
+              {n.sessionDate && (
+                <span style={{ ...infoChipStyle, fontSize: isMobile ? 12 : 13 }}>
+                  📅 {n.sessionDate}
+                </span>
+              )}
+
+              {n.dueDate && (
+                <span style={{ ...infoChipStyle, fontSize: isMobile ? 12 : 13 }}>
+                  ⏰ {n.dueDate}
+                </span>
+              )}
+
+              {n.judgmentDate && (
+                <span style={{ ...infoChipStyle, fontSize: isMobile ? 12 : 13 }}>
+                  📅 {n.judgmentDate}
+                </span>
+              )}
+
+              {n.daysLate > 0 && (
+                <span style={{ 
+                  ...infoChipStyle, 
+                  background: "#fef2f2", 
+                  color: "#dc2626", 
+                  border: "1px solid #fecaca",
+                  fontSize: isMobile ? 12 : 13,
+                }}>
+                  ⚠️ متأخر بـ {n.daysLate} يوم
+                </span>
+              )}
+            </div>
+
+            {/* الرسالة */}
+            <div
+              style={{
+                lineHeight: 1.8,
+                color: "#334155",
+                fontSize: isMobile ? 14 : 15,
+                marginBottom: isMobile ? 14 : 18,
+                fontWeight: isRead ? 500 : 700,
+                wordBreak: "break-word",
+              }}
+            >
+              {n.message}
+            </div>
+
+            {/* الأزرار */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 8,
+              }}
+            >
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {showDecisionButton && (
+                  <button
+                    onClick={handleDecision}
+                    style={{
+                      background: config.sidebar,
+                      color: "#fff",
+                      border: "none",
+                      padding: isMobile ? "8px 14px" : "9px 18px",
+                      borderRadius: 10,
+                      cursor: "pointer",
+                      fontWeight: 700,
+                      fontSize: isMobile ? 13 : 14,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    ✍️ تسجيل القرار
+                  </button>
+                )}
+
+                <button
+                  onClick={handleDelete}
+                  style={{
+                    background: "#fff",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 10,
+                    padding: isMobile ? "8px 12px" : "9px 14px",
+                    cursor: "pointer",
+                    fontSize: isMobile ? 13 : 14,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  🗑️ حذف
+                </button>
+              </div>
+
+              <div
+                style={{
+                  color: "#64748b",
+                  fontSize: isMobile ? 12 : 13,
+                  fontWeight: 600,
+                }}
+              >
+                اضغط لفتح الملف
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+    </Link>
+  );
+}
+
+/* ===========================
+        الصفحة الرئيسية
+=========================== */
+
+export default function Notifications() {
+  const navigate = useNavigate();
+  const { userData } = useAuth();  // ← NEW
+  const [filter, setFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [isMobile, setIsMobile] = useState(false);
+
+  const {
+    notifications,
+    count,
+    hasNotifications,
+    loading,
+    refreshing,
+    countsByType,
+    markAllAsRead,
+    refreshNotifications,  // ← NEW
+  } = useNotifications();
+
+  // ✅ Responsive check
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  const markAsRead = async (id) => {
+    await updateDoc(doc(db, "notifications", id), {
+      isRead: true,
+    });
   };
 
   const deleteNotification = async (id, e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!window.confirm("هل تريد حذف هذا الإشعار؟")) return;
+
+    if (!window.confirm("حذف الإشعار ؟")) return;
+
     await deleteDoc(doc(db, "notifications", id));
   };
 
+  // ✅ زر التحديث — شغال دلوقتي!
+  const handleRefresh = async () => {
+    try {
+      await refreshNotifications();
+    } catch (err) {
+      console.error("Error refreshing:", err);
+      alert("حدث خطأ أثناء التحديث");
+    }
+  };
+
   const filteredNotifications = notifications.filter((n) => {
-    if (filter === "all") return true;
-    if (filter === "unread") return !n.isRead;
-    if (filter === "late") return n.type === "late";
-    if (filter === "today") return n.type === "today";
-    if (filter === "soon") return n.type === "soon";
+    if (filter === "unread") {
+      const readBy = n.isReadBy || {};
+      if (readBy[n.currentUserId]) return false;
+    }
+
+    if (typeFilter !== "all" && n.type !== typeFilter) return false;
+
     return true;
   });
 
   const filterButtons = [
     { key: "all", label: "الكل", count: notifications.length },
     { key: "unread", label: "غير مقروء", count },
-    { key: "late", label: "متأخرة", count: notifications.filter((n) => n.type === "late").length },
-    { key: "today", label: "اليوم", count: notifications.filter((n) => n.type === "today").length },
-    { key: "soon", label: "قريباً", count: notifications.filter((n) => n.type === "soon").length },
   ];
+
+  const typeFilterButtons = [
+    { key: "all", label: "الكل", count: countsByType.total },
+    { key: "late", label: "جلسات متأخرة", count: countsByType.late, color: "#dc2626" },
+    { key: "admin_task", label: "أعمال إدارية", count: countsByType.admin_task, color: "#f97316" },
+    { key: "judgment", label: "أحكام", count: countsByType.judgment, color: "#a855f7" },
+  ];
+
+  if (loading) {
+    return (
+      <div style={{ direction: "rtl", padding: 18, textAlign: "center" }}>
+        جاري التحميل...
+      </div>
+    );
+  }
 
   return (
     <div
       style={{
-        padding: "clamp(10px, 3vw, 20px)",
         direction: "rtl",
-        background: "#f0f4f8",
+        padding: isMobile ? 12 : 18,
+        background: "#f4f7fb",
         minHeight: "100vh",
-        fontFamily: "'Segoe UI', 'Tahoma', 'Arial', sans-serif",
       }}
     >
-      {/* الهيدر المحسن */}
-      <Card style={{ marginBottom: 16, borderRadius: 16, boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}>
+      {/* ================= Header ================= */}
+      <Card
+        style={{
+          marginBottom: isMobile ? 14 : 18,
+          borderRadius: isMobile ? 14 : 18,
+          background: "#fff",
+          boxShadow: "0 8px 25px rgba(15,23,42,.06)",
+          border: "1px solid #e2e8f0",
+        }}
+      >
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
             flexWrap: "wrap",
-            gap: 12,
+            gap: isMobile ? 10 : 15,
+            padding: isMobile ? "4px 0" : 0,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 15 }}>
             <div
               style={{
-                width: "clamp(40px, 10vw, 48px)",
-                height: "clamp(40px, 10vw, 48px)",
-                background: "#1e3a8a",
-                borderRadius: 12,
+                width: isMobile ? 44 : 52,
+                height: isMobile ? 44 : 52,
+                borderRadius: 14,
+                background: "linear-gradient(135deg,#dc2626,#991b1b)",
                 display: "flex",
-                alignItems: "center",
                 justifyContent: "center",
-                fontSize: "clamp(18px, 5vw, 22px)",
+                alignItems: "center",
+                color: "#fff",
+                fontSize: isMobile ? 20 : 24,
+                flexShrink: 0,
               }}
             >
               🔔
             </div>
+
             <div>
               <h2
                 style={{
                   margin: 0,
-                  fontSize: "clamp(18px, 5vw, 24px)",
-                  color: "#1e293b",
+                  color: "#0f172a",
+                  fontSize: isMobile ? 20 : 24,
                   fontWeight: 700,
                 }}
               >
                 الإشعارات
               </h2>
-              <p style={{ margin: "4px 0 0 0", color: "#64748b", fontSize: "clamp(12px, 3vw, 14px)" }}>
-                {hasNotifications ? `${count} إشعارات غير مقروءة` : "لا توجد إشعارات جديدة"}
-              </p>
+
+              <div
+                style={{
+                  marginTop: 4,
+                  color: "#64748b",
+                  fontSize: isMobile ? 12 : 14,
+                }}
+              >
+                {hasNotifications
+                  ? `${count} إشعار غير مقروء`
+                  : "لا توجد إشعارات جديدة"}
+              </div>
             </div>
           </div>
 
-          {hasNotifications && (
-            <Button
-              size="small"
-              variant="secondary"
-              onClick={markAllAsRead}
+          {/* ✅ أزرار التحكم */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
               style={{
-                fontSize: "clamp(12px, 3vw, 14px)",
-                borderRadius: 10,
-                padding: "8px 16px",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: isMobile ? "8px 14px" : "10px 18px",
+                background: refreshing ? "#94a3b8" : "#2563eb",
+                color: "#fff",
+                border: "none",
+                borderRadius: 12,
+                cursor: refreshing ? "not-allowed" : "pointer",
+                fontWeight: 700,
+                fontSize: isMobile ? 13 : 14,
+                transition: "all 0.2s",
+                whiteSpace: "nowrap",
               }}
             >
-              ✓ تعليم الكل كمقروء
-            </Button>
-          )}
+              <RefreshCw
+                size={isMobile ? 14 : 16}
+                style={{
+                  animation: refreshing ? "spin 1s linear infinite" : "none",
+                }}
+              />
+              {refreshing ? "جاري..." : "تحديث"}
+            </button>
+
+            {hasNotifications && (
+              <Button
+                variant="secondary"
+                size="small"
+                onClick={markAllAsRead}
+              >
+                ✓ الكل
+              </Button>
+            )}
+          </div>
         </div>
       </Card>
 
-      {/* أزرار الفلتر المحسنة */}
+      {/* ================= فلتر النوع ================= */}
       <div
         style={{
           display: "flex",
-          gap: "clamp(6px, 1.5vw, 10px)",
+          gap: isMobile ? 6 : 10,
           flexWrap: "wrap",
-          marginBottom: 20,
-          overflowX: "auto",
-          paddingBottom: 4,
+          marginBottom: isMobile ? 10 : 12,
+          overflowX: isMobile ? "auto" : "visible",
           WebkitOverflowScrolling: "touch",
+          paddingBottom: isMobile ? 4 : 0,
         }}
       >
-        {filterButtons.map((btn) => (
+        {typeFilterButtons.map((btn) => (
           <button
             key={btn.key}
-            onClick={() => setFilter(btn.key)}
+            onClick={() => setTypeFilter(btn.key)}
             style={{
-              padding: "clamp(8px, 2.5vw, 12px) clamp(14px, 3vw, 20px)",
-              borderRadius: 12,
               border: "none",
               cursor: "pointer",
-              fontSize: "clamp(13px, 3vw, 15px)",
-              fontWeight: 600,
-              background: filter === btn.key ? "#1e3a8a" : "#fff",
-              color: filter === btn.key ? "#fff" : "#475569",
-              boxShadow: filter === btn.key
-                ? "0 4px 12px rgba(30, 58, 138, 0.25)"
-                : "0 1px 3px rgba(0,0,0,0.08)",
-              transition: "all 0.25s ease",
-              whiteSpace: "nowrap",
+              borderRadius: 12,
+              padding: isMobile ? "6px 12px" : "8px 16px",
+              fontWeight: 700,
+              transition: ".25s",
+              background:
+                typeFilter === btn.key
+                  ? btn.color || "#dc2626"
+                  : "#fff",
+              color:
+                typeFilter === btn.key
+                  ? "#fff"
+                  : "#334155",
+              boxShadow:
+                typeFilter === btn.key
+                  ? `0 6px 18px ${(btn.color || "#dc2626")}40`
+                  : "0 2px 8px rgba(0,0,0,.05)",
               display: "flex",
               alignItems: "center",
               gap: 6,
+              fontSize: isMobile ? 12 : 14,
+              whiteSpace: "nowrap",
+              flexShrink: 0,
             }}
           >
             {btn.label}
+
             {btn.count > 0 && (
               <span
                 style={{
-                  background: filter === btn.key ? "rgba(255,255,255,0.2)" : "#f3f4f6",
-                  color: filter === btn.key ? "#fff" : "#6b7280",
-                  padding: "2px 8px",
-                  borderRadius: 10,
-                  fontSize: "clamp(11px, 2.5vw, 12px)",
-                  fontWeight: 700,
+                  background:
+                    typeFilter === btn.key
+                      ? "rgba(255,255,255,.2)"
+                      : "#f1f5f9",
+                  borderRadius: 20,
+                  padding: "2px 6px",
+                  fontSize: 11,
                 }}
               >
                 {btn.count}
@@ -228,211 +623,112 @@ export default function Notifications() {
         ))}
       </div>
 
-      {/* قائمة الإشعارات المحسنة */}
+      {/* ================= فلتر القراءة ================= */}
+      <div
+        style={{
+          display: "flex",
+          gap: isMobile ? 6 : 10,
+          flexWrap: "wrap",
+          marginBottom: isMobile ? 16 : 20,
+        }}
+      >
+        {filterButtons.map((btn) => (
+          <button
+            key={btn.key}
+            onClick={() => setFilter(btn.key)}
+            style={{
+              border: "none",
+              cursor: "pointer",
+              borderRadius: 12,
+              padding: isMobile ? "8px 14px" : "10px 18px",
+              fontWeight: 700,
+              transition: ".25s",
+              background:
+                filter === btn.key
+                  ? "#334155"
+                  : "#fff",
+              color:
+                filter === btn.key
+                  ? "#fff"
+                  : "#334155",
+              boxShadow:
+                filter === btn.key
+                  ? "0 6px 18px rgba(51,65,85,.25)"
+                  : "0 2px 8px rgba(0,0,0,.05)",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: isMobile ? 13 : 14,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {btn.label}
+
+            {btn.count > 0 && (
+              <span
+                style={{
+                  background:
+                    filter === btn.key
+                      ? "rgba(255,255,255,.2)"
+                      : "#f1f5f9",
+                  borderRadius: 20,
+                  padding: "2px 6px",
+                  fontSize: 11,
+                }}
+              >
+                {btn.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ================= List ================= */}
       {filteredNotifications.length === 0 ? (
         <Card
           style={{
+            padding: isMobile ? 40 : 70,
             textAlign: "center",
-            padding: "clamp(40px, 12vw, 80px) 20px",
-            borderRadius: 16,
-            boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
+            borderRadius: isMobile ? 16 : 20,
           }}
         >
-          <div
-            style={{
-              width: "clamp(80px, 20vw, 120px)",
-              height: "clamp(80px, 20vw, 120px)",
-              background: "#f3f4f6",
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 20px",
-              fontSize: "clamp(32px, 8vw, 48px)",
-            }}
-          >
-            🔕
-          </div>
-          <div
-            style={{
-              fontSize: "clamp(16px, 4vw, 20px)",
-              color: "#374151",
-              fontWeight: 600,
-              marginBottom: 8,
-            }}
-          >
-            لا توجد إشعارات
-          </div>
-          <div style={{ fontSize: "clamp(13px, 3.5vw, 15px)", color: "#9ca3af" }}>
-            {filter !== "all" ? "جرب تصنيفاً آخر" : "ستظهر الإشعارات الجديدة هنا"}
-          </div>
+          <div style={{ fontSize: isMobile ? 50 : 70, marginBottom: 15 }}>✅</div>
+          <h3 style={{ margin: 0, color: "#334155", fontSize: isMobile ? 16 : 18 }}>لا توجد إشعارات</h3>
+          <p style={{ marginTop: 10, color: "#94a3b8", fontSize: isMobile ? 13 : 14 }}>
+            {filter === "all" && typeFilter === "all"
+              ? "جميع الأمور محدثة."
+              : "لا توجد نتائج مطابقة للفلاتر المحددة."}
+          </p>
         </Card>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "clamp(10px, 2.5vw, 14px)" }}>
+        <div>
           {filteredNotifications.map((n) => (
-            <Link
+            <NotificationCard
               key={n.id}
-              to={`/case/${n.caseId}`}
-              onClick={() => markAsRead(n.id)}
-              style={{
-                display: "block",
-                textDecoration: "none",
-                color: "inherit",
-              }}
-            >
-              <Card
-                style={{
-                  padding: 0,
-                  background: n.isRead ? "#fff" : "#fffbeb",
-                  borderRadius: 14,
-                  boxShadow: n.isRead
-                    ? "0 2px 8px rgba(0,0,0,0.06)"
-                    : "0 4px 12px rgba(251, 191, 36, 0.15)",
-                  border: n.isRead ? "1px solid #e5e7eb" : "1px solid #fcd34d",
-                  transition: "all 0.3s ease",
-                  overflow: "hidden",
-                }}
-              >
-                {/* شريط جانبي ملون */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "stretch",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: "clamp(4px, 1vw, 6px)",
-                      background: n.type === "late" ? "#dc2626" : n.type === "today" ? "#d97706" : "#2563eb",
-                      flexShrink: 0,
-                    }}
-                  />
-
-                  <div style={{ flex: 1, padding: "clamp(14px, 3.5vw, 18px)", minWidth: 0 }}>
-                    {/* الصف العلوي: الشارة + الوقت + حالة القراءة */}
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        flexWrap: "wrap",
-                        gap: 8,
-                        marginBottom: 10,
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <TypeBadge type={n.type} />
-                        {!n.isRead && (
-                          <span
-                            style={{
-                              width: 8,
-                              height: 8,
-                              background: "#dc2626",
-                              borderRadius: "50%",
-                              boxShadow: "0 0 0 3px rgba(220, 38, 38, 0.2)",
-                            }}
-                          />
-                        )}
-                      </div>
-                      <TimeAgo timestamp={n.createdAt} />
-                    </div>
-
-                    {/* نص الإشعار */}
-                    <div
-                      style={{
-                        fontWeight: n.isRead ? 400 : 600,
-                        fontSize: "clamp(14px, 3.5vw, 16px)",
-                        color: "#1f2937",
-                        lineHeight: 1.6,
-                        marginBottom: 12,
-                      }}
-                    >
-                      {n.message}
-                    </div>
-
-                    {/* الصف السفلي: رقم القضية + أزرار */}
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        flexWrap: "wrap",
-                        gap: 10,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: "clamp(12px, 3vw, 14px)",
-                          color: "#4b5563",
-                          background: "#f3f4f6",
-                          padding: "6px 14px",
-                          borderRadius: 8,
-                          fontWeight: 600,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                        }}
-                      >
-                        ⚖️ {n.caseNumber}
-                      </span>
-
-                      <div style={{ display: "flex", gap: 8 }}>
-                        {n.type === "late" && (
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              navigate(`/case/${n.caseId}?action=recordDecision&sessionDate=${n.sessionDate || ""}`);
-                            }}
-                            style={{
-                              background: "#dc2626",
-                              color: "#fff",
-                              border: "none",
-                              borderRadius: 8,
-                              padding: "clamp(6px, 2vw, 8px) clamp(12px, 3vw, 16px)",
-                              cursor: "pointer",
-                              fontSize: "clamp(12px, 3vw, 14px)",
-                              fontWeight: 600,
-                              whiteSpace: "nowrap",
-                              transition: "all 0.2s",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 4,
-                            }}
-                          >
-                            ✎ تسجيل القرار
-                          </button>
-                        )}
-                        <button
-                          onClick={(e) => deleteNotification(n.id, e)}
-                          style={{
-                            background: "transparent",
-                            border: "1px solid #e5e7eb",
-                            cursor: "pointer",
-                            padding: "clamp(6px, 2vw, 8px)",
-                            color: "#9ca3af",
-                            fontSize: 16,
-                            borderRadius: 8,
-                            transition: "all 0.2s",
-                            width: "clamp(32px, 8vw, 36px)",
-                            height: "clamp(32px, 8vw, 36px)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                          title="حذف الإشعار"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            </Link>
+              n={{ ...n, currentUserId: n.currentUserId }}
+              onMarkRead={markAsRead}
+              onDelete={deleteNotification}
+              isMobile={isMobile}
+            />
           ))}
         </div>
       )}
     </div>
   );
 }
+
+/* ===========================
+            Styles
+=========================== */
+
+const infoChipStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  padding: "7px 12px",
+  borderRadius: 999,
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+  color: "#334155",
+  fontWeight: 600,
+};

@@ -1,11 +1,65 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { db } from "../firebase";
 import { collection, onSnapshot, query, where, documentId, getDocs, doc, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { parseDate } from "../utils/date";
 import { CASE_STATUS } from "../constants/caseStatus";
 import { useAuth } from "../context/AuthContext";
-import Card from "../components/ui/Card";
+
+// ============================================================
+// 🏛️ ألوان عريقة — منصة القضاء الخشبية
+// ============================================================
+const THEME = {
+  pageBg: "#f5f0e8",
+  headerBg: "#2c1810",
+  cardBg: "#faf8f3",
+  cardBgHover: "#f5f0e6",
+  gold: "#b8860b",
+  goldLight: "#d4a843",
+  goldDark: "#8b6914",
+  textPrimary: "#3d2817",
+  textSecondary: "#6b5344",
+  textMuted: "#9c8b7a",
+  textLight: "#f5f0e8",
+  border: "#d4c5b0",
+  borderLight: "#e8dfd3",
+  shadow: "0 4px 20px rgba(44,24,16,0.08)",
+  shadowHover: "0 8px 30px rgba(44,24,16,0.15)",
+  urgent: "#8b2500",
+  urgentBg: "#fef2f2",
+  active: "#2d5a27",
+  execution: "#8b6914",
+  closed: "#6b5344",
+  btnPrimary: "#b8860b",
+  btnPrimaryHover: "#d4a843",
+  btnSecondary: "#2c1810",
+  btnSecondaryHover: "#4a2c1a",
+};
+
+const Icons = {
+  scale: "⚖️",
+  gavel: "🔨",
+  book: "📜",
+  building: "🏛️",
+  person: "👤",
+  calendar: "📅",
+  clock: "🕐",
+  warning: "⚠️",
+  search: "🔍",
+  add: "➕",
+  view: "👁️",
+  edit: "✏️",
+};
+
+// 📅 تنسيق التاريخ — YYYY-MM-DD
+const formatDate = (dateObj) => {
+  if (!dateObj) return "";
+  const d = new Date(dateObj);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 export default function Dashboard() {
   const [cases, setCases] = useState([]);
@@ -14,16 +68,24 @@ export default function Dashboard() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [officeName, setOfficeName] = useState("");
-  const [showToast, setShowToast] = useState(false); // حالة التنبيه المنبثق
+  const [showToast, setShowToast] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   const navigate = useNavigate();
   const { userData } = useAuth();
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
+
+  // Responsive check
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   // جلب اسم المكتب
   useEffect(() => {
@@ -36,13 +98,11 @@ export default function Dashboard() {
     fetchOfficeName();
   }, [userData]);
 
-  // دالة تحديد الجلسات العاجلة
   const isUrgent = (upcomingDate) => {
     if (!upcomingDate) return false;
     return upcomingDate >= today && upcomingDate <= tomorrow;
   };
 
-  // تفعيل التنبيه المنبثق عند تحميل القضايا
   useEffect(() => {
     const hasUrgentCases = cases.some(c => isUrgent(getUpcomingSessionDate(c.sessions)));
     if (hasUrgentCases) {
@@ -52,7 +112,6 @@ export default function Dashboard() {
     }
   }, [cases]);
 
-  /* ... باقي الـ useEffects ... */
   useEffect(() => {
     const timer = setTimeout(() => { setDebouncedSearch(search.toLowerCase().trim()); }, 300);
     return () => clearTimeout(timer);
@@ -61,7 +120,9 @@ export default function Dashboard() {
   useEffect(() => {
     if (!userData?.officeId) return;
     const q = query(collection(db, "cases"), where("officeId", "==", userData.officeId));
-    const unsub = onSnapshot(q, (snapshot) => { setCases(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))); });
+    const unsub = onSnapshot(q, (snapshot) => { 
+      setCases(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))); 
+    });
     return () => unsub();
   }, [userData]);
 
@@ -91,7 +152,6 @@ export default function Dashboard() {
     fetchClientNames();
   }, [cases]);
 
-  /* ... (باقي الدوال كما هي) ... */
   const normalizeStatus = (status) => {
     const s = (status || "").toString().trim().toLowerCase();
     if (["جارية", "نشطة", "active"].includes(s)) return CASE_STATUS.ACTIVE;
@@ -102,9 +162,26 @@ export default function Dashboard() {
 
   const getStatusBadge = (status) => {
     const s = normalizeStatus(status);
-    const map = { ACTIVE: { label: "نشطة", bg: "#e0f7e9", color: "#16a34a" }, EXECUTION: { label: "تنفيذ", bg: "#fff7e0", color: "#f59e0b" }, CLOSED: { label: "منتهية", bg: "#ffe0e0", color: "#dc2626" } };
+    const map = {
+      ACTIVE: { label: "نشطة", bg: "#e8f5e6", color: THEME.active, border: "#2d5a2730" },
+      EXECUTION: { label: "تنفيذ", bg: "#fdf6e3", color: THEME.execution, border: "#8b691430" },
+      CLOSED: { label: "منتهية", bg: "#f0e6e6", color: THEME.closed, border: "#6b534430" },
+    };
     const style = map[s] || map.ACTIVE;
-    return <span style={{ padding: "4px 10px", borderRadius: "999px", fontSize: "12px", fontWeight: "600", background: style.bg, color: style.color }}>{style.label}</span>;
+    return (
+      <span style={{
+        padding: "4px 12px",
+        borderRadius: "999px",
+        fontSize: "12px",
+        fontWeight: "700",
+        background: style.bg,
+        color: style.color,
+        border: `1px solid ${style.border}`,
+        fontFamily: "'Segoe UI', Tahoma, sans-serif",
+      }}>
+        {style.label}
+      </span>
+    );
   };
 
   const getUpcomingSessionDate = (sessions) => {
@@ -119,100 +196,831 @@ export default function Dashboard() {
     return dates.length > 0 ? dates.sort((a, b) => b - a)[0] : null;
   };
 
-  const formatDateForDisplay = (dateObj) => dateObj ? dateObj.toISOString().split('T')[0] : "";
-
   const statusFilteredCases = cases.filter(c => statusFilter === "ALL" || normalizeStatus(c.status) === statusFilter);
   const sortedCases = statusFilteredCases.filter(c => {
     const text = debouncedSearch;
     if (!text) return true;
-    const clientMatch = Array.isArray(c.clients) && c.clients.some(ci => (clientNamesCache[typeof ci === "object" ? ci.id : ci] || "").toLowerCase().includes(text));
+    const clientMatch = Array.isArray(c.clients) && c.clients.some(ci => 
+      (clientNamesCache[typeof ci === "object" ? ci.id : ci] || "").toLowerCase().includes(text)
+    );
     const sessionMatch = (c.sessions || []).some(s => (s.nextSessionDate || s.date || "").includes(text));
-    return (c.caseNumber || "").toLowerCase().includes(text) || clientMatch || (c.court || "").toLowerCase().includes(text) || sessionMatch;
-  }).sort((a, b) => (getUpcomingSessionDate(a.sessions) || new Date(9999,0,1)) - (getUpcomingSessionDate(b.sessions) || new Date(9999,0,1)));
+    return (c.caseNumber || "").toLowerCase().includes(text) || 
+           clientMatch || 
+           (c.court || "").toLowerCase().includes(text) || 
+           sessionMatch;
+  }).sort((a, b) => 
+    (getUpcomingSessionDate(a.sessions) || new Date(9999,0,1)) - 
+    (getUpcomingSessionDate(b.sessions) || new Date(9999,0,1))
+  );
+
+  const stats = {
+    total: cases.length,
+    active: cases.filter(c => normalizeStatus(c.status) === CASE_STATUS.ACTIVE).length,
+    execution: cases.filter(c => normalizeStatus(c.status) === CASE_STATUS.EXECUTION).length,
+    closed: cases.filter(c => normalizeStatus(c.status) === CASE_STATUS.CLOSED).length,
+    urgent: cases.filter(c => isUrgent(getUpcomingSessionDate(c.sessions))).length,
+  };
 
   return (
     <div style={{ ...styles.page, direction: "rtl" }}>
       {/* التنبيه المنبثق */}
       {showToast && (
         <div style={styles.toast}>
-          ⚖️ <strong>تنبيه:</strong> لديك جلسات عاجلة اليوم أو غداً! تحقق من البطاقات المحددة باللون الأحمر.
+          <span style={{ fontSize: "20px" }}>{Icons.warning}</span>
+          <div>
+            <strong style={{ fontSize: "15px" }}>تنبيه عاجل</strong>
+            <p style={{ margin: "4px 0 0 0", fontSize: "13px", opacity: 0.9 }}>
+              لديك {stats.urgent} جلس{stats.urgent > 1 ? "ات" : "ة"} عاجلة اليوم أو غداً
+            </p>
+          </div>
           <button onClick={() => setShowToast(false)} style={styles.closeToast}>✕</button>
         </div>
       )}
 
-      <div style={styles.brandingHeader}>
-        <div style={styles.logoContainer}>
-           {userData?.logoUrl ? <img src={userData.logoUrl} alt="Logo" style={styles.logo} /> : <div style={styles.logoPlaceholder}>⚖️</div>}
+      {/* ============================================================
+          🏛️ الهيدر العريق — مضغوط على الهاتف
+      ============================================================ */}
+      <header style={styles.header}>
+        <div style={styles.headerContent}>
+          <div style={styles.headerLeft}>
+            <div style={styles.logoWrapper}>
+              {userData?.logoUrl ? (
+                <img src={userData.logoUrl} alt="Logo" style={styles.logo} />
+              ) : (
+                <div style={styles.logoPlaceholder}>{Icons.scale}</div>
+              )}
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <h1 style={styles.officeName}>
+                {officeName || "مكتب المحاماة"}
+              </h1>
+              <p style={styles.welcomeText}>
+                أهلاً بك يا {userData?.name || "زميلي"} · {formatDate(today)}
+              </p>
+            </div>
+          </div>
+
+          {/* ✅ أزرار الإضافة — تظهر في الهيدر على الديسكتوب فقط */}
+          {!isMobile && (
+            <div style={styles.headerActions}>
+              <button 
+                style={styles.addCaseBtn} 
+                onClick={() => navigate("/add-case")}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = THEME.goldLight;
+                  e.currentTarget.style.transform = "translateY(-2px)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = THEME.gold;
+                  e.currentTarget.style.transform = "translateY(0)";
+                }}
+              >
+                <span style={{ fontSize: "16px" }}>{Icons.add}</span>
+                <span>إضافة قضية</span>
+              </button>
+              <button 
+                style={styles.addClientBtn} 
+                onClick={() => navigate("/clients/add")}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = THEME.btnSecondaryHover;
+                  e.currentTarget.style.transform = "translateY(-2px)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = THEME.btnSecondary;
+                  e.currentTarget.style.transform = "translateY(0)";
+                }}
+              >
+                <span style={{ fontSize: "16px" }}>{Icons.person}</span>
+                <span>إضافة موكل</span>
+              </button>
+            </div>
+          )}
         </div>
-        <div>
-          <h1 style={styles.title}>{officeName || "مكتب المحاماة"}</h1>
-          <p style={styles.subtitle}>أهلاً بك يا {userData?.name || "زميلي"} | {today.toLocaleDateString("ar-EG")}</p>
+
+        {/* شريط الإحصائيات */}
+        <div style={styles.statsBar}>
+          <StatItem icon={Icons.book} label="القضايا" value={stats.total} />
+          <StatItem icon="●" label="نشطة" value={stats.active} color={THEME.active} />
+          <StatItem icon="●" label="تنفيذ" value={stats.execution} color={THEME.execution} />
+          <StatItem icon="●" label="منتهية" value={stats.closed} color={THEME.closed} />
+          {stats.urgent > 0 && (
+            <StatItem icon={Icons.warning} label="عاجلة" value={stats.urgent} color={THEME.urgent} isUrgent />
+          )}
+        </div>
+      </header>
+
+      {/* ============================================================
+          ✅ أزرار الإضافة — تظهر برة الهيدر على الهاتف فقط
+      ============================================================ */}
+      {isMobile && (
+        <div style={styles.mobileActions}>
+          <button 
+            style={styles.mobileAddCaseBtn} 
+            onClick={() => navigate("/add-case")}
+          >
+            <span style={{ fontSize: "18px" }}>{Icons.add}</span>
+            <span>إضافة قضية</span>
+          </button>
+          <button 
+            style={styles.mobileAddClientBtn} 
+            onClick={() => navigate("/clients/add")}
+          >
+            <span style={{ fontSize: "18px" }}>{Icons.person}</span>
+            <span>إضافة موكل</span>
+          </button>
+        </div>
+      )}
+
+      {/* ============================================================
+          🔍 البحث والفلاتر
+      ============================================================ */}
+      <div style={styles.controlsSection}>
+        <div style={styles.searchWrapper}>
+          <span style={styles.searchIcon}>{Icons.search}</span>
+          <input 
+            placeholder="ابحث برقم السجل، المحكمة، الموكل، أو التاريخ (YYYY-MM-DD)..." 
+            value={search} 
+            onChange={(e) => setSearch(e.target.value)} 
+            style={styles.search}
+          />
+        </div>
+
+        <div style={styles.filters}>
+          {[
+            { key: "ALL", label: "الكل" },
+            { key: CASE_STATUS.ACTIVE, label: "نشطة" },
+            { key: CASE_STATUS.EXECUTION, label: "تنفيذ" },
+            { key: CASE_STATUS.CLOSED, label: "منتهية" },
+          ].map((filter) => (
+            <button 
+              key={filter.key}
+              onClick={() => setStatusFilter(filter.key)} 
+              style={statusFilter === filter.key ? styles.activeFilter : styles.filterBtn}
+            >
+              {filter.label}
+            </button>
+          ))}
         </div>
       </div>
-      
-      {/* ... باقي الواجهة ... */}
-      <Card>
-        <div style={styles.header}>
-          <h1 style={{ margin: 0, fontSize: "22px", color: "#1e3a8a" }}>📊 لوحة التحكم والمتابعة</h1>
-          <button style={styles.addBtn} onClick={() => navigate("/add-case")}>➕ قضية جديدة</button>
-        </div>
-      </Card>
 
-      <input placeholder="ابحث برقم السجل، المحكمة، الموكل، أو التاريخ..." value={search} onChange={(e) => setSearch(e.target.value)} style={styles.search} />
-      
-      <div style={styles.filters}>
-        <button onClick={() => setStatusFilter("ALL")} style={statusFilter === "ALL" ? styles.activeFilter : styles.filterBtn}>الكل</button>
-        <button onClick={() => setStatusFilter(CASE_STATUS.ACTIVE)} style={statusFilter === CASE_STATUS.ACTIVE ? styles.activeFilter : styles.filterBtn}>نشطة</button>
-        <button onClick={() => setStatusFilter(CASE_STATUS.EXECUTION)} style={statusFilter === CASE_STATUS.EXECUTION ? styles.activeFilter : styles.filterBtn}>تنفيذ</button>
-        <button onClick={() => setStatusFilter(CASE_STATUS.CLOSED)} style={statusFilter === CASE_STATUS.CLOSED ? styles.activeFilter : styles.filterBtn}>منتهية</button>
-      </div>
-
+      {/* ============================================================
+          📋 شبكة القضايا
+      ============================================================ */}
       <div style={styles.grid}>
         {sortedCases.map((c) => {
           const upcoming = getUpcomingSessionDate(c.sessions);
           const previous = getPreviousSessionDate(c.sessions);
           const urgent = isUrgent(upcoming);
+          const clientName = Array.isArray(c.clients) 
+            ? (clientNamesCache[typeof c.clients[0] === "object" ? c.clients[0].id : c.clients[0]] || "...")
+            : "-";
+
           return (
-            <Card key={c.id} style={{ borderRight: urgent ? "6px solid #ef4444" : "6px solid #e2e8f0" }}>
-              <h3 style={{ margin: "0 0 8px 0", fontSize: "17px" }}>⚖️ ق رقم: {c.caseSerial || c.caseNumber || "-"} / {c.caseYear}</h3>
-              {urgent && <div style={{ color: "#ef4444", fontWeight: "bold", fontSize: "12px", marginBottom: "8px" }}>⚠️ تنبيه: جلسة قريبة جداً!</div>}
-              <div style={{ marginBottom: "10px" }}>{getStatusBadge(c.status)}</div>
-              <p style={{ margin: "4px 0", fontSize: "14px" }}>👤 <strong>الموكل:</strong> {Array.isArray(c.clients) ? (clientNamesCache[typeof c.clients[0] === "object" ? c.clients[0].id : c.clients[0]] || "...") : "-"}</p>
-              <p style={{ margin: "4px 0", fontSize: "14px" }}>🏛️ <strong>المحكمة:</strong> {c.court || "-"}</p>
-              <div style={{ marginTop: "10px", padding: "8px", background: "#f8fafc", borderRadius: "8px" }}>
-                 <p style={{ margin: "2px 0", fontSize: "13px", color: urgent ? "#ef4444" : "#b45309" }}>📅 <strong>القادمة:</strong> {upcoming ? <span style={{ fontFamily: "monospace", fontWeight: "bold" }}>{formatDateForDisplay(upcoming)}</span> : "لا يوجد"}</p>
-                 {previous && <p style={{ margin: "2px 0", fontSize: "13px", color: "#64748b" }}>⏮ <strong>السابقة:</strong> {formatDateForDisplay(previous)}</p>}
+            <div 
+              key={c.id} 
+              style={{
+                ...styles.card,
+                ...(urgent ? styles.cardUrgent : {}),
+              }}
+              onClick={() => navigate(`/case/${c.id}`)}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-4px)";
+                e.currentTarget.style.boxShadow = THEME.shadowHover;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = THEME.shadow;
+              }}
+            >
+              <div style={{
+                ...styles.cardTopBar,
+                background: urgent ? THEME.urgent : THEME.gold,
+              }} />
+
+              <div style={styles.cardContent}>
+                <div style={styles.cardHeader}>
+                  <h3 style={styles.caseNumber}>
+                    {Icons.gavel} ق رقم: {c.caseSerial || c.caseNumber || "-"} / {c.caseYear}
+                  </h3>
+                  {getStatusBadge(c.status)}
+                </div>
+
+                {urgent && (
+                  <div style={styles.urgentBanner}>
+                    <span style={{ fontSize: "16px" }}>{Icons.warning}</span>
+                    <span>جلسة عاجلة — {formatDate(upcoming)}</span>
+                  </div>
+                )}
+
+                <div style={styles.caseInfo}>
+                  <InfoRow icon={Icons.person} label="الموكل" value={clientName} />
+                  <InfoRow icon={Icons.building} label="المحكمة" value={c.court || "-"} />
+                </div>
+
+                <div style={styles.datesBox}>
+                  <DateRow 
+                    icon={Icons.calendar} 
+                    label="القادمة" 
+                    date={upcoming} 
+                    isUrgent={urgent}
+                  />
+                  {previous && (
+                    <DateRow 
+                      icon={Icons.clock} 
+                      label="السابقة" 
+                      date={previous} 
+                      isPast
+                    />
+                  )}
+                </div>
+
+                <div style={styles.cardActions}>
+                  <button 
+                    style={styles.viewBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/case/${c.id}`);
+                    }}
+                  >
+                    {Icons.view} فتح الملف
+                  </button>
+                  <button 
+                    style={styles.editBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/edit/${c.id}`);
+                    }}
+                  >
+                    {Icons.edit} تعديل
+                  </button>
+                </div>
               </div>
-              <div style={styles.actions}>
-                <button style={styles.viewBtn} onClick={() => navigate(`/case/${c.id}`)}>🔎 فتح الملف</button>
-                <button style={styles.editBtn} onClick={() => navigate(`/edit/${c.id}`)}>✏️ تعديل</button>
-              </div>
-            </Card>
+            </div>
           );
         })}
+      </div>
+
+      {sortedCases.length === 0 && (
+        <div style={styles.emptyState}>
+          <div style={{ fontSize: "64px", marginBottom: "16px" }}>{Icons.book}</div>
+          <h3 style={{ color: THEME.textPrimary, margin: "0 0 8px 0" }}>
+            {debouncedSearch ? "لا توجد نتائج مطابقة" : "لا توجد قضايا"}
+          </h3>
+          <p style={{ color: THEME.textMuted, margin: 0 }}>
+            {debouncedSearch 
+              ? "جرب البحث بكلمات مختلفة" 
+              : "اضغط على 'إضافة قضية' لإضافة أول قضية"
+            }
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// 🏛️ مكونات مساعدة
+// ============================================================
+
+function StatItem({ icon, label, value, color, isUrgent }) {
+  return (
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      padding: "8px 16px",
+      background: isUrgent ? "#8b250015" : "rgba(255,255,255,0.05)",
+      borderRadius: "10px",
+      border: isUrgent ? "1px solid #8b250030" : "1px solid transparent",
+    }}>
+      <span style={{ 
+        fontSize: "14px", 
+        color: color || THEME.goldLight,
+        fontWeight: isUrgent ? "bold" : "normal",
+      }}>
+        {icon}
+      </span>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <span style={{ 
+          fontSize: "18px", 
+          fontWeight: "700", 
+          color: isUrgent ? THEME.urgent : "#fff",
+          fontFamily: "'Segoe UI', Tahoma, sans-serif",
+        }}>
+          {value}
+        </span>
+        <span style={{ fontSize: "11px", color: "#9c8b7a", fontWeight: "500" }}>
+          {label}
+        </span>
       </div>
     </div>
   );
 }
 
+function InfoRow({ icon, label, value }) {
+  return (
+    <div style={styles.infoRow}>
+      <span style={styles.infoIcon}>{icon}</span>
+      <span style={styles.infoLabel}>{label}:</span>
+      <span style={styles.infoValue}>{value}</span>
+    </div>
+  );
+}
+
+function DateRow({ icon, label, date, isUrgent, isPast }) {
+  return (
+    <div style={{
+      ...styles.dateRow,
+      ...(isUrgent ? styles.dateRowUrgent : {}),
+      ...(isPast ? styles.dateRowPast : {}),
+    }}>
+      <span style={styles.dateIcon}>{icon}</span>
+      <span style={styles.dateLabel}>{label}:</span>
+      <span style={{
+        ...styles.dateValue,
+        ...(isUrgent ? { color: THEME.urgent, fontWeight: "700" } : {}),
+        ...(isPast ? { color: THEME.textMuted } : {}),
+      }}>
+        {date ? formatDate(date) : "لا يوجد"}
+      </span>
+    </div>
+  );
+}
+
+// ============================================================
+// 🏛️ الستايلات
+// ============================================================
 const styles = {
-  page: { padding: "14px", background: "#f5f7fb", minHeight: "100vh", fontFamily: "Segoe UI, Tahoma" },
-  brandingHeader: { display: "flex", alignItems: "center", gap: "20px", background: "#fff", padding: "20px", borderRadius: "16px", marginBottom: "20px", boxShadow: "0 2px 4px rgba(0,0,0,0.05)", borderRight: "6px solid #1e3a8a" },
-  logoContainer: { width: "70px", height: "70px", borderRadius: "12px", background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center" },
-  logo: { width: "100%", height: "100%", objectFit: "cover", borderRadius: "12px" },
-  logoPlaceholder: { fontSize: "30px" },
-  title: { margin: 0, fontSize: "22px", color: "#1e3a8a" },
-  subtitle: { margin: "5px 0 0 0", color: "#64748b", fontSize: "14px" },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "center" },
-  addBtn: { padding: "8px 14px", border: "none", borderRadius: "8px", background: "#2563eb", color: "white", cursor: "pointer", fontWeight: "600" },
-  search: { width: "100%", padding: "11px", margin: "12px 0", borderRadius: "8px", border: "1px solid #cbd5e1", boxSizing: "border-box" },
-  filters: { display: "flex", gap: "8px", marginBottom: "12px" },
-  filterBtn: { padding: "6px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer" },
-  activeFilter: { padding: "6px 12px", borderRadius: "8px", border: "1px solid #2563eb", background: "#2563eb", color: "#fff", cursor: "pointer" },
-  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "14px" },
-  actions: { display: "flex", gap: "8px", marginTop: "12px", borderTop: "1px solid #f1f5f9", paddingTop: "10px" },
-  viewBtn: { flex: 1, padding: "8px", border: "none", borderRadius: "8px", background: "#2563eb", color: "white", cursor: "pointer" },
-  editBtn: { flex: 1, padding: "8px", border: "none", borderRadius: "8px", background: "#16a34a", color: "white", cursor: "pointer" },
-  toast: { position: "fixed", bottom: "20px", right: "20px", background: "#ef4444", color: "#fff", padding: "15px 20px", borderRadius: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.15)", zIndex: 1000, display: "flex", alignItems: "center", gap: "10px" },
-  closeToast: { background: "transparent", border: "none", color: "#fff", cursor: "pointer", fontWeight: "bold" }
+  page: {
+    padding: "24px",
+    background: THEME.pageBg,
+    minHeight: "100vh",
+    fontFamily: "'Segoe UI', 'Tahoma', 'Geneva', 'Verdana', sans-serif",
+  },
+
+  // ─── الهيدر ───
+  header: {
+    background: THEME.headerBg,
+    borderRadius: "16px",
+    padding: "20px 24px",
+    marginBottom: "20px",
+    boxShadow: "0 8px 32px rgba(44,24,16,0.15)",
+    border: "1px solid #3d2817",
+  },
+  headerContent: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: "16px",
+    marginBottom: "16px",
+  },
+  headerLeft: {
+    display: "flex",
+    alignItems: "center",
+    gap: "16px",
+    flex: 1,
+    minWidth: 0,
+  },
+  logoWrapper: {
+    width: "60px",
+    height: "60px",
+    borderRadius: "12px",
+    background: "linear-gradient(135deg, #3d2817, #5a3a22)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    border: `2px solid ${THEME.gold}`,
+    boxShadow: "0 4px 12px rgba(184,134,11,0.2)",
+    flexShrink: 0,
+  },
+  logo: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    borderRadius: "10px",
+  },
+  logoPlaceholder: {
+    fontSize: "28px",
+  },
+  officeName: {
+    margin: "0 0 4px 0",
+    fontSize: "22px",
+    fontWeight: "700",
+    color: THEME.goldLight,
+    fontFamily: "'Segoe UI', Tahoma, sans-serif",
+    letterSpacing: "0.5px",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  welcomeText: {
+    margin: 0,
+    color: "#9c8b7a",
+    fontSize: "14px",
+    fontWeight: "500",
+  },
+
+  // ─── أزرار الإضافة في الهيدر (ديسكتوب) ───
+  headerActions: {
+    display: "flex",
+    gap: "10px",
+    flexWrap: "wrap",
+  },
+  addCaseBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "10px 20px",
+    background: THEME.gold,
+    color: "#fff",
+    border: "none",
+    borderRadius: "12px",
+    fontSize: "14px",
+    fontWeight: "700",
+    cursor: "pointer",
+    transition: "all 0.25s ease",
+    boxShadow: "0 4px 16px rgba(184,134,11,0.3)",
+    fontFamily: "inherit",
+  },
+  addClientBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "10px 20px",
+    background: THEME.btnSecondary,
+    color: "#fff",
+    border: "none",
+    borderRadius: "12px",
+    fontSize: "14px",
+    fontWeight: "700",
+    cursor: "pointer",
+    transition: "all 0.25s ease",
+    boxShadow: "0 4px 16px rgba(44,24,16,0.2)",
+    fontFamily: "inherit",
+  },
+
+  // ─── أزرار الإضافة على الهاتف ───
+  mobileActions: {
+    display: "flex",
+    gap: "10px",
+    marginBottom: "16px",
+  },
+  mobileAddCaseBtn: {
+    flex: 1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
+    padding: "14px 16px",
+    background: THEME.gold,
+    color: "#fff",
+    border: "none",
+    borderRadius: "12px",
+    fontSize: "15px",
+    fontWeight: "700",
+    cursor: "pointer",
+    transition: "all 0.25s ease",
+    boxShadow: "0 4px 16px rgba(184,134,11,0.3)",
+    fontFamily: "inherit",
+  },
+  mobileAddClientBtn: {
+    flex: 1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
+    padding: "14px 16px",
+    background: THEME.btnSecondary,
+    color: "#fff",
+    border: "none",
+    borderRadius: "12px",
+    fontSize: "15px",
+    fontWeight: "700",
+    cursor: "pointer",
+    transition: "all 0.25s ease",
+    boxShadow: "0 4px 16px rgba(44,24,16,0.2)",
+    fontFamily: "inherit",
+  },
+
+  // ─── شريط الإحصائيات ───
+  statsBar: {
+    display: "flex",
+    gap: "12px",
+    flexWrap: "wrap",
+    paddingTop: "16px",
+    borderTop: "1px solid rgba(212,197,176,0.15)",
+  },
+
+  // ─── البحث والفلاتر ───
+  controlsSection: {
+    marginBottom: "20px",
+  },
+  searchWrapper: {
+    position: "relative",
+    marginBottom: "12px",
+  },
+  searchIcon: {
+    position: "absolute",
+    right: "16px",
+    top: "50%",
+    transform: "translateY(-50%)",
+    fontSize: "18px",
+    color: THEME.textMuted,
+    zIndex: 1,
+  },
+  search: {
+    width: "100%",
+    padding: "14px 48px 14px 16px",
+    borderRadius: "12px",
+    border: `1px solid ${THEME.border}`,
+    background: THEME.cardBg,
+    color: THEME.textPrimary,
+    fontSize: "15px",
+    fontFamily: "inherit",
+    outline: "none",
+    transition: "all 0.2s ease",
+    boxSizing: "border-box",
+    boxShadow: "0 2px 8px rgba(44,24,16,0.04)",
+  },
+  filters: {
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap",
+  },
+  filterBtn: {
+    padding: "10px 20px",
+    borderRadius: "10px",
+    border: `1px solid ${THEME.border}`,
+    background: THEME.cardBg,
+    color: THEME.textSecondary,
+    cursor: "pointer",
+    fontSize: "14px",
+    fontWeight: "600",
+    transition: "all 0.2s ease",
+    fontFamily: "inherit",
+  },
+  activeFilter: {
+    padding: "10px 20px",
+    borderRadius: "10px",
+    border: `1px solid ${THEME.gold}`,
+    background: "#fdf6e3",
+    color: THEME.goldDark,
+    cursor: "pointer",
+    fontSize: "14px",
+    fontWeight: "700",
+    transition: "all 0.2s ease",
+    fontFamily: "inherit",
+    boxShadow: "0 2px 8px rgba(184,134,11,0.1)",
+  },
+
+  // ─── شبكة القضايا ───
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+    gap: "16px",
+  },
+
+  // ─── البطاقة ───
+  card: {
+    background: THEME.cardBg,
+    borderRadius: "14px",
+    overflow: "hidden",
+    boxShadow: THEME.shadow,
+    transition: "all 0.3s ease",
+    cursor: "pointer",
+    border: `1px solid ${THEME.borderLight}`,
+    position: "relative",
+  },
+  cardUrgent: {
+    border: `2px solid ${THEME.urgent}30`,
+    boxShadow: "0 4px 20px rgba(139,37,0,0.08)",
+  },
+  cardTopBar: {
+    height: "4px",
+    transition: "background 0.3s ease",
+  },
+  cardContent: {
+    padding: "20px",
+  },
+  cardHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: "12px",
+    flexWrap: "wrap",
+    gap: "8px",
+  },
+  caseNumber: {
+    margin: 0,
+    fontSize: "16px",
+    fontWeight: "700",
+    color: THEME.textPrimary,
+    fontFamily: "'Segoe UI', Tahoma, sans-serif",
+  },
+
+  // ─── تنبيه عاجل ───
+  urgentBanner: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "10px 14px",
+    background: THEME.urgentBg,
+    borderRadius: "10px",
+    marginBottom: "12px",
+    color: THEME.urgent,
+    fontSize: "13px",
+    fontWeight: "700",
+    border: `1px solid ${THEME.urgent}20`,
+  },
+
+  // ─── بيانات القضية ───
+  caseInfo: {
+    marginBottom: "12px",
+  },
+  infoRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "6px 0",
+    fontSize: "14px",
+  },
+  infoIcon: {
+    fontSize: "16px",
+    opacity: 0.7,
+  },
+  infoLabel: {
+    color: THEME.textMuted,
+    fontWeight: "500",
+    minWidth: "60px",
+  },
+  infoValue: {
+    color: THEME.textPrimary,
+    fontWeight: "600",
+  },
+
+  // ─── تواريخ الجلسات ───
+  datesBox: {
+    background: "#f5f0e6",
+    borderRadius: "10px",
+    padding: "12px",
+    marginBottom: "16px",
+    border: `1px solid ${THEME.borderLight}`,
+  },
+  dateRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "4px 0",
+    fontSize: "13px",
+  },
+  dateRowUrgent: {
+    background: THEME.urgentBg,
+    margin: "-4px -8px",
+    padding: "8px",
+    borderRadius: "6px",
+    border: `1px solid ${THEME.urgent}20`,
+  },
+  dateRowPast: {
+    opacity: 0.8,
+  },
+  dateIcon: {
+    fontSize: "14px",
+    opacity: 0.6,
+  },
+  dateLabel: {
+    color: THEME.textMuted,
+    fontWeight: "500",
+    minWidth: "55px",
+  },
+  dateValue: {
+    color: THEME.textPrimary,
+    fontWeight: "600",
+    fontFamily: "'Segoe UI', Tahoma, sans-serif",
+  },
+
+  // ─── أزرار البطاقة ───
+  cardActions: {
+    display: "flex",
+    gap: "8px",
+    paddingTop: "12px",
+    borderTop: `1px solid ${THEME.borderLight}`,
+  },
+  viewBtn: {
+    flex: 1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "6px",
+    padding: "10px",
+    border: "none",
+    borderRadius: "10px",
+    background: THEME.btnSecondary,
+    color: "#fff",
+    cursor: "pointer",
+    fontSize: "13px",
+    fontWeight: "700",
+    transition: "all 0.2s ease",
+    fontFamily: "inherit",
+  },
+  editBtn: {
+    flex: 1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "6px",
+    padding: "10px",
+    border: `1px solid ${THEME.border}`,
+    borderRadius: "10px",
+    background: "transparent",
+    color: THEME.textSecondary,
+    cursor: "pointer",
+    fontSize: "13px",
+    fontWeight: "600",
+    transition: "all 0.2s ease",
+    fontFamily: "inherit",
+  },
+
+  // ─── حالة فارغة ───
+  emptyState: {
+    textAlign: "center",
+    padding: "80px 20px",
+    color: THEME.textMuted,
+  },
+
+  // ─── التنبيه المنبثق ───
+  toast: {
+    position: "fixed",
+    bottom: "24px",
+    right: "24px",
+    background: THEME.headerBg,
+    color: "#fff",
+    padding: "16px 20px",
+    borderRadius: "14px",
+    boxShadow: "0 8px 32px rgba(44,24,16,0.2)",
+    zIndex: 1000,
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    maxWidth: "400px",
+    border: `1px solid ${THEME.gold}30`,
+    animation: "slideIn 0.4s ease",
+  },
+  closeToast: {
+    background: "transparent",
+    border: "none",
+    color: "#9c8b7a",
+    cursor: "pointer",
+    fontWeight: "bold",
+    fontSize: "16px",
+    padding: "4px",
+    marginRight: "auto",
+    transition: "color 0.2s",
+  },
 };
+
+// ✅ Responsive adjustments
+const responsiveStyles = `
+  @media (max-width: 768px) {
+    .dashboard-grid {
+      grid-template-columns: 1fr !important;
+    }
+    .dashboard-header {
+      padding: 16px !important;
+    }
+    .dashboard-header-content {
+      flex-direction: column;
+      align-items: flex-start !important;
+    }
+    .dashboard-office-name {
+      font-size: 16px !important;
+    }
+    .dashboard-welcome-text {
+      font-size: 12px !important;
+    }
+    .dashboard-logo-wrapper {
+      width: 48px !important;
+      height: 48px !important;
+    }
+    .dashboard-stats-bar {
+      justify-content: center;
+    }
+    .dashboard-mobile-actions {
+      display: flex !important;
+    }
+    .dashboard-header-actions {
+      display: none !important;
+    }
+  }
+
+  @keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+`;
+
+if (typeof document !== "undefined") {
+  const styleSheet = document.createElement("style");
+  styleSheet.innerText = responsiveStyles;
+  document.head.appendChild(styleSheet);
+}

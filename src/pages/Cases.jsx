@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { parseDate } from "../utils/date";
+import { syncNotifications } from "../utils/syncNotifications";
 import Card from "../components/ui/Card";
 
 export default function Cases() {
@@ -19,6 +20,7 @@ export default function Cases() {
 
   const { userData } = useAuth();
   const navigate = useNavigate();
+  const hasSynced = useRef(false);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -44,12 +46,18 @@ export default function Cases() {
 
         const snap = await getDocs(q);
 
-        setCases(
-          snap.docs.map((d) => ({
-            id: d.id,
-            ...d.data(),
-          }))
-        );
+        const data = snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }));
+
+        setCases(data);
+
+        // 🔥 منع تكرار sync
+        if (!hasSynced.current) {
+          hasSynced.current = true;
+          await syncNotifications(data, userData.officeId);
+        }
       } catch (error) {
         console.error("Error loading cases:", error);
       }
@@ -88,7 +96,6 @@ export default function Cases() {
   /* =================🛡️ دالة مستقرة تقرأ المعرف النصي أو كائن الموكل المطور ================= */
   const getClientName = (clientItem) => {
     if (!clientItem) return "موكل غير معروف";
-    // إذا كان الموكل مخزناً كنص (النظام القديم) أو كائن يحتوي على id (النظام الجديد)
     const id = typeof clientItem === "object" ? clientItem.id : clientItem;
     return clientsMap[id]?.fullName || clientsMap[id]?.name || "موكل غير معروف";
   };
@@ -120,19 +127,16 @@ export default function Cases() {
     const courtName = (c.court || "").toLowerCase();
     const caseTypeStr = (c.caseType || "").toLowerCase();
 
-    // استخراج أسماء الموكلين للبحث النصي
     const clientNamesStr = (c.clients || [])
       .map((item) => getClientName(item))
       .join(" ")
       .toLowerCase();
 
-    // استخراج أسماء الخصوم وعناوينهم للبحث
     const opponentNamesStr = (c.opponents || [])
       .map((x) => (typeof x === "object" ? `${x.name || ""} ${x.address || ""}` : x))
       .join(" ")
       .toLowerCase();
 
-    // 📅 استخراج التاريخ الموحد للجلسة المستقبلية للبحث به
     const upcomingSessionDateStr = getUpcomingSessionString(c.sessions);
 
     const searchMatch =
@@ -141,7 +145,7 @@ export default function Cases() {
       opponentNamesStr.includes(text) ||
       courtName.includes(text) ||
       caseTypeStr.includes(text) ||
-      upcomingSessionDateStr.includes(text); // تفعيل البحث بالتاريخ
+      upcomingSessionDateStr.includes(text);
 
     const statusMatch =
       statusFilter === "ALL" || c.status === statusFilter;
@@ -164,7 +168,7 @@ export default function Cases() {
       {/* HEADER & CONTROLS */}
       <div style={styles.card}>
         <h1 style={{ margin: "0 0 10px 0", fontSize: "22px", color: "#1e3a8a" }}>📊 أرشيف وجدول كافة القضايا</h1>
-        
+
         <input
           placeholder="ابحث برقم القضية، الموكل، الخصم، المحكمة، أو تاريخ الجلسة القادمة (YYYY-MM-DD)..."
           value={search}

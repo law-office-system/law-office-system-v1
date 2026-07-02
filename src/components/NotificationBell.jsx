@@ -3,10 +3,40 @@ import useNotifications from "../hooks/useNotifications";
 import { Link } from "react-router-dom";
 
 export default function NotificationBell() {
-  const { count, hasNotifications } = useNotifications();
+  const { count, hasNotifications, countsByType } = useNotifications();
   const [isHovered, setIsHovered] = useState(false);
 
   const displayCount = count > 99 ? "99+" : count;
+
+  // ✅ تحديد الأيقونة حسب أولوية النوع
+  const getBellIcon = () => {
+    if (!hasNotifications) return "🔔";
+    if (countsByType?.late > 0) return "🔴"; // أولوية أعلى
+    if (countsByType?.admin_task > 0) return "🟠";
+    if (countsByType?.judgment > 0) return "🟣";
+    return "🔔";
+  };
+
+  // ✅ بناء الـ tooltip
+  const getTooltip = () => {
+    if (!hasNotifications) return "لا توجد إشعارات";
+
+    const parts = [];
+    if (countsByType?.late > 0) parts.push(`${countsByType.late} جلسة متأخرة`);
+    if (countsByType?.admin_task > 0) parts.push(`${countsByType.admin_task} عمل إداري متأخر`);
+    if (countsByType?.judgment > 0) parts.push(`${countsByType.judgment} حكم يحتاج متابعة`);
+
+    return parts.join(" • ") || `${count} إشعارات`;
+  };
+
+  // ✅ تحديد لون العداد
+  const getBadgeColor = () => {
+    if (!hasNotifications) return "#9ca3af";
+    if (countsByType?.late > 0) return "#dc2626";
+    if (countsByType?.admin_task > 0) return "#f97316";
+    if (countsByType?.judgment > 0) return "#a855f7";
+    return "#dc2626";
+  };
 
   return (
     <Link
@@ -16,7 +46,7 @@ export default function NotificationBell() {
       style={{
         position: "relative",
         fontSize: "clamp(20px, 5vw, 24px)",
-        color: hasNotifications ? "#dc2626" : "#374151",
+        color: hasNotifications ? getBadgeColor() : "#374151",
         textDecoration: "none",
         padding: "clamp(6px, 2vw, 10px)",
         borderRadius: "50%",
@@ -28,26 +58,24 @@ export default function NotificationBell() {
         width: "clamp(36px, 10vw, 44px)",
         height: "clamp(36px, 10vw, 44px)",
       }}
-      title={hasNotifications ? `${count} إشعارات جديدة` : "الإشعارات"}
+      title={getTooltip()}
     >
-      {/* الأيقونة مع تأثير اهتزاز عند وجود إشعارات */}
       <span
         style={{
           display: "inline-block",
           animation: hasNotifications ? "bellShake 2s ease-in-out infinite" : "none",
         }}
       >
-        🔔
+        {getBellIcon()}
       </span>
 
-      {/* الشارة الحمراء */}
       {count > 0 && (
         <span
           style={{
             position: "absolute",
             top: "clamp(-2px, 0.5vw, -4px)",
             right: "clamp(-2px, 0.5vw, -4px)",
-            background: "#dc2626",
+            background: getBadgeColor(),
             color: "#fff",
             borderRadius: "999px",
             minWidth: "clamp(16px, 4vw, 20px)",
@@ -58,7 +86,7 @@ export default function NotificationBell() {
             justifyContent: "center",
             fontWeight: "bold",
             padding: "0 4px",
-            boxShadow: "0 2px 4px rgba(220, 38, 38, 0.3)",
+            boxShadow: `0 2px 4px ${getBadgeColor()}40`,
             border: "2px solid #fff",
           }}
         >
@@ -66,24 +94,6 @@ export default function NotificationBell() {
         </span>
       )}
 
-      {/* نقطة صغيرة بدون رقم (للشاشات الصغيرة جداً) */}
-      {count > 0 && count < 10 && (
-        <span
-          style={{
-            position: "absolute",
-            top: "2px",
-            right: "2px",
-            width: "8px",
-            height: "8px",
-            background: "#dc2626",
-            borderRadius: "50%",
-            display: "none", // يظهر فقط على الشاشات الصغيرة
-          }}
-          className="mobile-dot"
-        />
-      )}
-
-      {/* تأثير الاهتزاز */}
       <style>{`
         @keyframes bellShake {
           0%, 100% { transform: rotate(0deg); }

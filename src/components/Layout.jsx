@@ -1,46 +1,63 @@
-import { useState, useEffect } from "react";
-import { Outlet } from "react-router-dom";
+import { useState, useEffect, useMemo } from "react";
+import { Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
+
+// الصفحات العامة اللي مفيش Sidebar/Topbar فيها
+const PUBLIC_PAGES = ["/", "/home", "/login", "/register", "/super-login"];
 
 export default function Layout() {
   const [open, setOpen] = useState(() => {
     const saved = localStorage.getItem("sidebarOpen");
-    return saved !== null ? JSON.parse(saved) : false;
+    return saved !== null ? JSON.parse(saved) : true;
   });
 
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isMobile, setIsMobile] = useState(false);
+  const { user, userData } = useAuth();
+  const location = useLocation();
+
+  // 🎯 تحقق هل الصفحة الحالية عامة؟
+  const isPublicPage = useMemo(() => {
+    return PUBLIC_PAGES.includes(location.pathname);
+  }, [location.pathname]);
+
+  // 🎯 Sidebar يظهر فقط لو:
+  // 1. مش صفحة عامة
+  // 2. المستخدم مسجل دخول
+  // 3. عنده officeId
+  const showSidebar = !isPublicPage && user && userData?.officeId;
+  const showTopbar = !isPublicPage && user;
+
+  useEffect(() => {
+    localStorage.setItem("sidebarOpen", JSON.stringify(open));
+  }, [open]);
 
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+      if (mobile && open) setOpen(false);
     };
+
+    handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   return (
-    <div style={styles.app}>
-      {/* 1. التوب بار في طبقة مستقلة في الأعلى */}
-      <div style={styles.topbarContainer}>
-        <Topbar open={open} setOpen={setOpen} />
-      </div>
+    <div style={styles.container}>
+      {/* Sidebar يظهر فقط للمستخدمين المسجلين داخل مكتب */}
+      {showSidebar && (
+        <Sidebar open={open} setOpen={setOpen} isMobile={isMobile} />
+      )}
 
-      {/* 2. منطقة القائمة والمحتوى */}
-      <div style={styles.bodyContainer}>
-        
-        {/* الـ Sidebar */}
-        <aside style={styles.sidebar(open, isMobile)}>
-          <Sidebar open={open} />
-        </aside>
-
-        {/* الـ Overlay (قناع الموبايل) - يغلق القائمة بضغطة واحدة */}
-        {isMobile && open && (
-          <div style={styles.overlay} onClick={() => setOpen(false)} />
+      <div style={styles.contentArea(showSidebar, isMobile, open)}>
+        {/* Topbar يظهر فقط للمستخدمين المسجلين */}
+        {showTopbar && (
+          <Topbar open={open} setOpen={setOpen} isMobile={isMobile} />
         )}
-
-        {/* المحتوى الرئيسي */}
-        <main style={styles.mainContent}>
+        <main style={styles.main(isMobile, showTopbar)}>
           <Outlet />
         </main>
       </div>
@@ -49,27 +66,30 @@ export default function Layout() {
 }
 
 const styles = {
-  app: { display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" },
-  
-  topbarContainer: { zIndex: 1001, background: "#fff" }, // Z-index أعلى من القائمة دائماً
-
-  bodyContainer: { display: "flex", flex: 1, overflow: "hidden", position: "relative" },
-
-  sidebar: (open, isMobile) => ({
-    width: isMobile ? (open ? "240px" : "0px") : (open ? "240px" : "70px"),
-    position: isMobile ? "absolute" : "relative",
-    height: "100%",
-    zIndex: 1000, // أقل من التوب بار
-    transition: "all 0.3s ease",
-    background: "#1f2a36",
+  container: {
+    display: "flex",
+    height: "100vh",
+    background: "#0f172a",
     overflow: "hidden",
-  }),
-
-  overlay: {
-    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-    background: "rgba(0,0,0,0.3)",
-    zIndex: 999, // بين القائمة والمحتوى
+    direction: "rtl",
   },
-
-  mainContent: { flex: 1, overflowY: "auto", padding: "20px", background: "#f5f7fb" },
+  contentArea: (showSidebar, isMobile, open) => ({
+    display: "flex",
+    flexDirection: "column",
+    flex: 1,
+    transition: "margin 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+    marginRight: showSidebar 
+      ? (isMobile ? 0 : (open ? "260px" : "72px"))
+      : 0,
+    minWidth: 0,
+  }),
+  main: (isMobile, showTopbar) => ({
+    flex: 1,
+    overflowY: "auto",
+    overflowX: "hidden",
+    padding: isMobile ? "12px" : "20px",
+    background: "#0f172a",
+    // لو مفيش Topbar، نضيف padding-top عشان المحتوى مايلزقش فوق
+    paddingTop: showTopbar ? undefined : "20px",
+  }),
 };

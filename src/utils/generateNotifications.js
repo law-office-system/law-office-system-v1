@@ -1,99 +1,201 @@
 import { parseDate } from "./date";
 import { CASE_STATUS } from "../constants/caseStatus";
 
-export const generateNotifications = (cases) => {
-  const now = new Date();
-  const notifications = [];
-  const seen = new Set(); // منع التكرار
+// ============================================================
+// ✅ توليد الإشعارات — 3 أنواع
+// ============================================================
+// late        : جلسات متأخرة (مش مسجّل قرار)          🔴
+// admin_task  : أعمال إدارية متأخرة                   🟠
+// judgment    : أحكام تمهيدية/أوامر تحتاج متابعة      🟣
+// ============================================================
 
+export const generateNotifications = (cases, adminTasks = [], judgments = []) => {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  const notifications = [];
+  const seen = new Set();
+
+  // ───────────────────────────────────────────────
+  // 1️⃣ الجلسات المتأخرة (late) 🔴
+  // ───────────────────────────────────────────────
   const activeCases = cases.filter(
     (c) =>
       c.status === CASE_STATUS.ACTIVE ||
-      c.status === "نشطة"
+      c.status === "نشطة" ||
+      c.status === "ACTIVE" ||
+      c.status === "active"
   );
 
   activeCases.forEach((c) => {
     const sessions = c.sessions || [];
     if (!sessions.length) return;
 
-    const sorted = [...sessions].sort(
-      (a, b) => parseDate(b.date) - parseDate(a.date)
-    );
-
-    const lastDate = parseDate(sorted[0].date);
     const caseId = c.id;
+    const caseNumber = c.caseNumber || (c.caseSerial ? `${c.caseSerial}/${c.caseYear}` : "-");
+    const court = c.court || "";
+    const caseType = c.caseType || "";
+    const clientNames = c.clientNames || [];
+    const opponentNames = c.opponentNames || [];
 
-    // 🔴 متأخرة
-    if (lastDate) {
-      const diffDays = (now - lastDate) / (1000 * 60 * 60 * 24);
+    // فلترة الجلسات: استبعد المكتملة والملغاة
+    const validSessions = sessions.filter((s) => {
+      if (s.decision && s.decision.trim() !== "") return false;
+      if (s.status === "completed" || s.status === "مكتملة") return false;
+      if (s.status === "cancelled" || s.status === "ملغاة") return false;
+      return true;
+    });
 
-      if (diffDays > 3) {
-        const key = `${caseId}-late`;
+    if (!validSessions.length) return;
 
-        if (!seen.has(key)) {
-          seen.add(key);
+    // أقرب جلسة متأخرة فقط
+    let closestLate = null;
+    let closestLateDiff = -Infinity;
 
-          notifications.push({
-            id: key,
-            type: "late",
-            caseId,
-            caseNumber:
-              c.caseNumber ||
-              (c.caseSerial ? `${c.caseSerial}/${c.caseYear}` : "-"),
-            message: "⚠ لا يوجد متابعة بعد آخر جلسة",
-            caseData: c,
-          });
-        }
-      }
-    }
+    validSessions.forEach((s) => {
+      const sessionDate = parseDate(s.nextSessionDate || s.date);
+      if (!sessionDate) return;
 
-    sessions.forEach((s) => {
-      const d = parseDate(s.date);
-      if (!d) return;
+      sessionDate.setHours(0, 0, 0, 0);
+      const diffDays = Math.floor((sessionDate - now) / (1000 * 60 * 60 * 24));
 
-      const diff = (d - now) / (1000 * 60 * 60 * 24);
-      const isToday = d.toDateString() === now.toDateString();
-
-      // 🟡 اليوم
-      if (isToday) {
-        const key = `${caseId}-${s.date}-today`;
-
-        if (!seen.has(key)) {
-          seen.add(key);
-
-          notifications.push({
-            id: key,
-            type: "today",
-            caseId,
-            caseNumber:
-              c.caseNumber ||
-              (c.caseSerial ? `${c.caseSerial}/${c.caseYear}` : "-"),
-            message: "🟡 جلسة اليوم",
-            caseData: c,
-          });
-        }
-      }
-
-      // 🟠 خلال 24 ساعة
-      if (diff > 0 && diff <= 1) {
-        const key = `${caseId}-${s.date}-soon`;
-
-        if (!seen.has(key)) {
-          seen.add(key);
-
-          notifications.push({
-            id: key,
-            type: "soon",
-            caseId,
-            caseNumber:
-              c.caseNumber ||
-              (c.caseSerial ? `${c.caseSerial}/${c.caseYear}` : "-"),
-            message: "🟠 جلسة خلال 24 ساعة",
-            caseData: c,
-          });
-        }
+      if (diffDays < 0 && diffDays > closestLateDiff) {
+        closestLateDiff = diffDays;
+        closestLate = s;
       }
     });
+
+    if (!closestLate) return;
+
+    const sessionDateStr = closestLate.nextSessionDate || closestLate.date;
+    const key = `${caseId}-late-${sessionDateStr}`;
+
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    notifications.push({
+      id: key,
+      type: "late",
+      caseId,
+      caseNumber,
+      court,
+      caseType,
+      sessionDate: sessionDateStr,
+      sessionRoll: closestLate.roll || "",
+      sessionDecision: closestLate.decision || "",
+      sessionAction: closestLate.action || "",
+      clientNames,
+      opponentNames,
+      message: `⚠️ جلسة متأخرة: القضية رقم ${caseNumber} - ${court} - كانت بتاريخ ${sessionDateStr}`,
+    });
+  });
+
+  // ───────────────────────────────────────────────
+  // 2️⃣ الأعمال الإدارية المتأخرة (admin_task) 🟠
+  // ───────────────────────────────────────────────
+  adminTasks.forEach((task) => {
+    if (task.status === "completed") return;
+
+    const dueDate = parseDate(task.dueDate);
+    if (!dueDate) return;
+
+    dueDate.setHours(0, 0, 0, 0);
+    if (dueDate >= now) return; // مش متأخرة
+
+    const caseId = task.caseId || "general";
+    const key = `task-${task.id}`;
+
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    // جيب بيانات القضية لو موجودة
+    const caseData = caseId !== "general"
+      ? activeCases.find((c) => c.id === caseId)
+      : null;
+
+    const caseNumber = caseData
+      ? caseData.caseNumber || (caseData.caseSerial ? `${caseData.caseSerial}/${caseData.caseYear}` : "-")
+      : task.caseNumber || "-";
+    const court = caseData?.court || task.court || "";
+    const clientNames = caseData?.clientNames || task.clientNames || [];
+
+    const daysLate = Math.floor((now - dueDate) / (1000 * 60 * 60 * 24));
+
+    notifications.push({
+      id: key,
+      type: "admin_task",
+      caseId,
+      caseNumber,
+      court,
+      caseType: caseData?.caseType || "",
+      taskId: task.id,
+      taskTitle: task.title || "عمل إداري",
+      dueDate: task.dueDate,
+      daysLate,
+      clientNames,
+      opponentNames: caseData?.opponentNames || [],
+      message: `📋 عمل إداري متأخر: ${task.title || "عمل إداري"} - متأخر بـ ${daysLate} يوم`,
+    });
+  });
+
+  // ───────────────────────────────────────────────
+  // 3️⃣ الأحكام/الأوامر اللي تحتاج متابعة (judgment) 🟣
+  // ───────────────────────────────────────────────
+  judgments.forEach((judgment) => {
+    if (!judgment.needsFollowUp) return;
+
+    const caseId = judgment.caseId || "general";
+    const key = `judgment-${judgment.id}`;
+
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    // جيب بيانات القضية
+    const caseData = caseId !== "general"
+      ? activeCases.find((c) => c.id === caseId)
+      : null;
+
+    const caseNumber = caseData
+      ? caseData.caseNumber || (caseData.caseSerial ? `${caseData.caseSerial}/${caseData.caseYear}` : "-")
+      : judgment.caseNumber || "-";
+    const court = caseData?.court || judgment.court || "";
+    const clientNames = caseData?.clientNames || judgment.clientNames || [];
+
+    const categoryLabel =
+      judgment.category === "preliminary"
+        ? "حكم تمهيدي"
+        : judgment.category === "order"
+        ? "أمر"
+        : "حكم";
+
+    notifications.push({
+      id: key,
+      type: "judgment",
+      caseId,
+      caseNumber,
+      court,
+      caseType: caseData?.caseType || "",
+      judgmentId: judgment.id,
+      judgmentTitle: judgment.title || categoryLabel,
+      judgmentCategory: judgment.category || "",
+      judgmentDate: judgment.date || "",
+      clientNames,
+      opponentNames: caseData?.opponentNames || [],
+      message: `⚖️ ${categoryLabel} يحتاج متابعة: ${judgment.title || categoryLabel} - القضية رقم ${caseNumber}`,
+    });
+  });
+
+  // ───────────────────────────────────────────────
+  // ✅ ترتيب: الأقدم أولاً (حسب التاريخ)
+  // ───────────────────────────────────────────────
+  notifications.sort((a, b) => {
+    const getDate = (n) => {
+      if (n.type === "late") return parseDate(n.sessionDate);
+      if (n.type === "admin_task") return parseDate(n.dueDate);
+      if (n.type === "judgment") return parseDate(n.judgmentDate);
+      return new Date(0);
+    };
+    return getDate(a) - getDate(b);
   });
 
   return notifications;

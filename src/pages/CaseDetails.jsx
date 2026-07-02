@@ -9,213 +9,104 @@ import {
   where,
   getDocs,
   writeBatch,
+  addDoc,
 } from "firebase/firestore";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
-import { getStatusLabel } from "../constants/caseStatusLabels";
-import Card from "../components/ui/Card";
-import Button from "../components/ui/Button";
+import { CASE_STATUS_LIST } from "../constants/caseStatus";
+import {
+  Landmark, Plus, Edit3, Calendar, Users, Shield, FileText,
+  ChevronDown, ChevronUp, Clock, MapPin, CheckCircle2, Trash2,
+  Gavel, Briefcase, DollarSign, MessageSquare, ArrowLeft
+} from "lucide-react";
+import SessionsTimeline from "../components/case/SessionsTimeline";
+import SessionForm from "../components/case/SessionForm";
+import JudgmentsSection from "../components/case/JudgmentsSection";
+import JudgmentForm from "../components/case/JudgmentForm";
+import DecisionForm from "../components/case/DecisionForm";
+import AdminTasksSection from "../components/case/AdminTasksSection";
 
-// ================= مكون InfoBox للوحة الإحصائية =================
-function InfoBox({ title, value }) {
+const getStatusLabel = (status) => {
+  const found = CASE_STATUS_LIST.find(s => s.value === status);
+  return found ? found.label : (status || "غير محدد");
+};
+
+const statusColors = {
+  active: { bg: "rgba(16, 185, 129, 0.15)", color: "#10b981", border: "rgba(16, 185, 129, 0.3)" },
+  pending: { bg: "rgba(245, 158, 11, 0.15)", color: "#f59e0b", border: "rgba(245, 158, 11, 0.3)" },
+  closed: { bg: "rgba(107, 114, 128, 0.15)", color: "#6b7280", border: "rgba(107, 114, 128, 0.3)" },
+  archived: { bg: "rgba(239, 68, 68, 0.15)", color: "#ef4444", border: "rgba(239, 68, 68, 0.3)" },
+};
+
+// ================= InfoBox =================
+function InfoBox({ icon: Icon, title, value, color = "#60a5fa" }) {
   return (
-    <div
-      style={{
-        background: "#fff",
-        border: "1px solid #e5e7eb",
+    <div style={{
+      background: "#1e293b",
+      border: "1px solid rgba(55, 65, 81, 0.5)",
+      borderRadius: 16,
+      padding: "clamp(10px, 3vw, 16px)",
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+      transition: "all 0.2s ease",
+    }}>
+      <div style={{
+        width: "clamp(32px, 8vw, 40px)",
+        height: "clamp(32px, 8vw, 40px)",
         borderRadius: 12,
-        padding: "clamp(10px, 3vw, 15px)",
-        boxShadow: "0 1px 3px rgba(0,0,0,.05)",
-        minWidth: 0,
-      }}
-    >
-      <div
-        style={{
-          color: "#64748b",
-          fontSize: "clamp(11px, 3vw, 13px)",
-          marginBottom: 5,
-        }}
-      >
-        {title}
+        background: color + "15",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+      }}>
+        <Icon size={20} color={color} strokeWidth={2} />
       </div>
-      <div
-        style={{
-          fontWeight: "bold",
-          color: "#111827",
-          fontSize: "clamp(13px, 3.5vw, 16px)",
+      <div style={{ minWidth: 0 }}>
+        <div style={{ color: "#6b7280", fontSize: "clamp(10px, 3vw, 12px)", marginBottom: 4 }}>
+          {title}
+        </div>
+        <div style={{
+          fontWeight: 700,
+          color: "#f3f4f6",
+          fontSize: "clamp(12px, 3.5vw, 15px)",
           wordBreak: "break-word",
-        }}
-      >
-        {value || "-"}
+        }}>
+          {value || "-"}
+        </div>
       </div>
     </div>
   );
 }
 
-// ================= نافذة تسجيل القرار المنبثقة =================
-function DecisionModal({ session, caseId, onClose, onSave }) {
-  const [decision, setDecision] = useState(session?.decision || session?.action || "");
-  const [nextDate, setNextDate] = useState("");
-  const [notes, setNotes] = useState(session?.notes || "");
-  const [loading, setLoading] = useState(false);
-
-  const handleSave = async () => {
-    if (!decision.trim()) {
-      alert("الرجاء إدخال القرار");
-      return;
-    }
-
-    setLoading(true);
-    await onSave({
-      ...session,
-      decision,
-      action: decision,
-      notes,
-      nextSessionDate: nextDate,
-    });
-    setLoading(false);
-    onClose();
-  };
-
+// ================= Section Card =================
+function SectionCard({ title, icon: Icon, iconColor = "#60a5fa", children, style = {} }) {
   return (
-    <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: "rgba(0,0,0,0.6)",
+    <div style={{
+      background: "#1e293b",
+      border: "1px solid rgba(55, 65, 81, 0.5)",
+      borderRadius: 16,
+      padding: "clamp(12px, 4vw, 24px)",
+      marginBottom: 20,
+      ...style,
+    }}>
+      <h2 style={{
         display: "flex",
         alignItems: "center",
-        justifyContent: "center",
-        zIndex: 9999,
-        padding: "clamp(10px, 3vw, 20px)",
-      }}
-      onClick={onClose}
-    >
-      <div
-        style={{
-          background: "#fff",
-          borderRadius: 16,
-          padding: "clamp(16px, 4vw, 24px)",
-          width: "100%",
-          maxWidth: 500,
-          maxHeight: "90vh",
-          overflow: "auto",
-          direction: "rtl",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 style={{ margin: "0 0 16px 0", color: "#1e3a8a", fontSize: "clamp(16px, 4vw, 20px)" }}>
-          ✎ تسجيل قرار الجلسة
-        </h3>
-
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: "block", marginBottom: 6, color: "#374151", fontWeight: "600" }}>
-            📅 تاريخ الجلسة:
-          </label>
-          <div style={{ padding: 10, background: "#f3f4f6", borderRadius: 8, fontSize: "clamp(13px, 3.5vw, 15px)" }}>
-            {session?.nextSessionDate || session?.date || "غير محدد"}
-          </div>
-        </div>
-
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: "block", marginBottom: 6, color: "#374151", fontWeight: "600" }}>
-            📝 القرار أو الإجراء: <span style={{ color: "#dc2626" }}>*</span>
-          </label>
-          <textarea
-            value={decision}
-            onChange={(e) => setDecision(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "10px",
-              borderRadius: 8,
-              border: "1px solid #d1d5db",
-              fontSize: "clamp(13px, 3.5vw, 15px)",
-              minHeight: 80,
-              fontFamily: "inherit",
-            }}
-            placeholder="اكتب القرار الصادر في الجلسة..."
-          />
-        </div>
-
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: "block", marginBottom: 6, color: "#374151", fontWeight: "600" }}>
-            📅 تاريخ الجلسة القادمة (اختياري):
-          </label>
-          <input
-            type="date"
-            value={nextDate}
-            onChange={(e) => setNextDate(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "10px",
-              borderRadius: 8,
-              border: "1px solid #d1d5db",
-              fontSize: "clamp(13px, 3.5vw, 15px)",
-              fontFamily: "inherit",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ display: "block", marginBottom: 6, color: "#374151", fontWeight: "600" }}>
-            📝 ملاحظات:
-          </label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "10px",
-              borderRadius: 8,
-              border: "1px solid #d1d5db",
-              fontSize: "clamp(13px, 3.5vw, 15px)",
-              minHeight: 60,
-              fontFamily: "inherit",
-            }}
-            placeholder="ملاحظات إضافية..."
-          />
-        </div>
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button
-            onClick={handleSave}
-            disabled={loading}
-            style={{
-              flex: 1,
-              padding: "clamp(10px, 3vw, 12px)",
-              background: loading ? "#9ca3af" : "#059669",
-              color: "#fff",
-              border: "none",
-              borderRadius: 8,
-              cursor: loading ? "not-allowed" : "pointer",
-              fontSize: "clamp(13px, 3.5vw, 15px)",
-              fontWeight: "600",
-            }}
-          >
-            {loading ? "جاري الحفظ..." : "💾 حفظ القرار"}
-          </button>
-          <button
-            onClick={onClose}
-            style={{
-              flex: 1,
-              padding: "clamp(10px, 3vw, 12px)",
-              background: "#f3f4f6",
-              color: "#374151",
-              border: "none",
-              borderRadius: 8,
-              cursor: "pointer",
-              fontSize: "clamp(13px, 3.5vw, 15px)",
-              fontWeight: "600",
-            }}
-          >
-            ❌ إلغاء
-          </button>
-        </div>
-      </div>
+        gap: 10,
+        margin: "0 0 16px 0",
+        color: "#f3f4f6",
+        fontSize: "clamp(14px, 4vw, 18px)",
+        fontWeight: 700,
+        paddingBottom: 12,
+        borderBottom: "1px solid rgba(55, 65, 81, 0.3)",
+      }}>
+        <Icon size={20} color={iconColor} strokeWidth={2.5} />
+        {title}
+      </h2>
+      {children}
     </div>
   );
 }
@@ -226,13 +117,30 @@ export default function CaseDetails() {
 
   const [caseData, setCaseData] = useState(null);
   const [clients, setClients] = useState([]);
+  const [judgments, setJudgments] = useState([]);
+  const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editSession, setEditSession] = useState(null);
-  const [showDecisionModal, setShowDecisionModal] = useState(false);
-  const [modalSession, setModalSession] = useState(null);
+  const [showSessionForm, setShowSessionForm] = useState(false);
+  const [showJudgmentForm, setShowJudgmentForm] = useState(false);
+  const [editingSession, setEditingSession] = useState(null);
+  const [linkedSessionForJudgment, setLinkedSessionForJudgment] = useState(null);
   const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState("sessions");
+  const [expandedSections, setExpandedSections] = useState({
+    info: true,
+    subject: false,
+    clients: false,
+    opponents: false,
+  });
 
-  // ================= تحميل القضية =================
+  const isAdmin = userData?.role === "admin" || userData?.role === "superadmin";
+  const canViewFinance = userData?.role === "admin" || userData?.role === "staff";
+
+  // Decision form states - MOVED HERE before any if/return
+  const [showDecisionForm, setShowDecisionForm] = useState(false);
+  const [editingDecisionSession, setEditingDecisionSession] = useState(null);
+
+  // ================= Load Case =================
   useEffect(() => {
     if (!id) return;
 
@@ -240,24 +148,17 @@ export default function CaseDetails() {
       if (snap.exists()) {
         const data = snap.data();
 
-        // ✅ التحقق مما إذا كانت هناك جلسات بدون id
+        // Ensure all sessions have IDs
         const needsUpdate = (data.sessions || []).some((s) => !s.id);
         let sessionsWithId = data.sessions || [];
 
         if (needsUpdate) {
-          // إضافة id للجلسات القديمة وحفظها في Firebase
           sessionsWithId = sessionsWithId.map((s) => ({
             ...s,
             id: s.id || crypto.randomUUID(),
           }));
-
-          // حفظ الجلسات المُحدّثة في Firebase
-          await updateDoc(doc(db, "cases", id), {
-            sessions: sessionsWithId,
-          });
+          await updateDoc(doc(db, "cases", id), { sessions: sessionsWithId });
         }
-
-        console.log("🔥 Firebase sessions:", sessionsWithId.length, sessionsWithId);
 
         setCaseData({
           id: snap.id,
@@ -269,43 +170,13 @@ export default function CaseDetails() {
       } else {
         setCaseData(null);
       }
-
       setLoading(false);
     });
 
     return () => unsub();
   }, [id]);
 
-  // ================= فتح Modal تسجيل القرار تلقائياً من الإشعار =================
-  useEffect(() => {
-    const action = searchParams.get("action");
-    const sessionDate = searchParams.get("sessionDate");
-
-    if (action === "recordDecision" && caseData?.sessions?.length > 0) {
-      // نبحث عن الجلسة التي تطابق التاريخ
-      const targetSession = caseData.sessions.find((s) => {
-        const sDate = s.nextSessionDate || s.date;
-        return sDate === sessionDate;
-      });
-
-      if (targetSession) {
-        setModalSession(targetSession);
-        setShowDecisionModal(true);
-      } else {
-        // إذا لم نجد تطابق، نفتح أول جلسة متأخرة
-        const pastSessions = caseData.sessions.filter((s) => {
-          const sDate = s.nextSessionDate || s.date;
-          return sDate && new Date(sDate) < new Date();
-        });
-        if (pastSessions.length > 0) {
-          setModalSession(pastSessions[0]);
-          setShowDecisionModal(true);
-        }
-      }
-    }
-  }, [searchParams, caseData]);
-
-  // ================= تحميل الموكلين (دعم البيانات القديمة والجديدة) =================
+  // ================= Load Clients =================
   useEffect(() => {
     const fetchClients = async () => {
       if (!caseData?.clients?.length) {
@@ -319,7 +190,6 @@ export default function CaseDetails() {
           const clientRole = typeof clientItem === "object" ? clientItem.clientRole : "موكل (غير محدد)";
 
           const snap = await getDoc(doc(db, "clientProfiles", clientId));
-
           if (!snap.exists()) return null;
 
           return {
@@ -336,587 +206,815 @@ export default function CaseDetails() {
     fetchClients();
   }, [caseData?.clients]);
 
-  if (loading) return <p style={{ padding: 20, textAlign: "center" }}>جاري تحميل ملف الدعوى...</p>;
-  if (!caseData) return <p style={{ padding: 20, textAlign: "center" }}>⚠️ هذه القضية غير موجودة بالنظام</p>;
-
-  const canViewFinance =
-    userData?.role === "admin" || userData?.role === "staff";
-
-  // ================= حذف جلسة =================
-  const deleteSession = async (sessionId) => {
-    const confirmDelete = window.confirm("هل تريد حذف هذه الجلسة نهائياً من أجندة المكتب؟");
-    if (!confirmDelete) return;
-
-    const updated = caseData.sessions.filter((s) => s.id !== sessionId);
-
-    await updateDoc(doc(db, "cases", id), {
-      sessions: updated,
+  // ================= Load Judgments (linked to case) =================
+  useEffect(() => {
+    if (!id) return;
+    const q = query(collection(db, "judgments"), where("caseId", "==", id));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setJudgments(data);
     });
-  };
+    return () => unsub();
+  }, [id]);
 
-  // ================= حفظ تعديل جلسة (تمت معالجته وإصلاحه بالكامل) =================
-  const saveSessionChanges = async (updatedSession) => {
-    const targetDate = updatedSession.nextSessionDate || updatedSession.date;
-    console.log("🔍 saveSessionChanges called for date:", targetDate);
-    console.log("🔍 caseData.sessions:", caseData.sessions.map(s => ({ id: s.id, date: s.nextSessionDate || s.date })));
-
-    // ✅ نحافظ على كل الجلسات ونُحدّث الجلسة المطلوبة بالتاريخ
-    const updated = caseData.sessions.map((s) => {
-      const sDate = s.nextSessionDate || s.date;
-      const isMatch = s.id === updatedSession.id || sDate === targetDate;
-      console.log("🔍 Checking:", sDate, "===", targetDate, "?", isMatch);
-      if (isMatch) {
-        console.log("✅ Updating session:", sDate);
-        return {
-          ...s,
-          ...updatedSession,
-          id: s.id || updatedSession.id || crypto.randomUUID(), // ✅ نحتفظ بالـ id الأصلي
-          roll: updatedSession.roll || s.roll || "",
-          nextSessionDate: updatedSession.nextSessionDate || updatedSession.date || s.nextSessionDate || s.date || "",
-          date: updatedSession.nextSessionDate || updatedSession.date || s.nextSessionDate || s.date || "",
-          decision: updatedSession.decision || updatedSession.action || "",
-          action: updatedSession.decision || updatedSession.action || "",
-          notes: updatedSession.notes || ""
-        };
-      }
-      return s;
+  // ================= Load Admin Tasks (linked to case) =================
+  useEffect(() => {
+    if (!id) return;
+    const q = query(collection(db, "adminTasks"), where("caseId", "==", id));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setTasks(data);
     });
+    return () => unsub();
+  }, [id]);
 
-    console.log("🔍 updated sessions count:", updated.length);
-    await updateDoc(doc(db, "cases", id), {
-      sessions: updated,
-    });
-  };
+  // ================= Auto-open decision modal from notification =================
+  useEffect(() => {
+    const action = searchParams.get("action");
+    const sessionDate = searchParams.get("sessionDate");
 
-  const saveEdit = async () => {
-    if (!editSession) return;
-
-    // نقوم بتحديث مصفوفة الجلسات والتأكد من إرسال الحقول بالهيكليتين لضمان استقرار العرض
-    const updated = [...caseData.sessions].sort((a, b) => {
-                    const dateA = new Date(a.nextSessionDate || a.date || 0);
-                    const dateB = new Date(b.nextSessionDate || b.date || 0);
-                    return dateB - dateA; // من الأحدث للأقدم
-                  }).map((s) => {
-      if (s.id === editSession.id) {
-        return {
-          ...s,
-          ...editSession,
-          // توحيد الحقول لكي تقرأ الشاشات القديمة والجديدة نفس القيمة المعدلة
-          roll: editSession.roll || s.roll || "",
-          nextSessionDate: editSession.nextSessionDate || editSession.date || s.nextSessionDate || s.date || "",
-          date: editSession.nextSessionDate || editSession.date || s.nextSessionDate || s.date || "",
-          decision: editSession.decision || editSession.action || "",
-          action: editSession.decision || editSession.action || "",
-          notes: editSession.notes || ""
-        };
-      }
-      return s;
-    });
-
-    await updateDoc(doc(db, "cases", id), {
-      sessions: updated,
-    });
-
-    setEditSession(null);
-  };
-
-  const handleSaveDecision = async (sessionData) => {
-    try {
-      const oldSessionDate =
-        modalSession?.nextSessionDate || modalSession?.date;
-
-      // تحديث الجلسة القديمة فقط
-      const updatedSessions = caseData.sessions.map((s) => {
-        if (s.id === modalSession.id) {
-          return {
-            ...s,
-            decision: sessionData.decision,
-            action: sessionData.decision,
-            notes: sessionData.notes || "",
-          };
-        }
-        return s;
+    if (action === "recordDecision" && caseData?.sessions?.length > 0) {
+      const targetSession = caseData.sessions.find((s) => {
+        const sDate = s.nextSessionDate || s.date;
+        return sDate === sessionDate;
       });
 
-      // إذا تم إدخال جلسة جديدة ننشئ Session جديدة مستقلة
-      const newSessionDate =
-        sessionData.nextSessionDate || sessionData.date;
-
-      if (
-        newSessionDate &&
-        newSessionDate !== oldSessionDate
-      ) {
-        updatedSessions.push({
-          id: crypto.randomUUID(),
-          roll: "",
-          nextSessionDate: newSessionDate,
-          date: newSessionDate,
-          decision: "",
-          action: "",
-          notes: "",
-          createdAt: new Date().toISOString(),
-          createdBy: userData?.uid || null,
-        });
+      if (targetSession) {
+        setEditingSession(targetSession);
+        setShowSessionForm(true);
       }
+    }
+  }, [searchParams, caseData]);
 
-      await updateDoc(doc(db, "cases", id), {
-        sessions: updatedSessions,
-      });
+  if (loading) {
+    return (
+      <div style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>
+        <div style={{
+          width: 40,
+          height: 40,
+          border: "3px solid rgba(30, 64, 175, 0.2)",
+          borderTopColor: "#1e40af",
+          borderRadius: "50%",
+          animation: "spin 1s linear infinite",
+          margin: "0 auto 16px",
+        }} />
+        جاري تحميل ملف الدعوى...
+      </div>
+    );
+  }
 
-      // حذف الإشعار القديم
-      const notificationsQuery = query(
-        collection(db, "notifications"),
-        where("officeId", "==", userData.officeId),
-        where("caseId", "==", id),
-        where("type", "==", "late")
+  if (!caseData) {
+    return (
+      <div style={{ padding: 40, textAlign: "center", color: "#ef4444" }}>
+        <Shield size={48} style={{ margin: "0 auto 12px" }} />
+        هذه القضية غير موجودة بالنظام
+      </div>
+    );
+  }
+
+  const safeSessions = caseData.sessions || [];
+  const safeClients = caseData.clients || [];
+  const safeOpponents = caseData.opponents || [];
+  const sc = statusColors[caseData.status] || statusColors.active;
+
+  // ================= Helpers for linked data =================
+  const getLinkedJudgment = (sessionId) => {
+    return judgments.find(j => j.sessionId === sessionId) || null;
+  };
+
+  const getLinkedTasks = (sessionId) => {
+    return tasks.filter(t => t.sessionId === sessionId);
+  };
+
+  // ================= Session Handlers =================
+  const handleSaveSession = async (formData) => {
+    const sessionData = {
+      id: editingSession?.id || crypto.randomUUID(),
+      title: formData.title,
+      date: formData.date,
+      nextSessionDate: formData.date,
+      time: formData.time,
+      location: formData.location,
+      roll: formData.roll,
+      description: formData.description,
+      decision: formData.decision,
+      action: formData.decision,
+      notes: formData.notes,
+      attachments: formData.attachments || [],
+      createdAt: editingSession?.createdAt || new Date().toISOString(),
+      createdBy: editingSession?.createdBy || userData?.uid || null,
+      updatedAt: new Date().toISOString(),
+    };
+
+    let updatedSessions;
+    if (editingSession) {
+      updatedSessions = safeSessions.map((s) =>
+        s.id === editingSession.id ? sessionData : s
       );
+    } else {
+      updatedSessions = [...safeSessions, sessionData];
+    }
 
-      const snap = await getDocs(notificationsQuery);
-      const batch = writeBatch(db);
+    await updateDoc(doc(db, "cases", id), { sessions: updatedSessions });
+    setShowSessionForm(false);
+    setEditingSession(null);
+  };
 
-      snap.docs.forEach((d) => {
-        const n = d.data();
+  const handleDeleteSession = async (sessionId) => {
+    if (!window.confirm("هل تريد حذف هذه الجلسة نهائياً؟")) return;
+    const updated = safeSessions.filter((s) => s.id !== sessionId);
+    await updateDoc(doc(db, "cases", id), { sessions: updated });
+  };
 
-        if (
-          n.sessionDate === oldSessionDate ||
-          n.message?.includes(oldSessionDate)
-        ) {
-          batch.delete(d.ref);
-        }
-      });
+  const handleEditSession = (session) => {
+    setEditingSession(session);
+    setShowSessionForm(true);
+  };
 
-      await batch.commit();
+  const handleAddSession = () => {
+    setEditingSession(null);
+    setShowSessionForm(true);
+  };
 
-      setShowDecisionModal(false);
-      setModalSession(null);
-    } catch (err) {
-      console.error(err);
-      alert("حدث خطأ أثناء حفظ القرار");
+  // ================= Decision Handler (linked to session) =================
+  const handleAddDecision = (session) => {
+    setEditingDecisionSession(session);
+    setShowDecisionForm(true);
+  };
+
+  const handleSaveDecision = async (decisionData) => {
+    if (!editingDecisionSession) return;
+
+    const updatedSessions = safeSessions.map((s) =>
+      s.id === editingDecisionSession.id
+        ? { ...s, decision: decisionData.decision, notes: decisionData.notes }
+        : s
+    );
+
+    await updateDoc(doc(db, "cases", id), { sessions: updatedSessions });
+    setShowDecisionForm(false);
+    setEditingDecisionSession(null);
+  };
+
+  // ================= Judgment Handlers (linked to session) =================
+  const handleAddJudgmentFromSession = (session, existingJudgment = null) => {
+    setLinkedSessionForJudgment(session);
+    setShowJudgmentForm(true);
+    if (existingJudgment) {
+      // Pass existing judgment to edit mode
     }
   };
 
+  const handleSaveJudgment = async (judgmentData) => {
+    // Save judgment with sessionId
+    const data = {
+      ...judgmentData,
+      caseId: id,
+      sessionId: linkedSessionForJudgment?.id || null,
+      createdAt: new Date().toISOString(),
+      createdBy: userData?.uid || null,
+    };
+
+    // Add to judgments collection
+    await addDoc(collection(db, "judgments"), data);
+    setShowJudgmentForm(false);
+    setLinkedSessionForJudgment(null);
+  };
+
+  const handleAddTaskFromSession = (session) => {
+    // Navigate to add task with sessionId
+    // Or open task form modal
+    alert("فتح فورم إضافة عمل إداري مرتبط بالجلسة: " + session.title);
+  };
+
+  // ================= Tabs =================
+  const tabs = [
+    { key: "sessions", label: "الجلسات", count: safeSessions.length, icon: Calendar },
+    { key: "judgments", label: "الأحكام", count: judgments.length, icon: Gavel },
+    { key: "admin", label: "الأعمال الإدارية", count: tasks.length, icon: Briefcase },
+  ];
+
+  const toggleSection = (section) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
   return (
-    <div style={{ padding: "clamp(10px, 3vw, 20px)", background: "#f8fafc", minHeight: "100vh", direction: "rtl", fontFamily: "'Segoe UI', 'Tahoma', 'Arial', sans-serif" }}>
+    <div style={{
+      padding: "clamp(8px, 3vw, 24px)",
+      background: "#0f172a",
+      minHeight: "100vh",
+      direction: "rtl",
+      fontFamily: "'Segoe UI', 'Tahoma', 'Arial', sans-serif",
+    }}>
 
-      {/* HEADER - محسن ومتجاوب */}
-      <Card>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: 10,
-          }}
-        >
-          <div>
-            <h1
-              style={{
+      {/* ========== HEADER ========== */}
+      <div style={{
+        background: "#1e293b",
+        border: "1px solid rgba(55, 65, 81, 0.5)",
+        borderRadius: 16,
+        padding: "clamp(12px, 4vw, 24px)",
+        marginBottom: 20,
+      }}>
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+          gap: 16,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "clamp(10px, 3vw, 16px)" }}>
+            <div style={{
+              width: "clamp(40px, 10vw, 52px)",
+              height: "clamp(40px, 10vw, 52px)",
+              background: "linear-gradient(135deg, #1e3a8a, #1e40af)",
+              borderRadius: 16,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 8px 24px rgba(30, 64, 175, 0.25)",
+              flexShrink: 0,
+            }}>
+              <Landmark color="#fbbf24" size={26} strokeWidth={2.5} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <h1 style={{
                 margin: 0,
-                fontSize: "clamp(18px, 5vw, 28px)",
-                color: "#1e3a8a",
-              }}
-            >
-              ⚖️ القضية رقم {caseData.caseSerial}
-            </h1>
-            <p
-              style={{
-                marginTop: 6,
-                color: "#64748b",
-                fontSize: "clamp(13px, 3.5vw, 16px)",
-              }}
-            >
-              سنة {caseData.caseYear}
-            </p>
+                fontSize: "clamp(16px, 5vw, 24px)",
+                color: "#f3f4f6",
+                fontWeight: 700,
+                wordBreak: "break-word",
+              }}>
+                القضية رقم {caseData.caseSerial}
+              </h1>
+              <p style={{ 
+                margin: "6px 0 0 0", 
+                color: "#9ca3af", 
+                fontSize: "clamp(12px, 3.5vw, 15px)" 
+              }}>
+                سنة {caseData.caseYear} - {caseData.court}
+              </p>
+            </div>
           </div>
-          <span
-            style={{
-              background: "#dbeafe",
-              color: "#1e40af",
-              padding: "6px 12px",
-              borderRadius: 10,
-              fontWeight: "bold",
-              fontSize: "clamp(12px, 3vw, 14px)",
-            }}
-          >
-            {getStatusLabel(caseData.status)}
-          </span>
-        </div>
-      </Card>
 
-      {/* لوحة إحصائية - متجاوبة */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-          gap: 10,
-          marginBottom: 20,
-        }}
-      >
-        <InfoBox title="🏛 المحكمة" value={caseData.court} />
-        <InfoBox title="📌 المرحلة الحالية" value={caseData.stage} />
-        <InfoBox title="📅 عدد الجلسات" value={caseData.sessions.length} />
-        <InfoBox title="👥 عدد الموكلين" value={clients.length} />
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span style={{
+              background: sc.bg,
+              color: sc.color,
+              border: `1px solid ${sc.border}`,
+              padding: "clamp(4px, 1.5vw, 6px) clamp(10px, 3vw, 14px)",
+              borderRadius: 20,
+              fontWeight: 700,
+              fontSize: "clamp(11px, 3vw, 13px)",
+              whiteSpace: "nowrap",
+            }}>
+              {getStatusLabel(caseData.status)}
+            </span>
+
+            {isAdmin && (
+              <Link to={`/edit/${id}`} style={{ textDecoration: "none" }}>
+                <button style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "clamp(8px, 2.5vw, 10px) clamp(12px, 3vw, 18px)",
+                  background: "rgba(59, 130, 246, 0.15)",
+                  color: "#60a5fa",
+                  border: "1px solid rgba(59, 130, 246, 0.3)",
+                  borderRadius: 12,
+                  cursor: "pointer",
+                  fontSize: "clamp(11px, 3vw, 13px)",
+                  fontWeight: 600,
+                  fontFamily: "inherit",
+                  transition: "all 0.2s ease",
+                  whiteSpace: "nowrap",
+                }}>
+                  <Edit3 size={15} />
+                  تعديل
+                </button>
+              </Link>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* بيانات القضية الأساسية - متجاوبة */}
-      <Card>
-        <h2 style={{ borderBottom: "2px solid #e5e7eb", paddingBottom: 8, color: "#374151", fontSize: "clamp(16px, 4vw, 20px)" }}>📁 بيانات القضية</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 250px), 1fr))", gap: 10 }}>
-          <p style={{ fontSize: "clamp(13px, 3.5vw, 15px)", margin: "6px 0" }}><strong>رقم القضية:</strong> {caseData.caseSerial}</p>
-          <p style={{ fontSize: "clamp(13px, 3.5vw, 15px)", margin: "6px 0" }}><strong>سنة القضية:</strong> {caseData.caseYear}</p>
-          <p style={{ fontSize: "clamp(13px, 3.5vw, 15px)", margin: "6px 0" }}><strong>نوع القضية:</strong> {caseData.caseType || "غير محدد"}</p>
-          <p style={{ fontSize: "clamp(13px, 3.5vw, 15px)", margin: "6px 0" }}><strong>المحكمة:</strong> {caseData.court}</p>
-          <p style={{ fontSize: "clamp(13px, 3.5vw, 15px)", margin: "6px 0" }}><strong>الدائرة:</strong> {caseData.department || "غير محدد"}</p>
-          <p style={{ fontSize: "clamp(13px, 3.5vw, 15px)", margin: "6px 0" }}><strong>المرحلة الحالية:</strong> {caseData.stage || "غير محدد"}</p>
-          <p style={{ fontSize: "clamp(13px, 3.5vw, 15px)", margin: "6px 0" }}><strong>درجة التقاضي:</strong> {caseData.litigationDegree || "ابتدائي"}</p>
-          <p style={{ fontSize: "clamp(13px, 3.5vw, 15px)", margin: "6px 0" }}><strong>اسم السكرتير:</strong> {caseData.secretary || "غير مسجل"}</p>
-          <p style={{ fontSize: "clamp(13px, 3.5vw, 15px)", margin: "6px 0" }}><strong>حالة الملف:</strong> <span style={{ background: "#dbeafe", color: "#1e40af", padding: "2px 8px", borderRadius: 4, fontSize: 13 }}>{getStatusLabel(caseData.status)}</span></p>
-        </div>
-      </Card>
+      {/* ========== STATS ========== */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(clamp(120px, 30vw, 160px), 1fr))",
+        gap: "clamp(8px, 2vw, 12px)",
+        marginBottom: 20,
+      }}>
+        <InfoBox icon={Landmark} title="المحكمة" value={caseData.court} color="#60a5fa" />
+        <InfoBox icon={FileText} title="المرحلة" value={caseData.stage} color="#8b5cf6" />
+        <InfoBox icon={Calendar} title="الجلسات" value={safeSessions.length} color="#d97706" />
+        <InfoBox icon={Gavel} title="الأحكام" value={judgments.length} color="#1e40af" />
+        <InfoBox icon={Briefcase} title="الأعمال" value={tasks.length} color="#f59e0b" />
+        <InfoBox icon={Users} title="الموكلين" value={safeClients.length} color="#10b981" />
+      </div>
 
-      {/* موضوع الدعوى */}
-      <Card>
-        <h2 style={{ borderBottom: "2px solid #e5e7eb", paddingBottom: 8, color: "#374151" }}>📝 موضوع الدعوى</h2>
-        <p style={{ whiteSpace: "pre-wrap", lineHeight: "1.6", color: "#4b5563" }}>
+      {/* ========== COLLAPSIBLE SECTIONS ========== */}
+      {/* Case Info */}
+      <SectionCard title="بيانات القضية" icon={FileText} iconColor="#60a5fa">
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, clamp(150px, 40vw, 220px)), 1fr))",
+          gap: "clamp(6px, 2vw, 12px)",
+        }}>
+          {[
+            { label: "رقم القضية", value: caseData.caseSerial },
+            { label: "سنة القضية", value: caseData.caseYear },
+            { label: "نوع القضية", value: caseData.caseType || "غير محدد" },
+            { label: "المحكمة", value: caseData.court },
+            { label: "الدائرة", value: caseData.department || "غير محدد" },
+            { label: "المرحلة", value: caseData.stage || "غير محدد" },
+            { label: "درجة التقاضي", value: caseData.litigationDegree || "ابتدائي" },
+            { label: "السكرتير", value: caseData.secretary || "غير مسجل" },
+          ].map((item) => (
+            <div key={item.label} style={{
+              padding: "clamp(8px, 2.5vw, 10px) clamp(10px, 3vw, 14px)",
+              background: "rgba(15, 23, 42, 0.5)",
+              borderRadius: 10,
+            }}>
+              <div style={{ color: "#6b7280", fontSize: "clamp(10px, 3vw, 12px)", marginBottom: 4 }}>{item.label}</div>
+              <div style={{ color: "#f3f4f6", fontSize: "clamp(12px, 3.5vw, 14px)", fontWeight: 600 }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      {/* Case Subject */}
+      <SectionCard title="موضوع الدعوى" icon={FileText} iconColor="#8b5cf6">
+        <p style={{
+          whiteSpace: "pre-wrap",
+          lineHeight: 1.7,
+          color: "#9ca3af",
+          fontSize: "clamp(13px, 3.5vw, 14px)",
+          margin: 0,
+        }}>
           {caseData.caseSubject || caseData.notes || "لم يتم تدوين موضوع أو ملخص لهذه الدعوى بعد."}
         </p>
-      </Card>
+      </SectionCard>
 
-      {/* الموكلون وصفاتهم - متجاوب */}
-      <Card>
-        <h2 style={{ borderBottom: "2px solid #e5e7eb", paddingBottom: 8, color: "#374151", fontSize: "clamp(16px, 4vw, 20px)" }}>👤 الموكلون المرتبطون بالملف</h2>
-        {clients.length === 0 ? (
-          <p style={{ color: "#6b7280" }}>لا يوجد موكلون مرتبطون بهذه القضية.</p>
+      {/* Clients */}
+      <SectionCard title="الموكلون" icon={Users} iconColor="#10b981">
+        {safeClients.length === 0 ? (
+          <p style={{ color: "#6b7280", textAlign: "center", padding: "20px 0" }}>
+            لا يوجد موكلون مرتبطون بهذه القضية.
+          </p>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 10, marginTop: 10 }}>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, clamp(250px, 70vw, 280px)), 1fr))",
+            gap: 10,
+          }}>
             {clients.map((c) => (
-              <div key={c.id} style={{ padding: "clamp(10px, 3vw, 12px)", background: "#f8fafc", borderRadius: 6, border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: 6 }}>
-                <div>
-                  <strong style={{ fontSize: "clamp(14px, 4vw, 16px)", color: "#1e293b" }}>{c.fullName}</strong>
+              <div key={c.id} style={{
+                padding: "clamp(10px, 3vw, 16px)",
+                background: "rgba(15, 23, 42, 0.5)",
+                borderRadius: 12,
+                border: "1px solid rgba(55, 65, 81, 0.3)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}>
+                <div style={{ fontWeight: 700, color: "#f3f4f6", fontSize: "clamp(13px, 4vw, 15px)" }}>
+                  {c.fullName}
                 </div>
-                <span style={{ color: "#64748b", fontSize: "clamp(12px, 3vw, 13px)" }}>الرقم القومي: {c.nationalId || "غير مسجل"}</span>
-                <span style={{ background: "#e0f2fe", color: "#0369a1", padding: "4px 10px", borderRadius: 6, fontSize: "clamp(12px, 3vw, 14px)", fontWeight: "600", alignSelf: "flex-start" }}>
-                  ⚖️ الصفة الدعائية: {c.currentCaseRole || "غير محددة"}
+                <div style={{ color: "#9ca3af", fontSize: "clamp(11px, 3vw, 13px)" }}>
+                  الرقم القومي: {c.nationalId || "غير مسجل"}
+                </div>
+                <span style={{
+                  background: "rgba(6, 182, 212, 0.15)",
+                  color: "#22d3ee",
+                  padding: "4px 12px",
+                  borderRadius: 8,
+                  fontSize: "clamp(10px, 3vw, 12px)",
+                  fontWeight: 600,
+                  alignSelf: "flex-start",
+                }}>
+                  الصفة: {c.currentCaseRole || "غير محددة"}
                 </span>
               </div>
             ))}
           </div>
         )}
-      </Card>
+      </SectionCard>
 
-      {/* الخصوم وعناوينهم - متجاوب */}
-      <Card>
-        <h2 style={{ borderBottom: "2px solid #e5e7eb", paddingBottom: 8, color: "#374151", fontSize: "clamp(16px, 4vw, 20px)" }}>⚔️ أطراف الخصوم</h2>
-        {caseData.opponents.length === 0 ? (
-          <p style={{ color: "#6b7280" }}>لا يوجد خصوم مسجلين.</p>
+      {/* Opponents */}
+      <SectionCard title="أطراف الخصوم" icon={Shield} iconColor="#ef4444">
+        {safeOpponents.length === 0 ? (
+          <p style={{ color: "#6b7280", textAlign: "center", padding: "20px 0" }}>
+            لا يوجد خصوم مسجلين.
+          </p>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
-            {caseData.opponents.map((o, i) => (
-              <div key={o.id || i} style={{ padding: "clamp(10px, 3vw, 12px)", background: "#ffffff", borderRadius: 6, border: "1px solid #fee2e2", boxShadow: "0 1px 3px rgba(0,0,0,.05)" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: o.address ? 6 : 0 }}>
-                  <strong style={{ fontSize: "clamp(13px, 3.5vw, 15px)" }}>{i + 1}. الاسم: {o.name}</strong>
-                  <span style={{ background: "#fee2e2", color: "#991b1b", padding: "3px 10px", borderRadius: 4, fontSize: "clamp(12px, 3vw, 13px)", fontWeight: "600", alignSelf: "flex-start" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {safeOpponents.map((o, i) => (
+              <div key={o.id || i} style={{
+                padding: "clamp(10px, 3vw, 16px)",
+                background: "rgba(15, 23, 42, 0.5)",
+                borderRadius: 12,
+                border: "1px solid rgba(239, 68, 68, 0.2)",
+              }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ fontWeight: 700, color: "#f3f4f6", fontSize: "clamp(13px, 4vw, 15px)" }}>
+                    {i + 1}. {o.name}
+                  </div>
+                  <span style={{
+                    background: "rgba(239, 68, 68, 0.15)",
+                    color: "#f87171",
+                    padding: "3px 10px",
+                    borderRadius: 6,
+                    fontSize: "clamp(10px, 3vw, 12px)",
+                    fontWeight: 600,
+                    alignSelf: "flex-start",
+                  }}>
                     الصفة: {o.caseRole || "مدعى عليه"}
                   </span>
+                  {o.address && (
+                    <p style={{ margin: "4px 0 0 0", fontSize: "clamp(11px, 3vw, 13px)", color: "#9ca3af" }}>
+                      <MapPin size={13} style={{ display: "inline", marginLeft: 4 }} />
+                      {o.address}
+                    </p>
+                  )}
                 </div>
-                {o.address && (
-                  <p style={{ margin: "5px 0 0 0", fontSize: "clamp(13px, 3.5vw, 14px)", color: "#475569", lineHeight: 1.5 }}>
-                    📍 <strong>محل الإقامة المختار للإعلان:</strong> {o.address}
-                  </p>
-                )}
               </div>
             ))}
           </div>
         )}
-      </Card>
+      </SectionCard>
 
-      {/* الجلسات والأجندة - متجاوبة */}
-      <Card>
-        <h2 style={{ borderBottom: "2px solid #e5e7eb", paddingBottom: 8, color: "#374151", fontSize: "clamp(16px, 4vw, 20px)" }}>📅 رول وجدول الجلسات</h2>
-        {caseData.sessions.length === 0 ? (
-          <p style={{ color: "#6b7280" }}>لا توجد جلسات مجدولة لهذه القضية.</p>
-        ) : (
-          <div style={{ overflowX: "auto", marginTop: 10, WebkitOverflowScrolling: "touch" }}>
-            <table width="100%" style={{ borderCollapse: "collapse", textAlign: "right", minWidth: 600 }}>
-              <thead>
-                <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #cbd5e1" }}>
-                  <th style={{ padding: "clamp(6px, 2vw, 10px)", fontSize: "clamp(12px, 3vw, 14px)" }}>الرول</th>
-                  <th style={{ padding: "clamp(6px, 2vw, 10px)", fontSize: "clamp(12px, 3vw, 14px)" }}>التاريخ</th>
-                  <th style={{ padding: "clamp(6px, 2vw, 10px)", fontSize: "clamp(12px, 3vw, 14px)" }}>القرار</th>
-                  <th style={{ padding: "clamp(6px, 2vw, 10px)", fontSize: "clamp(12px, 3vw, 14px)" }}>الملاحظات</th>
-                  <th style={{ padding: "clamp(6px, 2vw, 10px)", textAlign: "center", fontSize: "clamp(12px, 3vw, 14px)", whiteSpace: "nowrap" }}>إجراءات</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...caseData.sessions].sort((a, b) => {
-                    const dateA = new Date(a.nextSessionDate || a.date || 0);
-                    const dateB = new Date(b.nextSessionDate || b.date || 0);
-                    return dateB - dateA; // من الأحدث للأقدم
-                  }).map((s) => {
-                  const isEditing = editSession?.id === s.id;
-                  const sessionDate = s.nextSessionDate || s.date;
-                  const sessionDecision = s.decision || s.action;
-                  const isPast = sessionDate && (() => {
-                    const date = sessionDate?.toDate ? sessionDate.toDate() : new Date(sessionDate);
-                    return !isNaN(date) && date < new Date();
-                  })();
+      {/* ========== TABS ========== */}
+      <div style={{
+        background: "#1e293b",
+        border: "1px solid rgba(55, 65, 81, 0.5)",
+        borderRadius: 16,
+        padding: "clamp(12px, 4vw, 24px)",
+        marginBottom: 20,
+      }}>
+        {/* Tab Buttons */}
+        <div style={{
+          display: "flex",
+          gap: 4,
+          borderBottom: "1px solid rgba(55, 65, 81, 0.3)",
+          marginBottom: 20,
+          flexWrap: "wrap",
+          overflowX: "auto",
+          paddingBottom: 4,
+        }}>
+          {tabs.map((tab) => {
+            const TabIcon = tab.icon;
+            const isActive = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                style={{
+                  padding: "clamp(8px, 2.5vw, 12px) clamp(12px, 3vw, 20px)",
+                  border: "none",
+                  borderBottom: isActive ? "3px solid #1e40af" : "3px solid transparent",
+                  background: "transparent",
+                  color: isActive ? "#60a5fa" : "#6b7280",
+                  fontWeight: isActive ? 700 : 500,
+                  fontSize: "clamp(12px, 3.5vw, 14px)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontFamily: "inherit",
+                  transition: "all 0.2s ease",
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
+                }}
+              >
+                <TabIcon size={16} />
+                {tab.label}
+                {tab.count > 0 && (
+                  <span style={{
+                    background: isActive ? "#1e40af" : "rgba(55, 65, 81, 0.5)",
+                    color: isActive ? "#fff" : "#9ca3af",
+                    padding: "2px 8px",
+                    borderRadius: 12,
+                    fontSize: 11,
+                    fontWeight: 700,
+                  }}>
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-                  return (
-                    <tr key={s.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
-
-                      {/* حقل الرول */}
-                      <td style={{ padding: "clamp(6px, 2vw, 10px)", fontSize: "clamp(12px, 3vw, 14px)" }}>
-                        {isEditing ? (
-                          <input
-                            type="text"
-                            style={{ width: "clamp(60px, 15vw, 80px)", padding: "4px 6px", fontSize: "clamp(12px, 3vw, 14px)" }}
-                            value={editSession?.roll || ""}
-                            onChange={(e) =>
-                              setEditSession({
-                                ...editSession,
-                                roll: e.target.value,
-                              })
-                            }
-                          />
-                        ) : (
-                          s.roll || "غير محدد"
-                        )}
-                      </td>
-
-                      {/* حقل تاريخ الجلسة مع شارة الحالة */}
-                      <td style={{ padding: "clamp(6px, 2vw, 10px)", fontWeight: "bold", fontSize: "clamp(12px, 3vw, 14px)", whiteSpace: "nowrap" }}>
-                        {isEditing ? (
-                          <input
-                            type="date"
-                            style={{ padding: "4px 6px", fontSize: "clamp(12px, 3vw, 14px)" }}
-                            value={editSession?.nextSessionDate || editSession?.date || ""}
-                            onChange={(e) =>
-                              setEditSession({
-                                ...editSession,
-                                nextSessionDate: e.target.value,
-                                date: e.target.value,
-                              })
-                            }
-                          />
-                        ) : (
-                          <div>
-                            <div>{sessionDate}</div>
-                            <span
-                              style={{
-                                display: "inline-block",
-                                marginTop: 5,
-                                padding: "3px 10px",
-                                borderRadius: 20,
-                                fontSize: "clamp(10px, 2.5vw, 12px)",
-                                background: isPast ? "#fee2e2" : "#dcfce7",
-                                color: isPast ? "#991b1b" : "#166534",
-                              }}
-                            >
-                              {isPast ? "منتهية" : "قادمة"}
-                            </span>
-                          </div>
-                        )}
-                      </td>
-
-                      {/* حقل القرار */}
-                      <td style={{ padding: "clamp(6px, 2vw, 10px)", fontSize: "clamp(12px, 3vw, 14px)", maxWidth: 200 }}>
-                        {isEditing ? (
-                          <textarea
-                            style={{ width: "100%", padding: "4px 6px", fontSize: "clamp(12px, 3vw, 14px)", minHeight: 60 }}
-                            value={editSession?.decision || editSession?.action || ""}
-                            onChange={(e) =>
-                              setEditSession({
-                                ...editSession,
-                                decision: e.target.value,
-                                action: e.target.value,
-                              })
-                            }
-                          />
-                        ) : (
-                          sessionDecision || <span style={{ color: "#94a3b8" }}>لم يصدر قرار بعد</span>
-                        )}
-                      </td>
-
-                      {/* حقل الملاحظات */}
-                      <td style={{ padding: "clamp(6px, 2vw, 10px)", fontSize: "clamp(12px, 3vw, 14px)", maxWidth: 150 }}>
-                        {isEditing ? (
-                          <textarea
-                            style={{ width: "100%", padding: "4px 6px", fontSize: "clamp(12px, 3vw, 14px)", minHeight: 60 }}
-                            value={editSession?.notes || ""}
-                            onChange={(e) =>
-                              setEditSession({
-                                ...editSession,
-                                notes: e.target.value,
-                              })
-                            }
-                          />
-                        ) : (
-                          s.notes || "---"
-                        )}
-                      </td>
-
-                      {/* أزرار التحكم */}
-                      <td style={{ padding: "clamp(6px, 2vw, 10px)", textAlign: "center", whiteSpace: "nowrap" }}>
-                        {!isEditing ? (
-                          <>
-                            <Button size="small" onClick={() => setEditSession(s)}>
-                              ✏️
-                            </Button>
-                            {isPast && !sessionDecision && (
-                              <Button
-                                size="small"
-                                onClick={() => {
-                                  setModalSession(s);
-                                  setShowDecisionModal(true);
-                                }}
-                                style={{ marginRight: 5, background: "#dc2626", color: "#fff" }}
-                              >
-                                ✎ قرار
-                              </Button>
-                            )}
-                          </>
-                        ) : (
-                          <Button variant="success" size="small" onClick={saveEdit}>
-                            💾
-                          </Button>
-                        )}
-                        <Button
-                          variant="danger"
-                          size="small"
-                          onClick={() => deleteSession(s.id)}
-                          style={{ marginRight: 5 }}
-                        >
-                          🗑️
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+        {/* Tab Content */}
+        {activeTab === "sessions" && (
+          <SessionsTimeline
+            caseId={id}
+            sessions={safeSessions}
+            canEdit={isAdmin}
+            canDelete={isAdmin}
+            onEdit={handleEditSession}
+            onDelete={handleDeleteSession}
+            onAddClick={isAdmin ? handleAddSession : null}
+            onAddDecision={isAdmin ? handleAddDecision : null}
+            onAddJudgment={isAdmin ? handleAddJudgmentFromSession : null}
+            onAddTask={isAdmin ? handleAddTaskFromSession : null}
+            getLinkedJudgment={getLinkedJudgment}
+            getLinkedTasks={getLinkedTasks}
+          />
         )}
-      </Card>
 
-      {/* Modal تسجيل القرار */}
-      {showDecisionModal && modalSession && (
-        <DecisionModal
-          session={modalSession}
-          caseId={id}
-          onClose={() => {
-            setShowDecisionModal(false);
-            setModalSession(null);
-          }}
-          onSave={handleSaveDecision}
-        />
-      )}
+        {activeTab === "judgments" && (
+          <JudgmentsSection
+            caseId={id}
+            judgments={judgments}
+            sessions={safeSessions}
+          />
+        )}
 
-      {/* لوحة العمليات السريعة - متجاوبة */}
-      <Card style={{ borderRadius: 14, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
-        <h2 style={{ 
-          fontSize: "clamp(16px, 4vw, 20px)", 
-          fontWeight: 700, 
-          color: "#1e293b",
-          marginBottom: 16,
+        {activeTab === "admin" && (
+          <AdminTasksSection
+            caseId={id}
+            sessions={safeSessions}
+            tasks={tasks}
+          />
+        )}
+      </div>
+
+      {/* ========== QUICK ACTIONS ========== */}
+      <div style={{
+        background: "#1e293b",
+        border: "1px solid rgba(55, 65, 81, 0.5)",
+        borderRadius: 16,
+        padding: "clamp(12px, 4vw, 24px)",
+        marginBottom: 20,
+      }}>
+        <h2 style={{
+          fontSize: "clamp(14px, 4vw, 18px)",
+          fontWeight: 700,
+          color: "#f3f4f6",
+          margin: "0 0 16px 0",
           display: "flex",
           alignItems: "center",
-          gap: 8,
+          gap: 10,
         }}>
-          ⚙️ الإجراءات السريعة
+          <Briefcase size={20} color="#d97706" />
+          الإجراءات السريعة
         </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))", gap: "clamp(8px, 2vw, 12px)" }}>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, clamp(140px, 40vw, 180px)), 1fr))",
+          gap: "clamp(8px, 2vw, 12px)",
+        }}>
           <Link to={`/edit/${id}`} style={{ textDecoration: "none" }}>
-            <button style={{ 
-              width: "100%", 
-              padding: "clamp(10px, 3vw, 14px)", 
-              background: "#3b82f6", 
-              color: "#fff", 
-              border: "none", 
-              borderRadius: 12, 
-              cursor: "pointer", 
-              fontSize: "clamp(13px, 3.5vw, 15px)", 
+            <button style={{
+              width: "100%",
+              padding: "clamp(8px, 2.5vw, 14px)",
+              background: "rgba(59, 130, 246, 0.15)",
+              color: "#60a5fa",
+              border: "1px solid rgba(59, 130, 246, 0.3)",
+              borderRadius: 12,
+              cursor: "pointer",
+              fontSize: "clamp(12px, 3.5vw, 14px)",
               fontWeight: 600,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               gap: 8,
-              transition: "all 0.2s",
-              boxShadow: "0 2px 8px rgba(59, 130, 246, 0.25)",
+              transition: "all 0.2s ease",
+              fontFamily: "inherit",
+              whiteSpace: "nowrap",
             }}>
-              ✏️ تعديل القضية
+              <Edit3 size={16} />
+              تعديل القضية
             </button>
           </Link>
 
-          <Link to={`/add-session/${id}`} style={{ textDecoration: "none" }}>
-            <button style={{ 
-              width: "100%", 
-              padding: "clamp(10px, 3vw, 14px)", 
-              background: "#059669", 
-              color: "#fff", 
-              border: "none", 
-              borderRadius: 12, 
-              cursor: "pointer", 
-              fontSize: "clamp(13px, 3.5vw, 15px)", 
+          <button
+            onClick={handleAddSession}
+            style={{
+              width: "100%",
+              padding: "clamp(8px, 2.5vw, 14px)",
+              background: "rgba(16, 185, 129, 0.15)",
+              color: "#10b981",
+              border: "1px solid rgba(16, 185, 129, 0.3)",
+              borderRadius: 12,
+              cursor: "pointer",
+              fontSize: "clamp(12px, 3.5vw, 14px)",
               fontWeight: 600,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               gap: 8,
-              transition: "all 0.2s",
-              boxShadow: "0 2px 8px rgba(5, 150, 105, 0.25)",
-            }}>
-              📅 جلسة جديدة
-            </button>
-          </Link>
+              transition: "all 0.2s ease",
+              fontFamily: "inherit",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <Calendar size={16} />
+            جلسة جديدة
+          </button>
 
           <Link to={`/add-stage/${id}`} style={{ textDecoration: "none" }}>
-            <button style={{ 
-              width: "100%", 
-              padding: "clamp(10px, 3vw, 14px)", 
-              background: "#d97706", 
-              color: "#fff", 
-              border: "none", 
-              borderRadius: 12, 
-              cursor: "pointer", 
-              fontSize: "clamp(13px, 3.5vw, 15px)", 
+            <button style={{
+              width: "100%",
+              padding: "clamp(8px, 2.5vw, 14px)",
+              background: "rgba(217, 119, 6, 0.15)",
+              color: "#d97706",
+              border: "1px solid rgba(217, 119, 6, 0.3)",
+              borderRadius: 12,
+              cursor: "pointer",
+              fontSize: "clamp(12px, 3.5vw, 14px)",
               fontWeight: 600,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               gap: 8,
-              transition: "all 0.2s",
-              boxShadow: "0 2px 8px rgba(217, 119, 6, 0.25)",
+              transition: "all 0.2s ease",
+              fontFamily: "inherit",
+              whiteSpace: "nowrap",
             }}>
-              📌 مرحلة جديدة
+              <FileText size={16} />
+              مرحلة جديدة
             </button>
           </Link>
 
           {canViewFinance && (
             <Link to={`/case-finance/${id}`} style={{ textDecoration: "none" }}>
-              <button style={{ 
-                width: "100%", 
-                padding: "clamp(10px, 3vw, 14px)", 
-                background: "#7c3aed", 
-                color: "#fff", 
-                border: "none", 
-                borderRadius: 12, 
-                cursor: "pointer", 
-                fontSize: "clamp(13px, 3.5vw, 15px)", 
+              <button style={{
+                width: "100%",
+                padding: "clamp(8px, 2.5vw, 14px)",
+                background: "rgba(139, 92, 246, 0.15)",
+                color: "#8b5cf6",
+                border: "1px solid rgba(139, 92, 246, 0.3)",
+                borderRadius: 12,
+                cursor: "pointer",
+                fontSize: "clamp(12px, 3.5vw, 14px)",
                 fontWeight: 600,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 8,
-                transition: "all 0.2s",
-                boxShadow: "0 2px 8px rgba(124, 58, 237, 0.25)",
+                transition: "all 0.2s ease",
+                fontFamily: "inherit",
+                whiteSpace: "nowrap",
               }}>
-                💰 الحسابات والمصروفات
+                <DollarSign size={16} />
+                الحسابات
               </button>
             </Link>
           )}
         </div>
-      </Card>
+      </div>
+
+      {/* ========== SESSION FORM MODAL ========== */}
+      {showSessionForm && (
+        <SessionForm
+          session={editingSession}
+          caseId={id}
+          onClose={() => { setShowSessionForm(false); setEditingSession(null); }}
+          onSave={handleSaveSession}
+        />
+      )}
+
+      {/* ========== DECISION FORM MODAL ========== */}
+      {showDecisionForm && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0, 0, 0, 0.7)",
+          backdropFilter: "blur(8px)",
+          zIndex: 99999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 16,
+        }}>
+          <div style={{
+            background: "#1e293b",
+            border: "1px solid rgba(55, 65, 81, 0.5)",
+            borderRadius: 24,
+            width: "100%",
+            maxWidth: 600,
+            maxHeight: "90vh",
+            overflow: "auto",
+            padding: 24,
+          }}>
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 20,
+              paddingBottom: 16,
+              borderBottom: "1px solid rgba(55, 65, 81, 0.3)",
+            }}>
+              <div>
+                <h2 style={{ margin: 0, color: "#f3f4f6", fontSize: "clamp(14px, 4vw, 18px)", fontWeight: 700 }}>
+                  إضافة قرار للجلسة
+                </h2>
+                {editingDecisionSession && (
+                  <p style={{ margin: "6px 0 0 0", color: "#9ca3af", fontSize: "clamp(11px, 3vw, 13px)" }}>
+                    الجلسة: {editingDecisionSession.title || editingDecisionSession.date}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => { setShowDecisionForm(false); setEditingDecisionSession(null); }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#9ca3af",
+                  cursor: "pointer",
+                  padding: 8,
+                  borderRadius: 10,
+                  minWidth: 44,
+                  minHeight: 44,
+                }}
+              >
+                <ArrowLeft size={20} />
+              </button>
+            </div>
+
+            <DecisionForm
+              session={editingDecisionSession}
+              onClose={() => { setShowDecisionForm(false); setEditingDecisionSession(null); }}
+              onSave={handleSaveDecision}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ========== JUDGMENT FORM MODAL (linked to session) ========== */}
+      {showJudgmentForm && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0, 0, 0, 0.7)",
+          backdropFilter: "blur(8px)",
+          zIndex: 99999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 16,
+        }}>
+          <div style={{
+            background: "#1e293b",
+            border: "1px solid rgba(55, 65, 81, 0.5)",
+            borderRadius: 24,
+            width: "100%",
+            maxWidth: 600,
+            maxHeight: "90vh",
+            overflow: "auto",
+            padding: 24,
+          }}>
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 20,
+              paddingBottom: 16,
+              borderBottom: "1px solid rgba(55, 65, 81, 0.3)",
+            }}>
+              <div>
+                <h2 style={{ margin: 0, color: "#f3f4f6", fontSize: "clamp(14px, 4vw, 18px)", fontWeight: 700 }}>
+                  إضافة حكم مرتبط بالجلسة
+                </h2>
+                {linkedSessionForJudgment && (
+                  <p style={{ margin: "6px 0 0 0", color: "#9ca3af", fontSize: "clamp(11px, 3vw, 13px)" }}>
+                    الجلسة: {linkedSessionForJudgment.title || linkedSessionForJudgment.date}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => { setShowJudgmentForm(false); setLinkedSessionForJudgment(null); }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#9ca3af",
+                  cursor: "pointer",
+                  padding: 8,
+                  borderRadius: 10,
+                  minWidth: 44,
+                  minHeight: 44,
+                }}
+              >
+                <ArrowLeft size={20} />
+              </button>
+            </div>
+
+            <JudgmentForm
+              caseId={id}
+              onClose={() => { setShowJudgmentForm(false); setLinkedSessionForJudgment(null); }}
+              onSave={handleSaveJudgment}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

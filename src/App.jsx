@@ -1,4 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect, useCallback } from "react";
+import { useAuth } from "./context/AuthContext";
 
 import Layout from "./components/Layout";
 import SuperAdminLayout from "./layouts/SuperAdminLayout";
@@ -13,6 +15,8 @@ import CaseDetails from "./pages/CaseDetails";
 import AddSession from "./pages/AddSession";
 import AddStage from "./pages/AddStage";
 import Cases from "./pages/Cases";
+import Judgments from "./pages/Judgments";
+import AdminTasks from "./pages/AdminTasks";
 
 import RoomMembersAdmin from "./pages/RoomMembersAdmin";
 
@@ -36,37 +40,153 @@ import ClientProfile from "./pages/ClientProfile";
 
 import Profile from "./pages/Profile";
 import OfficeInfo from "./pages/OfficeInfo";
-import Notifications from "./pages/Notifications";
+import Notifications from "./pages/Notifications"; // ✅ أضفنا الإشعارات
 
 /* ================= CHAT ================= */
 import Chat from "./pages/Chat";
 import OfficeConnections from "./pages/OfficeConnections";
 import SharedRooms from "./pages/SharedRooms";
-import SharedRoomChat from "./pages/SharedRoomChat"; // 1. استيراد الصفحة الجديدة هنا 💡
+import SharedRoomChat from "./pages/SharedRoomChat";
 
 /* ================= AUTH ================= */
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 
+/* ================= NOTIFICATIONS SYNC ================= */
+import { syncNotifications } from "./utils/syncNotifications";
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  getDocs,
+} from "firebase/firestore";
+import { db } from "./firebase";
+
 import "./App.css";
+
+/* ================= REAL-TIME SYNC COMPONENT ================= */
+function NotificationSync() {
+  const { userData } = useAuth();
+
+  const checkAndSync = useCallback(async () => {
+    if (!userData?.officeId) return;
+
+    console.log("⏰ Running scheduled notification check...");
+
+    const casesQuery = query(
+      collection(db, "cases"),
+      where("officeId", "==", userData.officeId)
+    );
+
+    const snapshot = await getDocs(casesQuery);
+    const cases = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    await syncNotifications(cases, userData.officeId);
+  }, [userData?.officeId]);
+
+  useEffect(() => {
+    if (!userData?.officeId) return;
+
+    checkAndSync();
+
+    const casesQuery = query(
+      collection(db, "cases"),
+      where("officeId", "==", userData.officeId)
+    );
+
+    const unsubscribe = onSnapshot(casesQuery, (snapshot) => {
+      const cases = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      syncNotifications(cases, userData.officeId);
+    });
+
+    const interval = setInterval(checkAndSync, 5 * 60 * 1000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        console.log("👁️ App visible, checking notifications...");
+        checkAndSync();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [userData?.officeId, checkAndSync]);
+
+  return null;
+}
+
+/* ================= HOME REDIRECT ================= */
+function HomeRedirect() {
+  const { user, userData, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div style={{ 
+        display: "flex", 
+        justifyContent: "center", 
+        alignItems: "center", 
+        height: "100vh",
+        background: "#0f172a" 
+      }}>
+        <div style={{
+          width: "40px",
+          height: "40px",
+          border: "3px solid rgba(212, 175, 55, 0.2)",
+          borderTop: "3px solid #d4af37",
+          borderRadius: "50%",
+          animation: "spin 1s linear infinite",
+        }} />
+      </div>
+    );
+  }
+
+  if (user && userData?.officeId) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  if (user && !userData?.officeId) {
+    return <Navigate to="/profile" replace />;
+  }
+
+  return <Navigate to="/home" replace />;
+}
 
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <NotificationSync />
         <Routes>
 
-          {/* ================= AUTH ROUTES ================= */}
+          {/* ================= PUBLIC ROUTES (بدون Layout) ================= */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/super-login" element={<SuperAdminLogin />} />
 
-          {/* ================= MAIN LAYOUT ================= */}
+          {/* صفحة الهبوط — برا Layout */}
+          <Route path="/home" element={<Home />} />
+
+          {/* ================= MAIN LAYOUT (مع Sidebar/Topbar) ================= */}
           <Route path="/" element={<Layout />}>
+
+            {/* الصفحة الرئيسية */}
+            <Route index element={<HomeRedirect />} />
 
             {/* DASHBOARD */}
             <Route
-              index
+              path="dashboard"
               element={
                 <ProtectedRoute page="dashboard">
                   <Dashboard />
@@ -174,6 +294,24 @@ export default function App() {
             />
 
             <Route
+              path="judgments"
+              element={
+                <ProtectedRoute page="cases">
+                  <Judgments />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="admin-tasks"
+              element={
+                <ProtectedRoute page="cases">
+                  <AdminTasks />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
               path="add-session/:id"
               element={
                 <ProtectedRoute page="cases">
@@ -225,8 +363,6 @@ export default function App() {
               element={<OfficeRoomsManagement />}
             />
 
-            <Route path="/home" element={<Home />} />
-
             {/* PROFILE */}
             <Route
               path="profile"
@@ -275,7 +411,6 @@ export default function App() {
               }
             />
 
-            {/* 2. إضافة مسار الشات المشترك الديناميكي لتوجيه الـ Sidebar إليه بنجاح 💡 */}
             <Route
               path="shared-rooms/:id"
               element={
@@ -295,6 +430,16 @@ export default function App() {
               }
             />
 
+            {/* ✅ NOTIFICATIONS — جوه Layout */}
+            <Route
+              path="notifications"
+              element={
+                <ProtectedRoute>
+                  <Notifications />
+                </ProtectedRoute>
+              }
+            />
+
           </Route>
 
           {/* ================= SUPER ADMIN ================= */}
@@ -309,12 +454,6 @@ export default function App() {
             <Route index element={<SuperAdminDashboard />} />
             <Route path="offices" element={<OfficesManagement />} />
           </Route>
-
-          {/* ================= NOTIFICATIONS ================= */}
-          <Route
-            path="/notifications"
-            element={<Notifications />}
-          />
 
           {/* ================= FALLBACK ================= */}
           <Route path="*" element={<Navigate to="/" replace />} />

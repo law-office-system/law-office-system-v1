@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db } from "../firebase";
-import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, setDoc, onSnapshot, getDoc as getDocOnce } from "firebase/firestore";
 import { enablePushNotifications } from "../utils/pushNotifications";
 
 const AuthContext = createContext();
@@ -53,7 +53,7 @@ export function AuthProvider({ children }) {
 
         unsubscribeFirestore = onSnapshot(
           ref,
-          (docSnap) => {
+          async (docSnap) => {
             console.log("USER SNAPSHOT:", docSnap.data());
 
             if (!docSnap.exists()) {
@@ -71,6 +71,20 @@ export function AuthProvider({ children }) {
 
             const data = docSnap.data();
 
+            // ✅ جيب officeName من offices collection
+            let officeName = null;
+            if (data.officeId) {
+              try {
+                const officeRef = doc(db, "offices", data.officeId);
+                const officeSnap = await getDocOnce(officeRef);
+                if (officeSnap.exists()) {
+                  officeName = officeSnap.data().name || officeSnap.data().officeName || null;
+                }
+              } catch (err) {
+                console.error("Error fetching office:", err);
+              }
+            }
+
             console.log("FCM CHECK", {
               permission: Notification.permission,
               hasToken: !!data.fcmToken,
@@ -82,6 +96,7 @@ export function AuthProvider({ children }) {
               ...data,
               role: data.role || "client",
               officeId: data.officeId || null,
+              officeName: officeName || data.officeName || data.officeId || "المكتب", // ✅ أضف officeName
               officeStatus: data.officeStatus || "active",
               isOfficeAdmin:
                 data.role === "admin" ||
