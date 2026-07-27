@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { db } from "../firebase";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import Button from "../components/ui/Button";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
 
 export default function AddClient() {
   const { userData } = useAuth(); 

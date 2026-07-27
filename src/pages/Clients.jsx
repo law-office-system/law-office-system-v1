@@ -1,4 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+
 import {
   collection,
   onSnapshot,
@@ -8,11 +10,9 @@ import {
   query,
   where,
 } from "firebase/firestore";
-
-import { db } from "../firebase";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
 import Button from "../components/ui/Button";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
 
 export default function Clients() {
   const [clients, setClients] = useState([]);

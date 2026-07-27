@@ -1,6 +1,7 @@
-import { getToken } from "firebase/messaging";
 import { doc, setDoc } from "firebase/firestore";
-import { messaging, db } from "../firebase";
+import { getToken } from "firebase/messaging";
+import { db } from "../firebaseDb";
+import { messaging } from "../firebaseMessaging";
 
 // ضع هنا VAPID KEY
 const VAPID_KEY = "ضع_VAPID_KEY_هنا";

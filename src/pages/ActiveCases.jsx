@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import Button from "../components/ui/Button";
 import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
 import { parseDate } from "../utils/date";
 
 export default function ActiveCases() {
@@ -124,12 +124,12 @@ export default function ActiveCases() {
     const upcomingSessionDateStr = getUpcomingSessionString(c.sessions);
 
     return (
-      caseNumber.includes(text) ||
+      // دعم البحث بالتاريخ هنا أيضاً
+      (caseNumber.includes(text) ||
       clientNames.includes(text) ||
       opponentNames.includes(text) ||
       caseTypeStr.includes(text) ||
-      courtName.includes(text) ||
-      upcomingSessionDateStr.includes(text) // دعم البحث بالتاريخ هنا أيضاً
+      courtName.includes(text) || upcomingSessionDateStr.includes(text))
     );
   });
 

@@ -3,21 +3,24 @@ import {
   Gavel, Plus, Search, Scale, AlertTriangle, 
   CheckCircle2, Clock, Calendar, FileText, ChevronDown, Landmark, Bell
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { 
-  db,
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  deleteDoc, 
-  doc, 
-  updateDoc, 
-  getDoc, 
-  documentId 
-} from '../firebase';
+
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  deleteDoc,
+  doc,
+  updateDoc,
+  getDoc,
+  documentId,
+} from "firebase/firestore";
+
 import JudgmentCard from '../components/case/JudgmentCard';
 import JudgmentForm from '../components/case/JudgmentForm';
+
+import { useAuth } from '../context/AuthContext';
+import { db } from "../firebaseDb";
 
 const JUDGMENT_CATEGORIES = {
   order: 'أمر',

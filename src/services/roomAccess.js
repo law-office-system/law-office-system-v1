@@ -5,7 +5,7 @@ import {
   getDocs,
   onSnapshot,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { db } from "../firebaseDb";
 
 /**
  * 🔐 جلب بيانات عضوية المستخدم في غرفة واحدة

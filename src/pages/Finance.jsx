@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo } from "react";
-import { db } from "../firebase";
 import {
   collection,
   onSnapshot,
@@ -9,9 +8,10 @@ import {
   orderBy,
   serverTimestamp,
 } from "firebase/firestore";
+import Button from "../components/ui/Button";
 
 import { useAuth } from "../context/AuthContext";
-import Button from "../components/ui/Button";
+import { db } from "../firebaseDb";
 
 export default function Finance() {
   const { userData } = useAuth();

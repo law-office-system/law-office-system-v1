@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { doc, getDoc, updateDoc, collection, query, where, documentId, getDocs } from "firebase/firestore";
-import { db } from "../firebase";
 import { useParams, useNavigate } from "react-router-dom";
+import { doc, getDoc, updateDoc, collection, query, where, documentId, getDocs } from "firebase/firestore";
 import { CASE_STATUS } from "../constants/caseStatus";
 import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
 
 export default function EditCase() {
   const { id } = useParams();

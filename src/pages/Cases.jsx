@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, limit, startAfter, orderBy } from "firebase/firestore";
-import { db } from "../firebase";
 import { useNavigate, Link } from "react-router-dom";
+import { collection, getDocs, query, where, limit, startAfter, orderBy } from "firebase/firestore";
+import Card from "../components/ui/Card";
 import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
 import { parseDate } from "../utils/date";
 import { syncNotifications } from "../utils/syncNotifications";
-import Card from "../components/ui/Card";
 
 // ✅ Constants
 const PAGE_SIZE = 20;
@@ -386,7 +386,6 @@ export default function Cases() {
 
   return (
     <div style={{ ...styles.page, direction: "rtl" }}>
-
       {/* HEADER & CONTROLS */}
       <div style={styles.card}>
         <h1 style={{ margin: "0 0 10px 0", fontSize: "22px", color: "#1e3a8a" }}>
@@ -423,7 +422,6 @@ export default function Cases() {
           </select>
         </div>
       </div>
-
       {/* ================= MOBILE VIEW ================= */}
       {isMobile ? (
         <div style={styles.grid}>
@@ -473,7 +471,7 @@ export default function Cases() {
         </div>
       ) : (
         /* ================= DESKTOP VIEW ================= */
-        <div style={styles.cardTable}>
+        (<div style={styles.cardTable}>
           {filtered.length === 0 ? (
             <p style={styles.noData}>لا توجد دعاوى مطابقة لخيارات البحث الفعلي.</p>
           ) : (
@@ -549,7 +547,7 @@ export default function Cases() {
               />
             </>
           )}
-        </div>
+        </div>)
       )}
     </div>
   );

@@ -99,7 +99,7 @@ function NotificationSync() {
     setIsSyncing(true);
     try {
       const { collection, query, where, getDocs } = await import("firebase/firestore");
-      const { db } = await import("./firebase");
+      const { db } = await import("./firebaseDb");
       const { syncNotifications } = await import("./utils/syncNotifications");
 
       const casesQuery = query(

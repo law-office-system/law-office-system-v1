@@ -26,12 +26,12 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
 
-    // تحذير إذا زاد أي Chunk عن 300KB
-    chunkSizeWarningLimit: 300,
+    // ─── رفع الحد الأدنى للتحذير ──────────────────────────────
+    // Firestore طبيعيًا كبير (~400KB) فالـ 300KB تحذير زائف
+    chunkSizeWarningLimit: 500,
 
     sourcemap: false,
 
-    // يمكنك ترك terser لأنك تستخدم drop_console
     minify: "terser",
 
     terserOptions: {
@@ -49,7 +49,9 @@ export default defineConfig({
         assetFileNames: `assets/[name]-[hash]-${BUILD_ID}[extname]`,
 
         manualChunks(id) {
-          // ================= React =================
+          // ─── IMPORTANT: الأكثر تحديدًا يجب أن يكون أولاً ───
+
+          // ================= React Ecosystem =================
           if (
             id.includes("node_modules/react") ||
             id.includes("node_modules/react-dom") ||
@@ -58,7 +60,9 @@ export default defineConfig({
             return "react-vendor";
           }
 
-          // ================= Firebase =================
+          // ================= Firebase SDKs (منفصلة) =================
+          // كل خدمة Firebase في Chunk منفصل للـ Caching الأمثل
+
           if (id.includes("firebase/app")) {
             return "firebase-app";
           }
@@ -83,6 +87,24 @@ export default defineConfig({
             return "firebase-rtdb";
           }
 
+          if (id.includes("firebase/functions")) {
+            return "firebase-functions";
+          }
+
+          if (id.includes("firebase/analytics")) {
+            return "firebase-analytics";
+          }
+
+          // ================= Firebase Internals =================
+          // @firebase/* + idb + tslib = Core مشترك
+          if (
+            id.includes("@firebase") ||
+            id.includes("idb") ||
+            id.includes("tslib")
+          ) {
+            return "firebase-core";
+          }
+
           // ================= Material UI =================
           if (id.includes("@mui")) {
             return "mui-vendor";
@@ -93,21 +115,38 @@ export default defineConfig({
             return "icons";
           }
 
+          // ================= State Management =================
+          if (
+            id.includes("zustand") ||
+            id.includes("jotai") ||
+            id.includes("recoil")
+          ) {
+            return "state-vendor";
+          }
+
+          // ================= HTTP / API =================
+          if (
+            id.includes("axios") ||
+            id.includes("fetch")
+          ) {
+            return "http-vendor";
+          }
+
           // ================= Utilities =================
           if (
             id.includes("date-fns") ||
-            id.includes("lodash")
+            id.includes("lodash") ||
+            id.includes("moment")
           ) {
             return "utils-vendor";
           }
 
-          // ================= Firebase Helpers =================
+          // ================= Animation =================
           if (
-            id.includes("@firebase") ||
-            id.includes("idb") ||
-            id.includes("tslib")
+            id.includes("framer-motion") ||
+            id.includes("gsap")
           ) {
-            return "firebase-core";
+            return "animation-vendor";
           }
 
           // ================= Other Vendors =================

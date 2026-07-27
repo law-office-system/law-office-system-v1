@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   collection,
   query,
@@ -9,9 +10,8 @@ import {
   updateDoc,
   deleteDoc,
 } from "firebase/firestore";
-import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { db } from "../firebaseDb";
 import { addMemberToRoom } from "../services/roomMembers";
 
 export default function OfficeRoomsManagement() {

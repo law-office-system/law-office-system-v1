@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { nanoid } from "nanoid";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc, setDoc, Timestamp } from "firebase/firestore";
-import { nanoid } from "nanoid";
-import { auth, db } from "../firebase";
+import { auth } from "../firebaseAuth";
+import { db } from "../firebaseDb";
 
 export default function Register() {
   const navigate = useNavigate();

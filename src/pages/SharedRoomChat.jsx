@@ -1,13 +1,13 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import { db } from "../firebase";
+import { ArrowLeft, Send, Reply, Trash2 } from "lucide-react";
 import {
   collection, query, where, orderBy, onSnapshot,
   addDoc, updateDoc, deleteDoc, setDoc, serverTimestamp,
   doc, getDoc, getDocs, arrayUnion,
 } from "firebase/firestore";
-import { ArrowLeft, Send, Reply, Trash2 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
 
 // ===== Color Palette - Matching Sidebar (Gold + Dark) =====
 const COLORS = {

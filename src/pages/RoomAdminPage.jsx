@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { db } from "../firebase";
+import { db } from "../firebaseDb";
 import {
   addMemberToRoom,
   removeMemberFromRoom,

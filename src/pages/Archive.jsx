@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { db } from "../firebase";
-import { collection, onSnapshot, getDocs, query, where } from "firebase/firestore";
 import { Link } from "react-router-dom";
+import { collection, onSnapshot, getDocs, query, where } from "firebase/firestore";
 import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
 
 export default function Archive() {
   const [cases, setCases] = useState([]);

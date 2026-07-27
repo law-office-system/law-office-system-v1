@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { db } from "../firebase";
 import {
   collection,
   onSnapshot,
@@ -12,6 +11,7 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
 import { generateNotifications } from "../utils/generateNotifications";
 
 export default function useNotifications() {

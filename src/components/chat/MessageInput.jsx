@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
-import { storage } from "../../firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { storage } from "../../firebaseStorage";
 
 export default function MessageInput({ 
   onSendMessage, 

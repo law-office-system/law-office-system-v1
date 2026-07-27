@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
 
 export default function usePresence() {
   const { userData } = useAuth();

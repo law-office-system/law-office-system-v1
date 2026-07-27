@@ -10,7 +10,7 @@ import {
   where, 
   onSnapshot 
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { db } from "../firebaseDb";
 
 const TYPING_TIMEOUT = 3000; // 3 seconds
 

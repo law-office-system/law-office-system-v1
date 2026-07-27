@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "../firebase";
-import { useAuth } from "../context/AuthContext";
 import Button from "../components/ui/Button";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
 
 export default function ClientProfile() {
   const { id } = useParams();
@@ -146,7 +146,6 @@ export default function ClientProfile() {
 
   return (
     <div style={styles.page}>
-      
       {/* TOP CONTROL BAR */}
       <div style={styles.topBar}>
         <Button variant="secondary" onClick={() => navigate("/clients")} style={styles.backBtn}>
@@ -168,7 +167,6 @@ export default function ClientProfile() {
           </div>
         )}
       </div>
-
       {/* VIEW & EDIT DASHBOARD */}
       {!editMode ? (
         <div style={styles.gridContainer}>
@@ -226,9 +224,8 @@ export default function ClientProfile() {
         </div>
       ) : (
         /* MODE EDIT FORM */
-        <form style={styles.formBox} onSubmit={handleSave}>
+        (<form style={styles.formBox} onSubmit={handleSave}>
           <h3 style={styles.sectionTitle}>📋 تعديل بيانات ملف الموكل</h3>
-          
           <div style={styles.row}>
             <div style={{ ...styles.field, flex: 2 }}>
               <label style={styles.label}>الاسم الرباعي الكامل *</label>
@@ -239,7 +236,6 @@ export default function ClientProfile() {
               <input name="nationalId" maxLength={14} value={form.nationalId} onChange={handleChange} style={styles.textInput} />
             </div>
           </div>
-
           <div style={styles.row}>
             <div style={{ ...styles.field, flex: 2 }}>
               <label style={styles.label}>العنوان ومحل الإقامة</label>
@@ -254,9 +250,7 @@ export default function ClientProfile() {
               <input name="phone2" value={form.phone2} onChange={handleChange} style={styles.textInput} />
             </div>
           </div>
-
           <hr style={styles.divider} />
-
           <h3 style={styles.sectionTitle}>📄 تحديث بيانات التوكيل القضائي</h3>
           <div style={styles.row}>
             <div style={styles.field}>
@@ -295,9 +289,8 @@ export default function ClientProfile() {
               <input name="powerOffice" value={form.powerOffice} onChange={handleChange} style={styles.textInput} />
             </div>
           </div>
-        </form>
+        </form>)
       )}
-
     </div>
   );
 }

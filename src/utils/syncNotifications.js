@@ -1,4 +1,3 @@
-import { db } from "../firebase";
 import {
   collection,
   getDocs,
@@ -9,6 +8,7 @@ import {
   serverTimestamp,
   documentId,
 } from "firebase/firestore";
+import { db } from "../firebaseDb";
 import { generateNotifications } from "./generateNotifications";
 
 // ✅ Cache للـ client names — يدوم 10 دقايق

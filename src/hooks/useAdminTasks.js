@@ -1,17 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  db,
-  collection, 
-  query, 
-  where, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  doc, 
+
+import {
+  collection,
+  query,
+  where,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
   serverTimestamp,
   getDocs,
-} from '../firebase';
+} from "firebase/firestore";
+
 import { useAuth } from '../context/AuthContext';
+
+import { db } from "../firebaseDb";
 
 export function useAdminTasks(caseId = null) {
   const { userData } = useAuth();

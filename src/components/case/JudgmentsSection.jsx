@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { useJudgments } from "../../hooks/useJudgments";
-import { db } from "../../firebase";
 import { doc, getDoc } from "firebase/firestore";
-import JudgmentForm from "./JudgmentForm";
-import JudgmentCard from "./JudgmentCard";
-import Card from "../ui/Card";
+import { db } from "../../firebaseDb";
+import { useJudgments } from "../../hooks/useJudgments";
 import Button from "../ui/Button";
+import Card from "../ui/Card";
+import JudgmentCard from "./JudgmentCard";
+import JudgmentForm from "./JudgmentForm";
 
 export default function JudgmentsSection({ caseId }) {
   const { judgments, loading, deleteJudgment, toggleFollowUp } = useJudgments(caseId);

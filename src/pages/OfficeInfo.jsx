@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
-import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
 
 export default function OfficeInfo() {
   const { userData } = useAuth();

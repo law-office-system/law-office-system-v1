@@ -7,9 +7,9 @@ import {
   where,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "../firebase";
 import { CASE_STATUS } from "../constants/caseStatus";
 import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
 
 const TABS_ORDER = ["case", "parties", "sessions", "subject"];
 

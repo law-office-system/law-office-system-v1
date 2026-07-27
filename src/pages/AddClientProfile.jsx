@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom"; // لإعادة التوجيه
 import { doc, setDoc } from "firebase/firestore";
-import { db } from "../firebase";
 import Button from "../components/ui/Button";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
 
 export default function AddClientProfile() {
   const { userData } = useAuth();

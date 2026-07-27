@@ -1,10 +1,10 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { db } from "../firebase";
-import { collection, onSnapshot, query, where, documentId, getDocs, doc, getDoc, limit, orderBy } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
-import { parseDate } from "../utils/date";
+import { collection, onSnapshot, query, where, documentId, getDocs, doc, getDoc, limit, orderBy } from "firebase/firestore";
 import { CASE_STATUS } from "../constants/caseStatus";
 import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
+import { parseDate } from "../utils/date";
 
 // ============================================================
 // 🏛️ ألوان عريقة — منصة القضاء الخشبية

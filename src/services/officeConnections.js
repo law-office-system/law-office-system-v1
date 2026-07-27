@@ -1,4 +1,3 @@
-import { db } from "../firebase";
 import {
   collection,
   addDoc,
@@ -12,6 +11,7 @@ import {
   and,
   getDoc
 } from "firebase/firestore";
+import { db } from "../firebaseDb";
 
 /* ================= SEND REQUEST ================= */
 export const sendConnectionRequest = async (fromOfficeId, targetInviteCode) => {

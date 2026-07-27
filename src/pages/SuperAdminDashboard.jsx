@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   collection,
   onSnapshot,
@@ -6,9 +7,8 @@ import {
   updateDoc,
   deleteDoc,
 } from "firebase/firestore";
-import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate, useLocation } from "react-router-dom";
+import { db } from "../firebaseDb";
 
 export default function SuperAdminDashboard() {
   const [offices, setOffices] = useState([]);

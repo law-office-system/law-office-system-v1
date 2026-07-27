@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { db } from "../firebase";
 import {
   collection,
   query,
@@ -10,8 +9,9 @@ import {
   updateDoc,
   doc,
 } from "firebase/firestore";
-import { updateMemberRole, removeMemberFromRoom } from "../services/roomMembers";
 import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
+import { updateMemberRole, removeMemberFromRoom } from "../services/roomMembers";
 
 export default function RoomMembersAdmin() {
   const { roomId } = useParams();

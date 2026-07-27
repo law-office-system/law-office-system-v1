@@ -1,12 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useParams } from "react-router-dom";
-import { db } from "../firebase";
-import { useAuth } from "../context/AuthContext";
-import ChatSidebar from "../components/chat/ChatSidebar";
-import Messages from "../components/chat/Messages";
-import RoomHeader from "../components/chat/RoomHeader";
-import { listenToRoomMembers } from "../services/roomMembers";
-import { useMessages } from "../hooks/useMessages";
 import {
   collection,
   query,
@@ -21,6 +14,13 @@ import {
   writeBatch,
   limit,
 } from "firebase/firestore";
+import ChatSidebar from "../components/chat/ChatSidebar";
+import Messages from "../components/chat/Messages";
+import RoomHeader from "../components/chat/RoomHeader";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
+import { useMessages } from "../hooks/useMessages";
+import { listenToRoomMembers } from "../services/roomMembers";
 
 // ===== Color Palette - Matching Sidebar (Gold + Dark) =====
 const COLORS = {

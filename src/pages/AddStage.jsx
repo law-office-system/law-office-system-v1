@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { doc, updateDoc, arrayUnion, getDoc } from "firebase/firestore";
-import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
 
 export default function AddStage() {
   const { id } = useParams();

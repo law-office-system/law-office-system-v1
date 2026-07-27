@@ -12,10 +12,10 @@ import {
   updateDoc,
 } from "firebase/firestore";
 
-import { db } from "../firebase";
-import { useAuth } from "../context/AuthContext";
-import { canAccess } from "../utils/auth";
 import Button from "../components/ui/Button";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
+import { canAccess } from "../utils/auth";
 
 export default function CaseFinance() {
   const { id } = useParams();

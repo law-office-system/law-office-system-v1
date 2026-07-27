@@ -1,6 +1,4 @@
 import { useState, useEffect } from "react";
-import { useAuth } from "../context/AuthContext";
-import { db } from "../firebase";
 import {
   collection,
   query,
@@ -12,6 +10,8 @@ import {
   serverTimestamp,
   getDocs
 } from "firebase/firestore";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
 
 export default function OfficeConnections() {
   const { userData } = useAuth();

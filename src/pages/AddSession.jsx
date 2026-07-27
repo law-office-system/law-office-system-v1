@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { db } from "../firebase";
+import { Calendar, Clock, MapPin, FileText, Landmark, AlertCircle, CheckCircle2, ArrowRight } from "lucide-react";
 import { doc, updateDoc, arrayUnion, getDoc } from "firebase/firestore";
 import { useAuth } from "../context/AuthContext";
-import { Calendar, Clock, MapPin, FileText, Landmark, AlertCircle, CheckCircle2, ArrowRight } from "lucide-react";
+import { db } from "../firebaseDb";
 
 const statusOptions = [
   { value: 'scheduled', label: 'مجدولة', color: '#60a5fa' },

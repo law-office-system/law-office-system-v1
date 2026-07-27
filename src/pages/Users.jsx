@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { db } from "../firebase";
 import {
   collection,
   getDocs,
@@ -9,8 +8,9 @@ import {
   query,
   where,
 } from "firebase/firestore";
-
 import { useAuth } from "../context/AuthContext";
+
+import { db } from "../firebaseDb";
 
 export default function Users() {
   const { userData } = useAuth();

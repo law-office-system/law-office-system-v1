@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import { db } from "../firebase";
 import {
   collection,
   query,
@@ -11,6 +9,8 @@ import {
   updateDoc,
   deleteDoc,
 } from "firebase/firestore";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
 
 export default function SharedRooms() {
   const { userData } = useAuth();

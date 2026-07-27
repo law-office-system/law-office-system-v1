@@ -3,7 +3,7 @@ import {
   addDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { db } from "../firebaseDb";
 
 export async function createNotification({
   officeId,

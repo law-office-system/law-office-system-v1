@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { db } from "../../firebase";
 import { Menu, Users, Settings } from "lucide-react";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { db } from "../../firebaseDb";
 
 export default function RoomHeader({ room, userData, onMenuToggle, isSidebarOpen, isMobile }) {
   const [membersCount, setMembersCount] = useState(0);

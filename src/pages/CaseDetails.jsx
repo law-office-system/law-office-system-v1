@@ -1,25 +1,25 @@
 import { useEffect, useState, useMemo } from "react";
-import {
-  doc, onSnapshot, getDoc, updateDoc, collection,
-  query, where, getDocs, addDoc, deleteDoc, serverTimestamp,
-} from "firebase/firestore";
 import { useParams, Link, useSearchParams } from "react-router-dom";
-import { db } from "../firebase";
-import { useAuth } from "../context/AuthContext";
-import { CASE_STATUS_LIST } from "../constants/caseStatus";
 import {
   Landmark, Edit3, Calendar, Users, Shield, FileText,
   Clock, MapPin, CheckCircle2, Trash2, Gavel, Briefcase,
   DollarSign, ArrowLeft, Plus, Link2, Sparkles, RotateCcw,
   Scale, AlertTriangle
 } from "lucide-react";
-import SessionsTimeline from "../components/case/SessionsTimeline";
-import SessionForm from "../components/case/SessionForm";
-import JudgmentsSection from "../components/case/JudgmentsSection";
-import JudgmentForm from "../components/case/JudgmentForm";
-import DecisionForm from "../components/case/DecisionForm";
-import AdminTasksSection from "../components/case/AdminTasksSection";
+import {
+  doc, onSnapshot, getDoc, updateDoc, collection,
+  query, where, getDocs, addDoc, deleteDoc, serverTimestamp,
+} from "firebase/firestore";
 import AdminTaskForm from "../components/case/AdminTaskForm";  // ✅ NEW: Import the modal
+import AdminTasksSection from "../components/case/AdminTasksSection";
+import DecisionForm from "../components/case/DecisionForm";
+import JudgmentForm from "../components/case/JudgmentForm";
+import JudgmentsSection from "../components/case/JudgmentsSection";
+import SessionForm from "../components/case/SessionForm";
+import SessionsTimeline from "../components/case/SessionsTimeline";
+import { CASE_STATUS_LIST } from "../constants/caseStatus";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebaseDb";
 
 // ─── Decision-to-Stage mapping (sync across all files) ───────────
 const DECISION_STAGE_MAP = {

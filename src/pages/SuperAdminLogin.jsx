@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
+
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { auth } from "../firebaseAuth";
+import { db } from "../firebaseDb";
 
 export default function SuperAdminLogin() {
   const [email, setEmail] = useState("");

@@ -57,7 +57,7 @@ export default function Sidebar({ open, setOpen, isMobile }) {
     let isActive = true;
 
     const loadFirebase = async () => {
-      const { db } = await import("../firebase");
+      const { db } = await import("../firebaseDb");
       const { collection, query, where, onSnapshot, getDocs } = await import("firebase/firestore");
 
       // Get shared rooms for this office (multi-tenant isolation)
