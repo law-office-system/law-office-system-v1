@@ -4,8 +4,8 @@ import { useAuth } from "../context/AuthContext";
 import { db } from "../firebase";
 import {
   collection, query, where, orderBy, onSnapshot,
-  addDoc, updateDoc, deleteDoc, serverTimestamp,
-  doc, getDoc, getDocs,
+  addDoc, updateDoc, deleteDoc, setDoc, serverTimestamp,
+  doc, getDoc, getDocs, arrayUnion,
 } from "firebase/firestore";
 import { ArrowLeft, Send, Reply, Trash2 } from "lucide-react";
 
@@ -74,32 +74,64 @@ export default function SharedRoomChat() {
     loadRoom();
   }, [id]);
 
-  // Messages listener
+  // Messages listener - optimized with batch seenBy updates
   useEffect(() => {
-    if (!id) return;
+    if (!id || !userData?.uid) return;
+
     const q = query(
       collection(db, "sharedMessages"),
       where("roomId", "==", id),
       orderBy("createdAt", "asc")
     );
+
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       const valid = data.filter(m => (m.text && m.text.trim()) || (m.fileUrl));
       setMessages(valid);
-      valid.forEach(async (msg) => {
-        if (msg.senderId !== userData?.uid && !msg.seenBy?.includes(userData?.uid)) {
-          try { await updateDoc(doc(db, "sharedMessages", msg.id), { seenBy: [...(msg.seenBy || []), userData.uid] }); } catch {}
-        }
+
+      // Only update unread messages from others
+      const unread = valid.filter(msg => 
+        msg.senderId !== userData.uid && 
+        !msg.seenBy?.includes(userData.uid)
+      );
+
+      // Batch update seenBy using arrayUnion for safety
+      unread.forEach(async (msg) => {
+        try { 
+          await updateDoc(doc(db, "sharedMessages", msg.id), { 
+            seenBy: arrayUnion(userData.uid) 
+          }); 
+        } catch {}
       });
     }, console.error);
+
     return () => unsub();
   }, [id, userData?.uid]);
 
-  // Typing listener
+  // Typing listener - with active filter and cleanup
   useEffect(() => {
-    if (!id) return;
-    const q = query(collection(db, "typing"), where("roomId", "==", id), where("userId", "!=", userData?.uid || ""));
-    const unsub = onSnapshot(q, (snap) => setTypingUsers(snap.docs.map(d => d.data().userName)));
+    if (!id || !userData?.uid) return;
+
+    // Only listen to typing records from last 10 seconds
+    const tenSecondsAgo = new Date(Date.now() - 10000);
+    const q = query(
+      collection(db, "typing"),
+      where("roomId", "==", id),
+      where("userId", "!=", userData.uid),
+      where("timestamp", ">", tenSecondsAgo)
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      const users = snap.docs
+        .map(d => d.data())
+        .filter(t => {
+          const ts = t.timestamp?.toDate?.() || new Date(t.timestamp || Date.now());
+          return Date.now() - ts.getTime() < 10000;
+        })
+        .map(t => t.userName);
+      setTypingUsers(users);
+    }, console.error);
+
     return () => unsub();
   }, [id, userData?.uid]);
 
@@ -115,6 +147,19 @@ export default function SharedRoomChat() {
       messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
     }
   }, [loading]);
+
+  // Cleanup typing status when leaving room
+  useEffect(() => {
+    return () => {
+      if (id && userData?.uid) {
+        const docId = `${id}_${userData.uid}`;
+        deleteDoc(doc(db, "typing", docId)).catch(() => {});
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, [id, userData?.uid]);
 
   const handleScroll = () => {
     if (!chatBoxRef.current) return;
@@ -152,12 +197,27 @@ export default function SharedRoomChat() {
 
   const handleTyping = useCallback(() => {
     if (!id || !userData?.uid) return;
-    const tRef = doc(db, "typing", `${id}_${userData.uid}`);
-    updateDoc(tRef, { roomId: id, userId: userData.uid, userName: userData.name || "مستخدم", timestamp: serverTimestamp() }).catch(() => {
-      addDoc(collection(db, "typing"), { roomId: id, userId: userData.uid, userName: userData.name || "مستخدم", timestamp: serverTimestamp() });
-    });
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => deleteDoc(doc(db, "typing", `${id}_${userData.uid}`)), 3000);
+
+    const docId = `${id}_${userData.uid}`;
+    const tRef = doc(db, "typing", docId);
+
+    // Set typing status with merge to avoid overwriting
+    setDoc(tRef, {
+      roomId: id,
+      userId: userData.uid,
+      userName: userData.name || "مستخدم",
+      timestamp: serverTimestamp(),
+    }, { merge: true }).catch(console.error);
+
+    // Clear old timeout before setting new one
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Set new timeout - increased to 5 seconds
+    typingTimeoutRef.current = setTimeout(() => {
+      deleteDoc(tRef).catch(() => {});
+    }, 5000);
   }, [id, userData]);
 
   const deleteMessage = async (mid) => { if (!window.confirm("هل أنت متأكد؟")) return; await deleteDoc(doc(db, "sharedMessages", mid)); setSelectedMessage(null); };

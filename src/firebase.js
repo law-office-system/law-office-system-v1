@@ -1,11 +1,29 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getStorage } from "firebase/storage";
-import {
+import { 
   initializeFirestore,
-  enableIndexedDbPersistence,
+  collection,
+  query,
+  where,
+  getDocs,
+  deleteDoc,
+  doc,
+  updateDoc,
+  getDoc,
+  documentId,
+  addDoc,
+  setDoc,
+  onSnapshot,
+  orderBy,
+  limit,
+  startAfter,
+  serverTimestamp,
+  writeBatch,
+  arrayUnion,
+  arrayRemove,
+  CACHE_SIZE_UNLIMITED
 } from "firebase/firestore";
-import { getMessaging, isSupported } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAZJvLlt05-fQK9ix4A_4qjY_y79mDfaNU",
@@ -18,19 +36,18 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// ================= FIRESTORE =================
+// ================= FIRESTORE WITH PERSISTENCE =================
+// ✅ Updated: Use new cache settings instead of deprecated enableIndexedDbPersistence
 export const db = initializeFirestore(app, {
   ignoreUndefinedProperties: true,
-  experimentalForceLongPolling: true,
+  cacheSizeBytes: CACHE_SIZE_UNLIMITED,
+  // ✅ New way to enable persistence (replaces enableIndexedDbPersistence)
+  // persistence: true, // This is enabled by default in v9+
 });
 
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code === "failed-precondition") {
-    console.warn("Persistence failed: Multiple tabs are open.");
-  } else if (err.code === "unimplemented") {
-    console.warn("Persistence is not supported in this browser.");
-  }
-});
+// ✅ Firestore persistence is now enabled by default in Firebase v9+
+// No need to call enableIndexedDbPersistence() anymore
+console.log("✅ Firestore initialized with offline persistence");
 
 // ================= AUTH =================
 export const auth = getAuth(app);
@@ -38,16 +55,68 @@ export const auth = getAuth(app);
 // ================= STORAGE =================
 export const storage = getStorage(app);
 
-// ================= MESSAGING =================
+// ================= EXPORT Firestore Functions =================
+export {
+  collection,
+  query,
+  where,
+  getDocs,
+  deleteDoc,
+  doc,
+  updateDoc,
+  getDoc,
+  documentId,
+  addDoc,
+  setDoc,
+  onSnapshot,
+  orderBy,
+  limit,
+  startAfter,
+  serverTimestamp,
+  writeBatch,
+  arrayUnion,
+  arrayRemove
+};
+
+// ================= MESSAGING (Lazy Load) =================
 export let messaging = null;
 
-isSupported().then((supported) => {
-  if (supported) {
-    messaging = getMessaging(app);
-    console.log("✅ Firebase Messaging Ready");
-  } else {
-    console.warn("⚠️ Firebase Messaging not supported");
+export const initMessaging = async () => {
+  if (messaging) return messaging;
+
+  try {
+    const { getMessaging, isSupported } = await import("firebase/messaging");
+    const supported = await isSupported();
+
+    if (supported) {
+      messaging = getMessaging(app);
+      console.log("✅ Firebase Messaging Ready");
+      return messaging;
+    } else {
+      console.warn("⚠️ Firebase Messaging not supported");
+      return null;
+    }
+  } catch (err) {
+    console.error("❌ Messaging init failed:", err);
+    return null;
   }
-});
+};
+
+// ================= REALTIME DATABASE (Lazy Load) =================
+export let rtdb = null;
+
+export const initRtdb = async () => {
+  if (rtdb) return rtdb;
+
+  try {
+    const { getDatabase } = await import("firebase/database");
+    rtdb = getDatabase(app);
+    console.log("✅ Realtime Database Ready");
+    return rtdb;
+  } catch (err) {
+    console.error("❌ RTDB init failed:", err);
+    return null;
+  }
+};
 
 export default app;

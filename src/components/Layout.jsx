@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "./Sidebar";
@@ -10,15 +10,42 @@ const PUBLIC_PAGES = ["/", "/home", "/login", "/register", "/super-login"];
 // ✅ صفحات الدردشة اللي مفيش Sidebar عام فيها (عشان ChatSidebar يتحكم لوحده)
 const CHAT_PAGES = ["/chat", "/rooms", "/shared-rooms"];
 
+// ✅ Debounce function
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
 export default function Layout() {
+  // ✅ استخدم useRef عشان مايتعملش reset لما الـ route يتغير
   const [open, setOpen] = useState(() => {
-    const saved = localStorage.getItem("sidebarOpen");
-    return saved !== null ? JSON.parse(saved) : true;
+    try {
+      const saved = localStorage.getItem("sidebarOpen");
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
   });
 
   const [isMobile, setIsMobile] = useState(false);
-  const { user, userData } = useAuth();
+  const { user, userData, loading: authLoading } = useAuth();
   const location = useLocation();
+
+  // ✅ Ref للتحكم في الـ resize (مش بيعتمد على open)
+  const isMobileRef = useRef(false);
+  const openRef = useRef(open);
+
+  // ✅ تحديث الـ ref لما open يتغير
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
 
   // 🎯 تحقق هل الصفحة الحالية عامة؟
   const isPublicPage = useMemo(() => {
@@ -31,77 +58,117 @@ export default function Layout() {
   }, [location.pathname]);
 
   // 🎯 Sidebar يظهر فقط لو:
-  // 1. مش صفحة عامة
-  // 2. مش صفحة دردشة (ChatSidebar يتحكم لوحده)
-  // 3. المستخدم مسجل دخول
-  // 4. عنده officeId
   const showSidebar = !isPublicPage && !isChatPage && user && userData?.officeId;
   const showTopbar = !isPublicPage && user;
 
+  // ✅ Resize handler (مش بيعتمد على open)
   useEffect(() => {
-    localStorage.setItem("sidebarOpen", JSON.stringify(open));
-  }, [open]);
-
-  useEffect(() => {
-    const handleResize = () => {
+    const handleResize = debounce(() => {
       const mobile = window.innerWidth < 1024;
       setIsMobile(mobile);
-      if (mobile && open) setOpen(false);
-    };
+      isMobileRef.current = mobile;
 
-    handleResize();
+      // ✅ لو بقى موبايل، اقفل القائمة (بس لما الـ resize يحصل، مش لما الـ open يتغير)
+      if (mobile && openRef.current) {
+        setOpen(false);
+      }
+    }, 150);
+
+    // Check initial
+    const initialMobile = window.innerWidth < 1024;
+    setIsMobile(initialMobile);
+    isMobileRef.current = initialMobile;
+    if (initialMobile) {
+      setOpen(false);
+    }
+
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []); // ✅ مفيش dependencies!
+
+  // ✅ Save sidebar state
+  useEffect(() => {
+    try {
+      localStorage.setItem("sidebarOpen", JSON.stringify(open));
+    } catch (err) {
+      console.warn("Failed to save sidebar state:", err);
+    }
+  }, [open]);
+
+  // ✅ Toggle function (مش بيعتمد على الـ state القديم)
+  const toggleSidebar = useCallback(() => {
+    setOpen(prev => !prev);
   }, []);
 
-  return (
-    <div style={styles.container}>
-      {/* Sidebar العام يظهر فقط للمستخدمين المسجلين داخل مكتب ولسه صفحة دردشة */}
-      {showSidebar && (
-        <Sidebar open={open} setOpen={setOpen} isMobile={isMobile} />
-      )}
+  // ✅ Close function للموبايل
+  const closeSidebar = useCallback(() => {
+    if (isMobileRef.current) {
+      setOpen(false);
+    }
+  }, []);
 
-      <div style={styles.contentArea(showSidebar, isMobile, open, isChatPage)}>
-        {/* Topbar يظهر فقط للمستخدمين المسجلين */}
-        {showTopbar && (
-          <Topbar open={open} setOpen={setOpen} isMobile={isMobile} />
-        )}
-        <main style={styles.main(isMobile, showTopbar)}>
-          <Outlet />
-        </main>
-      </div>
-    </div>
-  );
-}
-
-const styles = {
-  container: {
+  // ✅ Memoized styles
+  const containerStyle = useMemo(() => ({
     display: "flex",
     height: "100vh",
     background: "#0f172a",
     overflow: "hidden",
     direction: "rtl",
-  },
-  contentArea: (showSidebar, isMobile, open, isChatPage) => ({
+  }), []);
+
+  const contentAreaStyle = useMemo(() => ({
     display: "flex",
     flexDirection: "column",
     flex: 1,
     transition: "margin 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
-    // ✅ لو صفحة دردشة، مفيش margin (ChatSidebar يتحكم لوحده)
     marginRight: isChatPage 
       ? 0 
       : (showSidebar 
           ? (isMobile ? 0 : (open ? "260px" : "72px"))
           : 0),
     minWidth: 0,
-  }),
-  main: (isMobile, showTopbar) => ({
-    flex: 1,
-    overflowY: "auto",
-    overflowX: "hidden",
-    padding: isMobile ? "12px" : "20px",
-    background: "#0f172a",
-    // لو مفيش Topbar، نضيف padding-top عشان المحتوى مايلزقش فوق
-    paddingTop: showTopbar ? undefined : "20px",
-  }),
-};
+  }), [isChatPage, showSidebar, isMobile, open]);
+
+  // ✅ إصلاح conflict بين padding و paddingTop
+  const mainStyle = useMemo(() => {
+    const basePadding = isMobile ? "12px" : "20px";
+    return {
+      flex: 1,
+      overflowY: "auto",
+      overflowX: "hidden",
+      paddingTop: showTopbar ? basePadding : "20px",
+      paddingRight: basePadding,
+      paddingBottom: basePadding,
+      paddingLeft: basePadding,
+      background: "#0f172a",
+    };
+  }, [isMobile, showTopbar]);
+
+  return (
+    <div style={containerStyle}>
+      {showSidebar && (
+        <Sidebar 
+          open={open} 
+          setOpen={setOpen} 
+          isMobile={isMobile}
+          onToggle={toggleSidebar}
+          onClose={closeSidebar}
+        />
+      )}
+
+      <div style={contentAreaStyle}>
+        {showTopbar && (
+          <Topbar 
+            open={open} 
+            setOpen={setOpen} 
+            isMobile={isMobile}
+            onToggle={toggleSidebar}
+          />
+        )}
+        <main style={mainStyle}>
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+}

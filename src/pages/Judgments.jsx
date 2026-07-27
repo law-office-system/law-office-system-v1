@@ -4,8 +4,18 @@ import {
   CheckCircle2, Clock, Calendar, FileText, ChevronDown, Landmark, Bell
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { db } from '../firebase';
-import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, getDoc, documentId } from 'firebase/firestore';
+import { 
+  db,
+  collection, 
+  query, 
+  where, 
+  getDocs, 
+  deleteDoc, 
+  doc, 
+  updateDoc, 
+  getDoc, 
+  documentId 
+} from '../firebase';
 import JudgmentCard from '../components/case/JudgmentCard';
 import JudgmentForm from '../components/case/JudgmentForm';
 

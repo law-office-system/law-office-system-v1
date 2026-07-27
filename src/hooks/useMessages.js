@@ -204,6 +204,11 @@ export function useMessages(roomId, roomType = 'internal', currentUser) {
     return groups;
   }, {});
 
+  // 🏛️ Multi-Tenant: Calculate unread count (messages not seen by current user)
+  const unreadCount = messages.filter(
+    (msg) => msg.senderId !== currentUser?.uid && !msg.seenBy?.includes(currentUser?.uid)
+  ).length;
+
   return {
     messages,
     groupedMessages,
@@ -218,5 +223,6 @@ export function useMessages(roomId, roomType = 'internal', currentUser) {
     sendNotification,
     deleteMessage,
     editMessage,
+    unreadCount,  // 🆕 Multi-Tenant: unread messages count
   };
 }

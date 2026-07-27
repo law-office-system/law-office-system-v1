@@ -1,10 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
-import { db } from '../firebase';
 import { 
-  collection, query, where, 
-  addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
+  db,
+  collection, 
+  query, 
+  where, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  doc, 
+  serverTimestamp,
   getDocs,
-} from 'firebase/firestore';
+} from '../firebase';
 import { useAuth } from '../context/AuthContext';
 
 export function useJudgments(caseId = null) {

@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { X, ClipboardList, Calendar, Flag, User, AlertCircle, MapPin } from "lucide-react";
+import {
+  X, ClipboardList, Calendar, Flag, User, AlertCircle, MapPin,
+  Link2, ChevronDown, CheckCircle2
+} from "lucide-react";
 import { useAdminTasks } from "../../hooks/useAdminTasks";
-import { useAuth } from "../../context/AuthContext";  // ← NEW
+import { useAuth } from "../../context/AuthContext";
 
 const priorities = [
   { value: "high", label: "عالية", color: "#f87171", bg: "rgba(248, 113, 113, 0.15)", border: "rgba(248, 113, 113, 0.3)" },
@@ -15,13 +18,16 @@ const statuses = [
   { value: "completed", label: "منجزة", color: "#4ade80" },
 ];
 
-export default function AdminTaskForm({ caseId, task = null, onClose }) {
-  const { userData } = useAuth();  // ← NEW
-  const officeId = userData?.officeId;  // ← NEW
+export default function AdminTaskForm({ caseId, sessions = [], task = null, onClose }) {
+  const { userData } = useAuth();
+  const officeId = userData?.officeId;
+  const tenantId = userData?.tenantId || officeId;
 
   const { addTask, updateTask } = useAdminTasks(caseId);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [showSessionDropdown, setShowSessionDropdown] = useState(false);
+
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -29,6 +35,9 @@ export default function AdminTaskForm({ caseId, task = null, onClose }) {
     dueDate: "",
     assignedTo: "",
     status: "pending",
+    // ── NEW: Session Link ──
+    sessionId: "",
+    sessionTitle: "",
   });
 
   useEffect(() => {
@@ -40,6 +49,8 @@ export default function AdminTaskForm({ caseId, task = null, onClose }) {
         dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split("T")[0] : "",
         assignedTo: task.assignedTo || "",
         status: task.status || "pending",
+        sessionId: task.sessionId || "",
+        sessionTitle: task.sessionTitle || "",
       });
     }
   }, [task]);
@@ -51,6 +62,16 @@ export default function AdminTaskForm({ caseId, task = null, onClose }) {
       setErrors((prev) => ({ ...prev, [name]: null }));
     }
   }, [errors]);
+
+  const selectSession = (session) => {
+    setFormData(prev => ({
+      ...prev,
+      sessionId: session.id,
+      sessionTitle: session.title || `الجلسة ${sessions.indexOf(session) + 1}`,
+    }));
+    setShowSessionDropdown(false);
+    if (errors.sessionId) setErrors(prev => ({ ...prev, sessionId: null }));
+  };
 
   const validate = useCallback(() => {
     const newErrors = {};
@@ -73,7 +94,9 @@ export default function AdminTaskForm({ caseId, task = null, onClose }) {
     try {
       const dataToSave = {
         ...formData,
-        officeId,  // ← NEW
+        officeId,
+        tenantId,
+        caseId,
       };
 
       if (task) {
@@ -87,7 +110,7 @@ export default function AdminTaskForm({ caseId, task = null, onClose }) {
     } finally {
       setLoading(false);
     }
-  }, [formData, task, validate, onClose, addTask, updateTask, officeId]);  // ← added officeId
+  }, [formData, task, validate, onClose, addTask, updateTask, officeId, tenantId, caseId]);
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -115,14 +138,7 @@ export default function AdminTaskForm({ caseId, task = null, onClose }) {
     }
   }, [onClose]);
 
-  const handleModalClick = useCallback((e) => {
-    e.stopPropagation();
-    e.nativeEvent.stopImmediatePropagation();
-  }, []);
-
-  const handleFormClick = useCallback((e) => {
-    e.stopPropagation();
-  }, []);
+  const selectedSession = sessions.find(s => s.id === formData.sessionId);
 
   return (
     <div 
@@ -133,16 +149,12 @@ export default function AdminTaskForm({ caseId, task = null, onClose }) {
     >
       <div 
         style={styles.modal} 
-        onClick={handleModalClick}
-        onMouseDown={handleModalClick}
-        onTouchStart={handleModalClick}
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div 
-          style={styles.header}
-          onClick={handleModalClick}
-          onMouseDown={handleModalClick}
-        >
+        <div style={styles.header}>
           <div style={styles.headerLeft}>
             <div style={styles.headerIcon}>
               <ClipboardList color="#4ade80" size={22} strokeWidth={2.5} />
@@ -167,9 +179,154 @@ export default function AdminTaskForm({ caseId, task = null, onClose }) {
         <form 
           onSubmit={handleSubmit} 
           style={styles.form}
-          onClick={handleFormClick}
-          onMouseDown={handleFormClick}
+          onClick={(e) => e.stopPropagation()}
         >
+          {/* ═══ NEW: Session Selector ═══ */}
+          {sessions.length > 0 && (
+            <div style={styles.fieldGroup}>
+              <label style={styles.label}>
+                <Link2 size={14} color="#60a5fa" />
+                الجلسة المرتبطة (اختياري)
+              </label>
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowSessionDropdown(!showSessionDropdown)}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    background: 'rgba(15, 23, 42, 0.6)',
+                    border: `1px solid ${formData.sessionId ? 'rgba(96, 165, 250, 0.5)' : 'rgba(55, 65, 81, 0.5)'}`,
+                    borderRadius: '12px',
+                    color: formData.sessionId ? '#f3f4f6' : '#6b7280',
+                    fontSize: '14px',
+                    fontFamily: 'inherit',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    textAlign: 'right',
+                    direction: 'rtl',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Calendar size={16} color={formData.sessionId ? '#60a5fa' : '#6b7280'} />
+                    {formData.sessionId
+                      ? `${selectedSession?.title || formData.sessionTitle} (${new Date(selectedSession?.date || selectedSession?.nextSessionDate).toLocaleDateString('ar-EG')})`
+                      : 'اختر الجلسة المرتبطة (اختياري)...'}
+                  </span>
+                  <ChevronDown size={16} color="#6b7280" style={{ transform: showSessionDropdown ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+                </button>
+
+                {showSessionDropdown && (
+                  <div style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 6px)',
+                    left: 0,
+                    right: 0,
+                    background: '#1f2937',
+                    border: '1px solid rgba(55, 65, 81, 0.6)',
+                    borderRadius: '14px',
+                    boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)',
+                    zIndex: 100,
+                    maxHeight: '280px',
+                    overflow: 'auto',
+                    padding: '8px',
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, sessionId: '', sessionTitle: '' }));
+                        setShowSessionDropdown(false);
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        background: !formData.sessionId ? 'rgba(96, 165, 250, 0.1)' : 'transparent',
+                        border: 'none',
+                        borderRadius: '10px',
+                        color: !formData.sessionId ? '#60a5fa' : '#6b7280',
+                        fontSize: '13px',
+                        fontWeight: !formData.sessionId ? 600 : 400,
+                        cursor: 'pointer',
+                        textAlign: 'right',
+                        fontFamily: 'inherit',
+                        marginBottom: '4px',
+                      }}
+                    >
+                      بدون جلسة مرتبطة
+                    </button>
+                    <div style={{ height: 1, background: 'rgba(55, 65, 81, 0.3)', margin: '4px 8px' }} />
+                    {sessions.map((session, idx) => (
+                      <button
+                        key={session.id}
+                        type="button"
+                        onClick={() => selectSession(session)}
+                        style={{
+                          width: '100%',
+                          padding: '10px 14px',
+                          background: formData.sessionId === session.id ? 'rgba(96, 165, 250, 0.15)' : 'transparent',
+                          border: 'none',
+                          borderRadius: '10px',
+                          color: formData.sessionId === session.id ? '#60a5fa' : '#d1d5db',
+                          fontSize: '13px',
+                          fontWeight: formData.sessionId === session.id ? 700 : 500,
+                          cursor: 'pointer',
+                          textAlign: 'right',
+                          fontFamily: 'inherit',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          marginBottom: '4px',
+                          transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (formData.sessionId !== session.id) {
+                            e.currentTarget.style.background = 'rgba(55, 65, 81, 0.3)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (formData.sessionId !== session.id) {
+                            e.currentTarget.style.background = 'transparent';
+                          }
+                        }}
+                      >
+                        <div style={{
+                          width: '24px',
+                          height: '24px',
+                          borderRadius: '50%',
+                          background: formData.sessionId === session.id ? '#60a5fa20' : 'rgba(55, 65, 81, 0.5)',
+                          color: formData.sessionId === session.id ? '#60a5fa' : '#9ca3af',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '11px',
+                          fontWeight: 'bold',
+                          flexShrink: 0,
+                        }}>
+                          {idx + 1}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600 }}>{session.title || `الجلسة ${idx + 1}`}</div>
+                          <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
+                            {new Date(session.date || session.nextSessionDate).toLocaleDateString('ar-EG')}
+                            {session.decisionType && session.decisionType !== 'pending' && (
+                              <span style={{ marginRight: '8px', color: '#f59e0b' }}>
+                                — {session.decisionLabel || session.decisionType}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {formData.sessionId === session.id && <CheckCircle2 size={16} color="#60a5fa" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Title - مكان العمل */}
           <div style={styles.fieldGroup}>
             <label style={styles.label}>
@@ -182,7 +339,6 @@ export default function AdminTaskForm({ caseId, task = null, onClose }) {
                 name="title"
                 value={formData.title}
                 onChange={handleChange}
-                onClick={(e) => e.stopPropagation()}
                 style={{
                   ...styles.input,
                   paddingRight: "40px",
@@ -206,7 +362,6 @@ export default function AdminTaskForm({ caseId, task = null, onClose }) {
               name="description"
               value={formData.description}
               onChange={handleChange}
-              onClick={(e) => e.stopPropagation()}
               rows={3}
               style={styles.textarea}
               placeholder="وصف تفصيلي للعمل المطلوب..."
@@ -253,7 +408,6 @@ export default function AdminTaskForm({ caseId, task = null, onClose }) {
                   name="dueDate"
                   value={formData.dueDate}
                   onChange={handleChange}
-                  onClick={(e) => e.stopPropagation()}
                   style={{
                     ...styles.input,
                     paddingRight: "40px",
@@ -280,7 +434,6 @@ export default function AdminTaskForm({ caseId, task = null, onClose }) {
                 name="assignedTo"
                 value={formData.assignedTo}
                 onChange={handleChange}
-                onClick={(e) => e.stopPropagation()}
                 style={{ ...styles.input, paddingRight: "40px" }}
                 placeholder="اسم الموظف المسؤول"
               />

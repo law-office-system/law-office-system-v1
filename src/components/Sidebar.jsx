@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { 
   LayoutDashboard, Briefcase, Users, Calendar, 
@@ -8,21 +8,10 @@ import {
   Crown, User
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import useNotifications from "../hooks/useNotifications";
 
-// ===== All items - Notifications right after Dashboard =====
-const navItems = [
-  { path: "/dashboard", label: "الرئيسية", icon: LayoutDashboard },
-  { path: "/notifications", label: "الإشعارات", icon: Bell, badge: 5 },
-  { path: "/cases", label: "جميع القضايا", icon: Scale },
-  { path: "/cases/active", label: "القضايا النشطة", icon: Briefcase },
-  { path: "/archive", label: "الأرشيف", icon: Archive },
-  { path: "/judgments", label: "الأحكام", icon: Gavel },
-  { path: "/admin-tasks", label: "الأعمال الإدارية", icon: ClipboardList },
-  { path: "/clients", label: "العملاء", icon: Users },
-  { path: "/finance", label: "المالية", icon: DollarSign },
-  { path: "/chat", label: "المحادثات", icon: MessageSquare, badge: 3 },
-  { path: "/office-connections", label: "التواصل", icon: Building2 },
-];
+
+// ===== navItems will be defined inside the component =====
 
 // ===== Color Palette - Luxury Law Firm =====
 const COLORS = {
@@ -50,6 +39,84 @@ export default function Sidebar({ open, setOpen, isMobile }) {
   const [hoveredItem, setHoveredItem] = useState(null);
   const [tooltip, setTooltip] = useState(null);
 
+  // 🏛️ Multi-Tenant: Centralized hooks for accurate per-user, per-office counts
+  const { count: unreadNotifications } = useNotifications();
+
+  // 🆕 Multi-Tenant: Chat unread count (per-office isolation)
+  const [unreadChats, setUnreadChats] = useState(0);
+
+  // 🆕 Listen for shared rooms and count unread messages (multi-tenant scoped)
+  useEffect(() => {
+    if (!userData?.uid || !userData?.officeId) {
+      setUnreadChats(0);
+      return;
+    }
+
+    let unsubscribes = [];
+    let counts = {};
+    let isActive = true;
+
+    const loadFirebase = async () => {
+      const { db } = await import("../firebase");
+      const { collection, query, where, onSnapshot, getDocs } = await import("firebase/firestore");
+
+      // Get shared rooms for this office (multi-tenant isolation)
+      const qA = query(
+        collection(db, "sharedRooms"),
+        where("officeA", "==", userData.officeId)
+      );
+      const qB = query(
+        collection(db, "sharedRooms"),
+        where("officeB", "==", userData.officeId)
+      );
+
+      const [snapA, snapB] = await Promise.all([getDocs(qA), getDocs(qB)]);
+      const roomIds = [...new Set([
+        ...snapA.docs.map(d => d.id),
+        ...snapB.docs.map(d => d.id)
+      ])];
+
+      if (roomIds.length === 0) {
+        if (isActive) setUnreadChats(0);
+        return;
+      }
+
+      // Listen for unread messages in each room
+      roomIds.forEach((roomId) => {
+        const q = query(
+          collection(db, "sharedMessages"),
+          where("roomId", "==", roomId),
+          where("senderId", "!=", userData.uid)
+        );
+
+        const unsub = onSnapshot(q, (snap) => {
+          let roomUnread = 0;
+          snap.docs.forEach((docSnap) => {
+            const msg = docSnap.data();
+            // Multi-tenant: only count if not seen by current user
+            if (!msg.seenBy?.includes(userData.uid)) {
+              roomUnread++;
+            }
+          });
+          counts[roomId] = roomUnread;
+
+          // Recalculate total
+          const totalUnread = Object.values(counts).reduce((sum, count) => sum + count, 0);
+          if (isActive) setUnreadChats(totalUnread);
+        }, (err) => console.error("Messages listener error:", err));
+
+        unsubscribes.push(unsub);
+      });
+    };
+
+    loadFirebase();
+
+    return () => {
+      isActive = false;
+      unsubscribes.forEach(unsub => unsub());
+    };
+  }, [userData?.uid, userData?.officeId]);
+
   // 🚨 لا تظهر Sidebar على الصفحات العامة
   if (PUBLIC_PAGES.includes(location.pathname)) {
     return null;
@@ -59,6 +126,31 @@ export default function Sidebar({ open, setOpen, isMobile }) {
   if (!user || !userData?.officeId) {
     return null;
   }
+
+  // 🆕 Dynamic nav items with real badge counts
+  const navItems = [
+    { path: "/dashboard", label: "الرئيسية", icon: LayoutDashboard },
+    { 
+      path: "/notifications", 
+      label: "الإشعارات", 
+      icon: Bell, 
+      badge: unreadNotifications > 0 ? unreadNotifications : null 
+    },
+    { path: "/cases", label: "جميع القضايا", icon: Scale },
+    { path: "/cases/active", label: "القضايا النشطة", icon: Briefcase },
+    { path: "/archive", label: "الأرشيف", icon: Archive },
+    { path: "/judgments", label: "الأحكام", icon: Gavel },
+    { path: "/admin-tasks", label: "الأعمال الإدارية", icon: ClipboardList },
+    { path: "/clients", label: "العملاء", icon: Users },
+    { path: "/finance", label: "المالية", icon: DollarSign },
+    { 
+      path: "/chat", 
+      label: "المحادثات", 
+      icon: MessageSquare, 
+      badge: unreadChats > 0 ? unreadChats : null 
+    },
+    { path: "/office-connections", label: "التواصل", icon: Building2 },
+  ];
 
   // ✅ عرض Sidebar: موبايل 280px، مفتوح 260px، مطوي 85px
   const sidebarWidth = isMobile ? 280 : (open ? 260 : 85);

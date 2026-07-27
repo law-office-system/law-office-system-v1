@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { db } from '../firebase';
 import { 
+  db,
   collection, 
   query, 
   where, 
@@ -10,7 +10,7 @@ import {
   doc, 
   serverTimestamp,
   getDocs,
-} from 'firebase/firestore';
+} from '../firebase';
 import { useAuth } from '../context/AuthContext';
 
 export function useAdminTasks(caseId = null) {

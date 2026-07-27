@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { db } from "../firebase";
-import { collection, onSnapshot, query, where, documentId, getDocs, doc, getDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, where, documentId, getDocs, doc, getDoc, limit, orderBy } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { parseDate } from "../utils/date";
 import { CASE_STATUS } from "../constants/caseStatus";
@@ -51,6 +51,87 @@ const Icons = {
   edit: "✏️",
 };
 
+// ✅ Constants
+const CASES_LIMIT = 50;
+const DEBOUNCE_MS = 300;
+const CLIENT_BATCH_SIZE = 30;
+
+// ✅ Skeleton Loading Components
+function DashboardSkeleton() {
+  return (
+    <div style={{ ...styles.page, direction: "rtl" }}>
+      <div style={{ ...styles.header, padding: "20px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "16px" }}>
+          <div style={{ 
+            width: "60px", height: "60px", borderRadius: "12px", 
+            background: "#3d2817", animation: "pulse 1.5s ease-in-out infinite" 
+          }} />
+          <div>
+            <div style={{ 
+              width: "200px", height: "24px", borderRadius: "4px",
+              background: "#5a3a22", marginBottom: "8px",
+              animation: "pulse 1.5s ease-in-out infinite"
+            }} />
+            <div style={{ 
+              width: "150px", height: "16px", borderRadius: "4px",
+              background: "#4a3520", animation: "pulse 1.5s ease-in-out infinite",
+              animationDelay: "0.1s"
+            }} />
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+          {[...Array(5)].map((_, i) => (
+            <div key={i} style={{ 
+              width: "100px", height: "50px", borderRadius: "10px",
+              background: "rgba(255,255,255,0.05)",
+              animation: "pulse 1.5s ease-in-out infinite",
+              animationDelay: `${i * 0.1}s`
+            }} />
+          ))}
+        </div>
+      </div>
+
+      <div style={{ ...styles.controlsSection, marginBottom: "20px" }}>
+        <div style={{ 
+          width: "100%", height: "50px", borderRadius: "12px",
+          background: "#e8dfd3", marginBottom: "12px",
+          animation: "pulse 1.5s ease-in-out infinite"
+        }} />
+        <div style={{ display: "flex", gap: "8px" }}>
+          {[...Array(4)].map((_, i) => (
+            <div key={i} style={{ 
+              width: "80px", height: "40px", borderRadius: "10px",
+              background: "#e8dfd3", animation: "pulse 1.5s ease-in-out infinite",
+              animationDelay: `${i * 0.1}s`
+            }} />
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "16px" }}>
+        {[...Array(6)].map((_, i) => (
+          <div key={i} style={{ 
+            background: THEME.cardBg, borderRadius: "14px", padding: "20px",
+            height: "200px", animation: "pulse 1.5s ease-in-out infinite",
+            animationDelay: `${i * 0.1}s`
+          }}>
+            <div style={{ width: "60%", height: "20px", background: "#e8dfd3", borderRadius: "4px", marginBottom: "12px" }} />
+            {[...Array(4)].map((_, j) => (
+              <div key={j} style={{ width: `${70 + j * 10}%`, height: "16px", background: "#f0ebe3", borderRadius: "4px", marginBottom: "8px" }} />
+            ))}
+          </div>
+        ))}
+      </div>
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // 📅 تنسيق التاريخ — YYYY-MM-DD
 const formatDate = (dateObj) => {
   if (!dateObj) return "";
@@ -70,9 +151,14 @@ export default function Dashboard() {
   const [officeName, setOfficeName] = useState("");
   const [showToast, setShowToast] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const navigate = useNavigate();
-  const { userData } = useAuth();
+  const { user, userData, loading: authLoading, userDataLoading } = useAuth();
+  const searchTimeoutRef = useRef(null);
+  const unsubRef = useRef(null);
+  const isMountedRef = useRef(true);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -87,47 +173,83 @@ export default function Dashboard() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // جلب اسم المكتب
+  // جلب اسم المكتب (مرة واحدة)
   useEffect(() => {
     const fetchOfficeName = async () => {
       if (userData?.officeId) {
-        const snap = await getDoc(doc(db, "offices", userData.officeId));
-        if (snap.exists()) setOfficeName(snap.data().name);
+        try {
+          const snap = await getDoc(doc(db, "offices", userData.officeId));
+          if (snap.exists() && isMountedRef.current) setOfficeName(snap.data().name);
+        } catch (err) {
+          console.error("Error fetching office name:", err);
+        }
       }
     };
     fetchOfficeName();
-  }, [userData]);
+  }, [userData?.officeId]);
 
-  const isUrgent = (upcomingDate) => {
+  const isUrgent = useCallback((upcomingDate) => {
     if (!upcomingDate) return false;
     return upcomingDate >= today && upcomingDate <= tomorrow;
-  };
+  }, [today, tomorrow]);
 
+  // ✅ Debounced search
   useEffect(() => {
-    const hasUrgentCases = cases.some(c => isUrgent(getUpcomingSessionDate(c.sessions)));
-    if (hasUrgentCases) {
-      setShowToast(true);
-      const timer = setTimeout(() => setShowToast(false), 8000);
-      return () => clearTimeout(timer);
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
     }
-  }, [cases]);
+    searchTimeoutRef.current = setTimeout(() => {
+      if (isMountedRef.current) setDebouncedSearch(search.toLowerCase().trim());
+    }, DEBOUNCE_MS);
 
-  useEffect(() => {
-    const timer = setTimeout(() => { setDebouncedSearch(search.toLowerCase().trim()); }, 300);
-    return () => clearTimeout(timer);
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
   }, [search]);
 
+  // ✅ Optimized cases loading with limit
   useEffect(() => {
-    if (!userData?.officeId) return;
-    const q = query(collection(db, "cases"), where("officeId", "==", userData.officeId));
-    const unsub = onSnapshot(q, (snapshot) => { 
-      setCases(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))); 
-    });
-    return () => unsub();
-  }, [userData]);
+    // ✅ لو الـ auth لسه بيتحمل، استنى
+    if (authLoading || userDataLoading) return;
 
+    // ✅ لو مفيش userData أو officeId، حط loading = false وارجع
+    if (!userData?.officeId) {
+      setLoading(false);
+      setCases([]);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    const q = query(
+      collection(db, "cases"), 
+      where("officeId", "==", userData.officeId),
+      orderBy("createdAt", "desc"),
+      limit(CASES_LIMIT)
+    );
+
+    const unsub = onSnapshot(q, (snapshot) => {
+      if (!isMountedRef.current) return;
+      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      setCases(data);
+      setLoading(false);
+    }, (err) => {
+      console.error("Error loading cases:", err);
+      if (isMountedRef.current) {
+        setError("حدث خطأ في تحميل القضايا");
+        setLoading(false);
+      }
+    });
+
+    unsubRef.current = unsub;
+    return () => unsub();
+  }, [userData?.officeId, authLoading, userDataLoading]);
+
+  // ✅ Optimized client loading with batching
   useEffect(() => {
     if (cases.length === 0) return;
+
     const fetchClientNames = async () => {
       const allClientIds = new Set();
       cases.forEach((c) => {
@@ -138,29 +260,59 @@ export default function Dashboard() {
           });
         }
       });
+
       const idsArray = Array.from(allClientIds).filter(Boolean);
       if (idsArray.length === 0) return;
+
       const newCache = { ...clientNamesCache };
-      for (let i = 0; i < idsArray.length; i += 30) {
-        const chunk = idsArray.slice(i, i + 30);
-        const q = query(collection(db, "clientProfiles"), where(documentId(), "in", chunk));
-        const snap = await getDocs(q);
-        snap.forEach((doc) => { newCache[doc.id] = doc.data().fullName || "موكل"; });
+
+      for (let i = 0; i < idsArray.length; i += CLIENT_BATCH_SIZE) {
+        const chunk = idsArray.slice(i, i + CLIENT_BATCH_SIZE);
+        try {
+          const q = query(collection(db, "clientProfiles"), where(documentId(), "in", chunk));
+          const snap = await getDocs(q);
+          snap.forEach((doc) => { 
+            newCache[doc.id] = doc.data().fullName || "موكل"; 
+          });
+        } catch (err) {
+          console.error("Error fetching clients:", err);
+        }
       }
-      setClientNamesCache(newCache);
+
+      if (isMountedRef.current) setClientNamesCache(newCache);
     };
+
     fetchClientNames();
   }, [cases]);
 
-  const normalizeStatus = (status) => {
+  // ✅ Toast for urgent cases
+  useEffect(() => {
+    const hasUrgentCases = cases.some(c => isUrgent(getUpcomingSessionDate(c.sessions)));
+    if (hasUrgentCases) {
+      setShowToast(true);
+      const timer = setTimeout(() => setShowToast(false), 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [cases, isUrgent]);
+
+  // ✅ Component cleanup
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      if (unsubRef.current) unsubRef.current();
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, []);
+
+  const normalizeStatus = useCallback((status) => {
     const s = (status || "").toString().trim().toLowerCase();
     if (["جارية", "نشطة", "active"].includes(s)) return CASE_STATUS.ACTIVE;
     if (["تنفيذ", "execution"].includes(s)) return CASE_STATUS.EXECUTION;
     if (["منتهية", "closed"].includes(s)) return CASE_STATUS.CLOSED;
     return CASE_STATUS.ACTIVE;
-  };
+  }, []);
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = useCallback((status) => {
     const s = normalizeStatus(status);
     const map = {
       ACTIVE: { label: "نشطة", bg: "#e8f5e6", color: THEME.active, border: "#2d5a2730" },
@@ -182,44 +334,78 @@ export default function Dashboard() {
         {style.label}
       </span>
     );
-  };
+  }, [normalizeStatus]);
 
-  const getUpcomingSessionDate = (sessions) => {
+  const getUpcomingSessionDate = useCallback((sessions) => {
     if (!Array.isArray(sessions) || sessions.length === 0) return null;
     const dates = sessions.map(s => parseDate(s.nextSessionDate || s.date)).filter(d => d && d >= today);
     return dates.length > 0 ? dates.sort((a, b) => a - b)[0] : null;
-  };
+  }, [today]);
 
-  const getPreviousSessionDate = (sessions) => {
+  const getPreviousSessionDate = useCallback((sessions) => {
     if (!Array.isArray(sessions) || sessions.length === 0) return null;
     const dates = sessions.map(s => parseDate(s.nextSessionDate || s.date)).filter(d => d && d < today);
     return dates.length > 0 ? dates.sort((a, b) => b - a)[0] : null;
-  };
+  }, [today]);
 
-  const statusFilteredCases = cases.filter(c => statusFilter === "ALL" || normalizeStatus(c.status) === statusFilter);
-  const sortedCases = statusFilteredCases.filter(c => {
-    const text = debouncedSearch;
-    if (!text) return true;
-    const clientMatch = Array.isArray(c.clients) && c.clients.some(ci => 
-      (clientNamesCache[typeof ci === "object" ? ci.id : ci] || "").toLowerCase().includes(text)
+  // ✅ Memoized filtered cases
+  const statusFilteredCases = useMemo(() => 
+    cases.filter(c => statusFilter === "ALL" || normalizeStatus(c.status) === statusFilter),
+  [cases, statusFilter, normalizeStatus]);
+
+  const sortedCases = useMemo(() => {
+    return statusFilteredCases.filter(c => {
+      const text = debouncedSearch;
+      if (!text) return true;
+      const clientMatch = Array.isArray(c.clients) && c.clients.some(ci => 
+        (clientNamesCache[typeof ci === "object" ? ci.id : ci] || "").toLowerCase().includes(text)
+      );
+      const sessionMatch = (c.sessions || []).some(s => (s.nextSessionDate || s.date || "").includes(text));
+      return (c.caseNumber || "").toLowerCase().includes(text) || 
+             clientMatch || 
+             (c.court || "").toLowerCase().includes(text) || 
+             sessionMatch;
+    }).sort((a, b) => 
+      (getUpcomingSessionDate(a.sessions) || new Date(9999,0,1)) - 
+      (getUpcomingSessionDate(b.sessions) || new Date(9999,0,1))
     );
-    const sessionMatch = (c.sessions || []).some(s => (s.nextSessionDate || s.date || "").includes(text));
-    return (c.caseNumber || "").toLowerCase().includes(text) || 
-           clientMatch || 
-           (c.court || "").toLowerCase().includes(text) || 
-           sessionMatch;
-  }).sort((a, b) => 
-    (getUpcomingSessionDate(a.sessions) || new Date(9999,0,1)) - 
-    (getUpcomingSessionDate(b.sessions) || new Date(9999,0,1))
-  );
+  }, [statusFilteredCases, debouncedSearch, clientNamesCache, getUpcomingSessionDate]);
 
-  const stats = {
+  const stats = useMemo(() => ({
     total: cases.length,
     active: cases.filter(c => normalizeStatus(c.status) === CASE_STATUS.ACTIVE).length,
     execution: cases.filter(c => normalizeStatus(c.status) === CASE_STATUS.EXECUTION).length,
     closed: cases.filter(c => normalizeStatus(c.status) === CASE_STATUS.CLOSED).length,
     urgent: cases.filter(c => isUrgent(getUpcomingSessionDate(c.sessions))).length,
-  };
+  }), [cases, normalizeStatus, isUrgent, getUpcomingSessionDate]);
+
+  // ✅ Loading state - يعتمد على authLoading و userDataLoading
+  if (authLoading || userDataLoading || loading) {
+    return <DashboardSkeleton />;
+  }
+
+  // ✅ Error state
+  if (error && cases.length === 0) {
+    return (
+      <div style={{ ...styles.page, direction: "rtl", textAlign: "center", padding: "40px" }}>
+        <h2 style={{ color: "#dc2626" }}>⚠️ {error}</h2>
+        <button 
+          onClick={() => window.location.reload()}
+          style={{
+            padding: "10px 20px",
+            background: THEME.btnPrimary,
+            color: "#fff",
+            border: "none",
+            borderRadius: "8px",
+            cursor: "pointer",
+            marginTop: "20px"
+          }}
+        >
+          إعادة المحاولة
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ ...styles.page, direction: "rtl" }}>
@@ -251,10 +437,10 @@ export default function Dashboard() {
               )}
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <h1 style={styles.officeName}>
+              <h1 style={styles.officeName} className="dashboard-office-name">
                 {officeName || "مكتب المحاماة"}
               </h1>
-              <p style={styles.welcomeText}>
+              <p style={styles.welcomeText} className="dashboard-welcome-text">
                 أهلاً بك يا {userData?.name || "زميلي"} · {formatDate(today)}
               </p>
             </div>
@@ -298,7 +484,7 @@ export default function Dashboard() {
         </div>
 
         {/* شريط الإحصائيات */}
-        <div style={styles.statsBar}>
+        <div style={styles.statsBar} className="dashboard-stats-bar">
           <StatItem icon={Icons.book} label="القضايا" value={stats.total} />
           <StatItem icon="●" label="نشطة" value={stats.active} color={THEME.active} />
           <StatItem icon="●" label="تنفيذ" value={stats.execution} color={THEME.execution} />
@@ -610,15 +796,20 @@ const styles = {
     color: THEME.goldLight,
     fontFamily: "'Segoe UI', Tahoma, sans-serif",
     letterSpacing: "0.5px",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
+    whiteSpace: "normal",
+    overflow: "visible",
+    lineHeight: "1.3",
   },
   welcomeText: {
     margin: 0,
     color: "#9c8b7a",
     fontSize: "14px",
     fontWeight: "500",
+    whiteSpace: "normal",
+    overflow: "visible",
+    display: "flex",
+    flexDirection: "column",
+    gap: "2px",
   },
 
   // ─── أزرار الإضافة في الهيدر (ديسكتوب) ───
@@ -993,10 +1184,24 @@ const responsiveStyles = `
       align-items: flex-start !important;
     }
     .dashboard-office-name {
-      font-size: 16px !important;
+      font-size: 15px !important;
+      line-height: 1.4 !important;
+      word-break: break-word !important;
     }
     .dashboard-welcome-text {
       font-size: 12px !important;
+      white-space: normal !important;
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 2px !important;
+    }
+    .dashboard-stats-bar {
+      display: grid !important;
+      grid-template-columns: repeat(2, 1fr) !important;
+      gap: 8px !important;
+    }
+    .dashboard-stats-bar > div {
+      justify-content: center !important;
     }
     .dashboard-logo-wrapper {
       width: 48px !important;

@@ -2,17 +2,36 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Calendar, Clock, MapPin, FileText, ChevronDown, ChevronUp,
   Edit2, Trash2, CheckCircle2, Landmark, Gavel, Briefcase,
-  MoreVertical, Link2, AlertTriangle
+  MoreVertical, Link2, AlertTriangle, RotateCcw, Scale,
+  Send, FileCheck, Sparkles, ArrowRight, UserCheck
 } from 'lucide-react';
 import { formatDate, formatTime } from '../../utils/date';
 
+// ─── Decision Type Config (sync with SessionForm) ────────────────
+const DECISION_CONFIG = {
+  pending:        { label: 'لم يُصدر',      color: '#6b7280', icon: Clock,       stageLabel: '' },
+  adjourned:      { label: 'تأجيل',         color: '#f59e0b', icon: RotateCcw,   stageLabel: 'مؤجلة' },
+  adjourned_notice:{ label: 'تأجيل لإعلان', color: '#f97316', icon: Send,        stageLabel: 'مؤجلة لإعلان' },
+  judgment:       { label: 'حكم',           color: '#10b981', icon: Gavel,       stageLabel: 'حُكمت' },
+  referred:       { label: 'إحالة',         color: '#3b82f6', icon: ArrowRight,  stageLabel: 'محالة' },
+  absence:        { label: 'غياب',          color: '#ef4444', icon: UserCheck,   stageLabel: 'غياب' },
+  expert:         { label: 'خبير',          color: '#8b5cf6', icon: Scale,       stageLabel: 'معينة خبير' },
+  settlement:     { label: 'تسوية',         color: '#14b8a6', icon: FileCheck,   stageLabel: 'مسوّاة' },
+};
+
+const JUDGMENT_TYPE_LABELS = {
+  accept: { label: 'قبول', color: '#10b981', bg: 'rgba(16, 185, 129, 0.12)', border: 'rgba(16, 185, 129, 0.25)' },
+  reject: { label: 'رفض', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.12)', border: 'rgba(239, 68, 68, 0.25)' },
+  partial:{ label: 'جزئي', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)', border: 'rgba(245, 158, 11, 0.25)' },
+};
+
 const statusConfig = {
-  scheduled: { label: "مجدولة", color: "#60a5fa", bg: "rgba(96, 165, 250, 0.12)", border: "rgba(96, 165, 250, 0.25)", icon: Calendar, glow: "0 0 12px rgba(96, 165, 250, 0.15)" },
-  completed: { label: "منعقدة", color: "#10b981", bg: "rgba(16, 185, 129, 0.12)", border: "rgba(16, 185, 129, 0.25)", icon: CheckCircle2, glow: "0 0 12px rgba(16, 185, 129, 0.15)" },
-  postponed: { label: "مؤجلة", color: "#f59e0b", bg: "rgba(245, 158, 11, 0.12)", border: "rgba(245, 158, 11, 0.25)", icon: Clock, glow: "0 0 12px rgba(245, 158, 11, 0.15)" },
-  cancelled: { label: "ملغاة", color: "#ef4444", bg: "rgba(239, 68, 68, 0.12)", border: "rgba(239, 68, 68, 0.25)", icon: Trash2, glow: "0 0 12px rgba(239, 68, 68, 0.15)" },
-  "in-progress": { label: "جارية", color: "#a78bfa", bg: "rgba(167, 139, 250, 0.12)", border: "rgba(167, 139, 250, 0.25)", icon: Clock, glow: "0 0 12px rgba(167, 139, 250, 0.15)" },
-  default: { label: "غير محدد", color: "#6b7280", bg: "rgba(107, 114, 128, 0.12)", border: "rgba(107, 114, 128, 0.25)", icon: Calendar, glow: "none" },
+  scheduled:  { label: "مجدولة", color: "#60a5fa", bg: "rgba(96, 165, 250, 0.12)", border: "rgba(96, 165, 250, 0.25)", icon: Calendar, glow: "0 0 12px rgba(96, 165, 250, 0.15)" },
+  completed:  { label: "منعقدة", color: "#10b981", bg: "rgba(16, 185, 129, 0.12)", border: "rgba(16, 185, 129, 0.25)", icon: CheckCircle2, glow: "0 0 12px rgba(16, 185, 129, 0.15)" },
+  postponed:  { label: "مؤجلة", color: "#f59e0b", bg: "rgba(245, 158, 11, 0.12)", border: "rgba(245, 158, 11, 0.25)", icon: Clock, glow: "0 0 12px rgba(245, 158, 11, 0.15)" },
+  cancelled:  { label: "ملغاة", color: "#ef4444", bg: "rgba(239, 68, 68, 0.12)", border: "rgba(239, 68, 68, 0.25)", icon: Trash2, glow: "0 0 12px rgba(239, 68, 68, 0.15)" },
+  "in-progress":{ label: "جارية", color: "#a78bfa", bg: "rgba(167, 139, 250, 0.12)", border: "rgba(167, 139, 250, 0.25)", icon: Clock, glow: "0 0 12px rgba(167, 139, 250, 0.15)" },
+  default:    { label: "غير محدد", color: "#6b7280", bg: "rgba(107, 114, 128, 0.12)", border: "rgba(107, 114, 128, 0.25)", icon: Calendar, glow: "none" },
 };
 
 export default function SessionCard({
@@ -20,10 +39,7 @@ export default function SessionCard({
   index,
   onEdit,
   onDelete,
-  onAddDecision,
-  onAddJudgment,
   onAddTask,
-  linkedJudgment = null,
   linkedTasks = [],
   isAdmin = false
 }) {
@@ -46,6 +62,14 @@ export default function SessionCard({
   const sc = statusConfig[status] || statusConfig.default;
   const StatusIcon = sc.icon;
 
+  // ─── NEW: Decision metadata ─────────────────────────────────────
+  const decisionType = session.decisionType || 'pending';
+  const decisionMeta = DECISION_CONFIG[decisionType] || DECISION_CONFIG.pending;
+  const DecisionIcon = decisionMeta.icon;
+  const hasDecision = decisionType !== 'pending';
+  const hasJudgment = decisionType === 'judgment';
+  const judgmentMeta = hasJudgment ? JUDGMENT_TYPE_LABELS[session.judgmentType] : null;
+
   const isOverdue = () => {
     const sessionDate = new Date(session.nextSessionDate || session.date);
     return sessionDate < new Date() && status === 'scheduled';
@@ -56,8 +80,6 @@ export default function SessionCard({
     switch (action) {
       case 'edit': onEdit?.(session); break;
       case 'delete': onDelete?.(session.id); break;
-      case 'decision': onAddDecision?.(session); break;
-      case 'judgment': onAddJudgment?.(session); break;
       case 'task': onAddTask?.(session); break;
       default: break;
     }
@@ -72,55 +94,55 @@ export default function SessionCard({
       style={{
         background: "#1e293b",
         border: "1px solid rgba(55, 65, 81, 0.5)",
-        borderRadius: 16,
+        borderRadius: 20,
         marginBottom: 16,
         overflow: "visible",
-        borderRight: `4px solid ${overdue ? "#ef4444" : sc.color}`,
+        borderRight: `4px solid ${overdue ? "#ef4444" : hasDecision ? decisionMeta.color : sc.color}`,
         transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
         boxShadow: hovered
-          ? `0 8px 32px rgba(0, 0, 0, 0.3), ${sc.glow}`
+          ? `0 8px 32px rgba(0, 0, 0, 0.3), ${hasDecision ? `0 0 16px ${decisionMeta.color}15` : sc.glow}`
           : "0 2px 8px rgba(0, 0, 0, 0.2)",
         transform: hovered ? "translateY(-2px)" : "translateY(0)",
         position: "relative",
         zIndex: menuOpen ? 50 : hovered ? 2 : 1,
       }}
     >
-      {/* Header */}
-      <div style={{ padding: "clamp(12px, 4vw, 18px) clamp(12px, 4vw, 20px)" }}>
-        <div style={{ 
-          display: "flex", 
-          justifyContent: "space-between", 
-          alignItems: "flex-start", 
-          gap: 12 
+      {/* ═══ HEADER ═══ */}
+      <div style={{ padding: "clamp(14px, 4vw, 18px) clamp(14px, 4vw, 20px)" }}>
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 12
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            {/* Badges Row */}
-            <div style={{ 
-              display: "flex", 
-              alignItems: "center", 
-              gap: "clamp(4px, 1.5vw, 8px)", 
-              marginBottom: 12, 
-              flexWrap: "wrap" 
+            {/* ── Badges Row ── */}
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "clamp(4px, 1.5vw, 8px)",
+              marginBottom: 12,
+              flexWrap: "wrap"
             }}>
               {/* Session Number */}
               <div style={{
                 width: "clamp(28px, 8vw, 32px)",
                 height: "clamp(28px, 8vw, 32px)",
                 borderRadius: "50%",
-                background: sc.color + "18",
-                color: sc.color,
+                background: hasDecision ? `${decisionMeta.color}18` : sc.color + "18",
+                color: hasDecision ? decisionMeta.color : sc.color,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 fontWeight: "bold",
                 fontSize: "clamp(11px, 3vw, 13px)",
                 flexShrink: 0,
-                border: `1px solid ${sc.border}`,
+                border: `1px solid ${hasDecision ? `${decisionMeta.color}30` : sc.border}`,
               }}>
                 {index + 1}
               </div>
 
-              {/* Status Badge */}
+              {/* Session Status */}
               <div style={{
                 display: "flex",
                 alignItems: "center",
@@ -139,23 +161,63 @@ export default function SessionCard({
                 {sc.label}
               </div>
 
-              {/* Linked Judgment Badge */}
-              {linkedJudgment && (
+              {/* ── NEW: Decision Type Badge ── */}
+              {hasDecision && (
                 <div style={{
                   display: "flex",
                   alignItems: "center",
                   gap: 4,
-                  padding: "clamp(3px, 1vw, 4px) clamp(8px, 2.5vw, 10px)",
-                  background: "rgba(30, 64, 175, 0.12)",
-                  color: "#60a5fa",
+                  padding: "clamp(3px, 1vw, 5px) clamp(8px, 2.5vw, 12px)",
+                  background: `${decisionMeta.color}12`,
+                  color: decisionMeta.color,
+                  borderRadius: 20,
+                  fontSize: "clamp(10px, 3vw, 12px)",
+                  fontWeight: 700,
+                  border: `1px solid ${decisionMeta.color}25`,
+                  flexShrink: 0,
+                }}>
+                  <DecisionIcon size={12} />
+                  {decisionMeta.label}
+                </div>
+              )}
+
+              {/* ── NEW: Auto Stage Badge ── */}
+              {session.suggestedStage && decisionMeta.stageLabel && (
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "clamp(3px, 1vw, 5px) clamp(8px, 2.5vw, 12px)",
+                  background: `${decisionMeta.color}10`,
+                  color: decisionMeta.color,
                   borderRadius: 20,
                   fontSize: "clamp(9px, 2.5vw, 11px)",
                   fontWeight: 700,
-                  border: "1px solid rgba(30, 64, 175, 0.25)",
+                  border: `1px solid ${decisionMeta.color}20`,
                   flexShrink: 0,
                 }}>
-                  <Gavel size={11} />
-                  حكم مرتبط
+                  <Sparkles size={11} />
+                  {decisionMeta.stageLabel}
+                </div>
+              )}
+
+              {/* ── NEW: Judgment Result Badge ── */}
+              {hasJudgment && judgmentMeta && (
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "clamp(3px, 1vw, 5px) clamp(8px, 2.5vw, 12px)",
+                  background: judgmentMeta.bg,
+                  color: judgmentMeta.color,
+                  borderRadius: 20,
+                  fontSize: "clamp(10px, 3vw, 12px)",
+                  fontWeight: 700,
+                  border: `1px solid ${judgmentMeta.border}`,
+                  flexShrink: 0,
+                }}>
+                  <Gavel size={12} />
+                  حكم: {judgmentMeta.label}
                 </div>
               )}
 
@@ -200,9 +262,9 @@ export default function SessionCard({
                 </div>
               )}
 
-              <span style={{ 
-                color: "#4b5563", 
-                fontSize: "clamp(9px, 2.5vw, 11px)", 
+              <span style={{
+                color: "#4b5563",
+                fontSize: "clamp(9px, 2.5vw, 11px)",
                 fontFamily: "monospace",
                 flexShrink: 0,
               }}>
@@ -210,7 +272,7 @@ export default function SessionCard({
               </span>
             </div>
 
-            {/* Title */}
+            {/* ── Title ── */}
             <h4 style={{
               margin: "0 0 12px 0",
               color: "#f3f4f6",
@@ -222,16 +284,16 @@ export default function SessionCard({
               {session.title || `الجلسة ${index + 1}`}
             </h4>
 
-            {/* Meta Info */}
-            <div style={{ 
-              display: "flex", 
-              flexWrap: "wrap", 
-              gap: "clamp(6px, 2vw, 10px)" 
+            {/* ── Meta Info ── */}
+            <div style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "clamp(6px, 2vw, 10px)"
             }}>
-              <MetaItem 
-                icon={Calendar} 
-                iconColor="#60a5fa" 
-                label={formatDate(session.nextSessionDate || session.date)} 
+              <MetaItem
+                icon={Calendar}
+                iconColor="#60a5fa"
+                label={formatDate(session.nextSessionDate || session.date)}
               />
 
               {session.time && (
@@ -244,24 +306,24 @@ export default function SessionCard({
               )}
 
               {session.location && (
-                <MetaItem 
-                  icon={MapPin} 
-                  iconColor="#fbbf24" 
-                  label={session.location} 
+                <MetaItem
+                  icon={MapPin}
+                  iconColor="#fbbf24"
+                  label={session.location}
                 />
               )}
 
               {session.roll && (
-                <MetaItem 
-                  icon={Landmark} 
-                  iconColor="#10b981" 
-                  label={`رول: ${session.roll}`} 
+                <MetaItem
+                  icon={Landmark}
+                  iconColor="#10b981"
+                  label={`رول: ${session.roll}`}
                 />
               )}
             </div>
           </div>
 
-          {/* Actions */}
+          {/* ── Actions ── */}
           <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "flex-start" }}>
             {isAdmin && (
               <div style={{ position: "relative" }} ref={menuRef}>
@@ -301,8 +363,6 @@ export default function SessionCard({
                     animation: "dropdownIn 0.15s ease-out",
                   }}>
                     <MenuItem icon={Edit2} label="تعديل الجلسة" color="#60a5fa" onClick={() => handleMenuAction('edit')} />
-                    <MenuItem icon={CheckCircle2} label="إضافة قرار" color="#10b981" onClick={() => handleMenuAction('decision')} />
-                    <MenuItem icon={Gavel} label="إضافة حكم" color="#3b82f6" onClick={() => handleMenuAction('judgment')} />
                     <MenuItem icon={Briefcase} label="إضافة عمل إداري" color="#d97706" onClick={() => handleMenuAction('task')} />
                     <div style={{ height: 1, background: "rgba(55, 65, 81, 0.5)", margin: "4px 8px" }} />
                     <MenuItem icon={Trash2} label="حذف الجلسة" color="#ef4444" danger onClick={() => handleMenuAction('delete')} />
@@ -336,63 +396,197 @@ export default function SessionCard({
         </div>
       </div>
 
-      {/* Expanded Details */}
+      {/* ═══ EXPANDED DETAILS ═══ */}
       {expanded && (
         <div style={{
-          padding: "0 clamp(12px, 4vw, 20px) clamp(12px, 4vw, 20px)",
+          padding: "0 clamp(14px, 4vw, 20px) clamp(14px, 4vw, 20px)",
           borderTop: "1px solid rgba(55, 65, 81, 0.2)",
           animation: "expandIn 0.2s ease-out",
         }}>
-          <div style={{ paddingTop: 16 }}>
-            {/* Linked Judgment Summary */}
-            {linkedJudgment && (
+          <div style={{ paddingTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+
+            {/* ── Decision Details (NEW) ── */}
+            {hasDecision && (
               <DetailBox
-                icon={Gavel}
-                title="الحكم المرتبط"
-                color="#60a5fa"
-                bg="rgba(30, 64, 175, 0.08)"
-                border="rgba(30, 64, 175, 0.2)"
+                icon={DecisionIcon}
+                title={`القرار: ${decisionMeta.label}`}
+                color={decisionMeta.color}
+                bg={`${decisionMeta.color}08`}
+                border={`${decisionMeta.color}20`}
               >
-                <p style={{ 
-                  fontSize: "clamp(12px, 3.5vw, 14px)", 
-                  color: "#9ca3af", 
-                  margin: 0, 
-                  lineHeight: 1.6 
-                }}>
-                  {linkedJudgment.title || linkedJudgment.type || 'حكم مرتبط'}
-                </p>
-                {linkedJudgment.result && (
+                {session.decisionDetails ? (
+                  <p style={{
+                    fontSize: "clamp(12px, 3.5vw, 14px)",
+                    color: "#d1d5db",
+                    margin: 0,
+                    lineHeight: 1.7,
+                    padding: "clamp(10px, 3vw, 14px)",
+                    background: "rgba(15, 23, 42, 0.4)",
+                    borderRadius: 12,
+                  }}>
+                    {session.decisionDetails}
+                  </p>
+                ) : (
+                  <p style={{ fontSize: "13px", color: "#6b7280", margin: 0, fontStyle: "italic" }}>
+                    لا توجد تفاصيل إضافية للقرار
+                  </p>
+                )}
+
+                {/* Decision Date */}
+                {session.decisionDate && (
                   <div style={{
                     marginTop: 10,
-                    display: "inline-flex",
+                    display: "flex",
                     alignItems: "center",
                     gap: 6,
-                    padding: "5px 12px",
-                    background: linkedJudgment.result === 'win' ? 'rgba(16, 185, 129, 0.12)' :
-                      linkedJudgment.result === 'lose' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                    color: linkedJudgment.result === 'win' ? '#10b981' :
-                      linkedJudgment.result === 'lose' ? '#ef4444' : '#f59e0b',
-                    borderRadius: 20,
-                    fontSize: "clamp(11px, 3vw, 12px)",
-                    fontWeight: 700,
-                    border: `1px solid ${linkedJudgment.result === 'win' ? 'rgba(16, 185, 129, 0.3)' :
-                      linkedJudgment.result === 'lose' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                    fontSize: "12px",
+                    color: "#9ca3af",
                   }}>
-                    {linkedJudgment.result === 'win' ? 'لصالحنا' :
-                      linkedJudgment.result === 'lose' ? 'ضدنا' : 'متعادل'}
+                    <Calendar size={12} />
+                    تاريخ صدور القرار: {formatDate(session.decisionDate)}
                   </div>
                 )}
               </DetailBox>
             )}
 
-            {/* Linked Tasks Summary */}
+            {/* ── Judgment Details (NEW, conditional) ── */}
+            {hasJudgment && (
+              <DetailBox
+                icon={Gavel}
+                title="بيانات الحكم"
+                color="#10b981"
+                bg="rgba(16, 185, 129, 0.06)"
+                border="rgba(16, 185, 129, 0.2)"
+              >
+                {/* Judgment Type */}
+                {judgmentMeta && (
+                  <div style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "5px 14px",
+                    background: judgmentMeta.bg,
+                    color: judgmentMeta.color,
+                    borderRadius: 20,
+                    fontSize: "clamp(12px, 3.5vw, 13px)",
+                    fontWeight: 700,
+                    border: `1px solid ${judgmentMeta.border}`,
+                    marginBottom: 12,
+                  }}>
+                    <Gavel size={13} />
+                    {judgmentMeta.label}
+                  </div>
+                )}
+
+                {/* Judgment Summary */}
+                {session.judgmentSummary && (
+                  <p style={{
+                    fontSize: "clamp(12px, 3.5vw, 14px)",
+                    color: "#d1d5db",
+                    margin: 0,
+                    lineHeight: 1.7,
+                    padding: "clamp(10px, 3vw, 14px)",
+                    background: "rgba(15, 23, 42, 0.4)",
+                    borderRadius: 12,
+                  }}>
+                    {session.judgmentSummary}
+                  </p>
+                )}
+
+                {/* Appeal Info */}
+                <div style={{
+                  marginTop: 10,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 10,
+                  alignItems: "center",
+                }}>
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    padding: "4px 10px",
+                    background: session.judgmentAppealable !== false
+                      ? 'rgba(16, 185, 129, 0.1)'
+                      : 'rgba(107, 114, 128, 0.1)',
+                    color: session.judgmentAppealable !== false ? '#10b981' : '#6b7280',
+                    borderRadius: 8,
+                    fontSize: "12px",
+                    fontWeight: 600,
+                  }}>
+                    {session.judgmentAppealable !== false ? (
+                      <>
+                        <CheckCircle2 size={12} />
+                        قابل للاستئناف
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle size={12} />
+                        غير قابل للاستئناف
+                      </>
+                    )}
+                  </div>
+
+                  {session.judgmentAppealable !== false && session.appealDeadline && (
+                    <div style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 5,
+                      padding: "4px 10px",
+                      background: 'rgba(245, 158, 11, 0.1)',
+                      color: '#f59e0b',
+                      borderRadius: 8,
+                      fontSize: "12px",
+                      fontWeight: 600,
+                    }}>
+                      <Clock size={12} />
+                      آخر موعد: {formatDate(session.appealDeadline)}
+                    </div>
+                  )}
+                </div>
+              </DetailBox>
+            )}
+
+            {/* ── Suggested Task (NEW) ── */}
+            {session.suggestedTask && (
+              <DetailBox
+                icon={Sparkles}
+                title="المهمة المقترحة"
+                color="#60a5fa"
+                bg="rgba(30, 64, 175, 0.06)"
+                border="rgba(30, 64, 175, 0.15)"
+              >
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "clamp(10px, 3vw, 14px)",
+                  background: "rgba(15, 23, 42, 0.4)",
+                  borderRadius: 12,
+                }}>
+                  <div style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: "#60a5fa",
+                    boxShadow: "0 0 8px rgba(96, 165, 250, 0.4)",
+                    flexShrink: 0,
+                  }} />
+                  <span style={{ fontSize: "clamp(12px, 3.5vw, 14px)", color: "#d1d5db", fontWeight: 500 }}>
+                    {session.suggestedTask}
+                  </span>
+                </div>
+              </DetailBox>
+            )}
+
+            {/* ── Linked Tasks ── */}
             {linkedTasks.length > 0 && (
               <DetailBox
                 icon={Briefcase}
                 title={`الأعمال الإدارية المرتبطة (${linkedTasks.length})`}
                 color="#d97706"
-                bg="rgba(217, 119, 6, 0.08)"
-                border="rgba(217, 119, 6, 0.2)"
+                bg="rgba(217, 119, 6, 0.06)"
+                border="rgba(217, 119, 6, 0.15)"
               >
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {linkedTasks.map((task, idx) => (
@@ -423,25 +617,7 @@ export default function SessionCard({
               </DetailBox>
             )}
 
-            {/* Decision */}
-            {session.decision && (
-              <DetailSection icon={CheckCircle2} iconColor="#10b981" title="القرار / الإجراء">
-                <p style={{
-                  fontSize: "clamp(12px, 3.5vw, 14px)",
-                  color: "#9ca3af",
-                  lineHeight: 1.7,
-                  margin: 0,
-                  padding: "clamp(10px, 3vw, 14px)",
-                  background: "rgba(15, 23, 42, 0.5)",
-                  borderRadius: 12,
-                  border: "1px solid rgba(16, 185, 129, 0.1)",
-                }}>
-                  {session.decision}
-                </p>
-              </DetailSection>
-            )}
-
-            {/* Description */}
+            {/* ── Description ── */}
             {session.description && (
               <DetailSection icon={FileText} iconColor="#8b5cf6" title="تفاصيل الجلسة">
                 <p style={{
@@ -459,7 +635,7 @@ export default function SessionCard({
               </DetailSection>
             )}
 
-            {/* Notes */}
+            {/* ── Notes ── */}
             {session.notes && (
               <DetailSection icon={FileText} iconColor="#60a5fa" title="ملاحظات">
                 <p style={{
@@ -477,7 +653,7 @@ export default function SessionCard({
               </DetailSection>
             )}
 
-            {/* Attachments */}
+            {/* ── Attachments ── */}
             {session.attachments?.length > 0 && (
               <DetailSection icon={Link2} iconColor="#4ade80" title="المرفقات">
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -526,7 +702,9 @@ export default function SessionCard({
   );
 }
 
-// ========== Sub Components ==========
+// ═══════════════════════════════════════════════════════════════════
+// SUB COMPONENTS
+// ═══════════════════════════════════════════════════════════════════
 
 function MetaItem({ icon: Icon, iconColor, label, highlight = false }) {
   return (
@@ -594,7 +772,6 @@ function MenuItem({ icon: Icon, label, color, danger, onClick }) {
 function DetailBox({ icon: Icon, title, color, bg, border, children }) {
   return (
     <div style={{
-      marginBottom: 16,
       padding: "clamp(12px, 3.5vw, 16px)",
       background: bg,
       border: `1px solid ${border}`,
@@ -619,7 +796,7 @@ function DetailBox({ icon: Icon, title, color, bg, border, children }) {
 
 function DetailSection({ icon: Icon, iconColor, title, children }) {
   return (
-    <div style={{ marginBottom: 16 }}>
+    <div>
       <h5 style={{
         display: "flex",
         alignItems: "center",
