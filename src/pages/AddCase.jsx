@@ -8,6 +8,8 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { CASE_STATUS } from "../constants/caseStatus";
+import { CASE_TYPE_LIST } from "../constants/caseStatus";
+import { createInitialLitigationLevel } from "../services/litigationLevels";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebaseDb";
 
@@ -29,8 +31,8 @@ export default function AddCase() {
     stage: "",
     secretary: "",
     status: CASE_STATUS.ACTIVE,
-    caseSubject: "", 
-    clients: [], // ستصبح مصفوفة من الكائنات تحتوي على المعرف والصفة القانونية
+    caseSubject: "",
+    clients: [],
     opponents: [],
     sessions: [],
   });
@@ -99,7 +101,6 @@ export default function AddCase() {
     setForm((p) => {
       const exists = p.clients.some((c) => c.id === id);
       if (exists) return p;
-      // ندرج الموكل مع صفة افتراضية "مدعي" قابلة للتعديل
       return {
         ...p,
         clients: [...p.clients, { id, clientRole: "مدعي" }],
@@ -156,8 +157,8 @@ export default function AddCase() {
         {
           id: Date.now(),
           nextSessionDate: "",
-          decision: "",        
-          notes: "",           
+          decision: "",
+          notes: "",
         },
       ],
     }));
@@ -188,15 +189,31 @@ export default function AddCase() {
 
     setLoading(true);
     try {
-      await addDoc(collection(db, "cases"), {
+      // 1. Create the case document
+      const caseDocRef = await addDoc(collection(db, "cases"), {
         ...form,
         officeId: userData.officeId,
         createdBy: userData.uid,
+        currentLevel: "first_instance",
+        currentStatus: "new",
+        activeLevelId: null, // will be updated after creating the level
+        totalSessions: 0,
+        totalExpenses: 0,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
-      alert("✔ تم حفظ القضية بنجاح بنظام المكتب وتوزيعها بالأجندة");
+      // 2. Create the initial litigation level automatically
+      await createInitialLitigationLevel(caseDocRef.id, {
+        levelType: "first_instance",
+        court: form.court,
+        circuit: form.department,
+        caseNumber: form.caseSerial,
+        caseYear: parseInt(form.caseYear) || new Date().getFullYear(),
+        status: "new",
+      });
+
+      alert("✔ تم حفظ القضية بنجاح وإنشاء درجة التقاضي الأولى");
 
       setForm({
         caseSerial: "",
@@ -208,7 +225,7 @@ export default function AddCase() {
         stage: "",
         secretary: "",
         status: CASE_STATUS.ACTIVE,
-        caseSubject: "", 
+        caseSubject: "",
         clients: [],
         opponents: [],
         sessions: [],
@@ -252,9 +269,21 @@ export default function AddCase() {
             <input style={styles.input} name="caseSerial" placeholder="رقم القضية *" onChange={handleChange} value={form.caseSerial} />
             <input style={styles.input} name="caseYear" placeholder="السنة *" onChange={handleChange} value={form.caseYear} />
           </div>
-          
+
           <div style={styles.formGroup}>
-            <input style={styles.input} name="caseType" placeholder="نوع الدعوى" onChange={handleChange} value={form.caseType} />
+            <select
+              style={styles.input}
+              name="caseType"
+              onChange={handleChange}
+              value={form.caseType}
+            >
+              <option value="">اختر نوع الدعوى...</option>
+              {CASE_TYPE_LIST.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.icon} {type.label}
+                </option>
+              ))}
+            </select>
             <input style={styles.input} name="court" placeholder="المحكمة *" onChange={handleChange} value={form.court} />
           </div>
 
@@ -293,9 +322,9 @@ export default function AddCase() {
                 return (
                   <div key={c.id} style={styles.searchRow}>
                     <span>{c.fullName} ({c.nationalId})</span>
-                    <button 
-                      style={isAdded ? styles.disabledBtn : styles.addBtn} 
-                      disabled={isAdded} 
+                    <button
+                      style={isAdded ? styles.disabledBtn : styles.addBtn}
+                      disabled={isAdded}
                       onClick={() => addClient(c.id)}
                     >
                       {isAdded ? "✔ مضاف" : "إضافة للدعوى"}
@@ -306,19 +335,19 @@ export default function AddCase() {
             </div>
           )}
 
-          <h4 style={{marginTop: 15}}>الموكلون المختارون في الدعوى الحالية:</h4>
-          {form.clients.length === 0 ? <p style={{color: '#666', fontSize: 14}}>لم يتم اختيار موكلين بعد.</p> : (
+          <h4 style={{ marginTop: 15 }}>الموكلون المختارون في الدعوى الحالية:</h4>
+          {form.clients.length === 0 ? <p style={{ color: '#666', fontSize: 14 }}>لم يتم اختيار موكلين بعد.</p> : (
             form.clients.map((selectedClient) => {
               const c = clients.find((x) => x.id === selectedClient.id);
               return (
                 <div key={selectedClient.id} style={styles.selectedPartyCard}>
-                  <div style={{display:'flex', gap: 15, alignItems:'center', flex: 1, flexWrap:'wrap'}}>
-                    <span style={{fontWeight:'600'}}>⚖️ {c?.fullName}</span>
-                    <label style={{fontSize: 13, display:'flex', alignItems:'center', gap: 5}}>
+                  <div style={{ display: 'flex', gap: 15, alignItems: 'center', flex: 1, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: '600' }}>⚖️ {c?.fullName}</span>
+                    <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 5 }}>
                       الصفة القانونية:
-                      <select 
-                        style={styles.selectSmall} 
-                        value={selectedClient.clientRole} 
+                      <select
+                        style={styles.selectSmall}
+                        value={selectedClient.clientRole}
                         onChange={(e) => updateClientRole(selectedClient.id, e.target.value)}
                       >
                         <option value="مدعي">مدعي</option>
@@ -347,7 +376,7 @@ export default function AddCase() {
 
           {form.opponents.map((o, idx) => (
             <div key={o.id} style={styles.opponentCard}>
-              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <strong>الخصم #{idx + 1}</strong>
                 <button style={styles.dangerLink} onClick={() => removeOpponent(o.id)}>حذف الخصم</button>
               </div>
@@ -358,9 +387,9 @@ export default function AddCase() {
                   value={o.name}
                   onChange={(e) => updateOpponent(o.id, "name", e.target.value)}
                 />
-                <select 
-                  style={styles.input} 
-                  value={o.caseRole} 
+                <select
+                  style={styles.input}
+                  value={o.caseRole}
                   onChange={(e) => updateOpponent(o.id, "caseRole", e.target.value)}
                 >
                   <option value="مدعى عليه">مدعى عليه</option>
@@ -373,7 +402,7 @@ export default function AddCase() {
                   <option value="مجني عليه">مجني عليه</option>
                 </select>
               </div>
-              <div style={{width: '100%'}}>
+              <div style={{ width: '100%' }}>
                 <input
                   style={styles.inputFull}
                   placeholder="محل إقامته / موطنه المختار لإرسال الإعلانات والتكليفات *"
@@ -389,20 +418,20 @@ export default function AddCase() {
       {/* SESSIONS TAB */}
       {tab === "sessions" && (
         <div style={styles.section}>
-          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={styles.subTitle}>📅 جدولة جلسات القضية</h3>
             <button style={styles.secondaryBtn} onClick={addSession}>➕ إضافة جلسة جديدة</button>
           </div>
 
           <div style={styles.sessionsBox}>
-            {form.sessions.length === 0 ? <p style={{textAlign:'center', color:'#999', padding:20}}>لا توجد جلسات مضافة بعد لهذه القضية.</p> : (
+            {form.sessions.length === 0 ? <p style={{ textAlign: 'center', color: '#999', padding: 20 }}>لا توجد جلسات مضافة بعد لهذه القضية.</p> : (
               form.sessions.map((s, idx) => (
                 <div key={s.id} style={styles.card}>
-                  <div style={{display:'flex', justifyContent:'space-between'}}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <strong>جلسة مرتقبة #{idx + 1}</strong>
                     <button style={styles.dangerLink} onClick={() => removeSession(s.id)}>حذف الجلسة</button>
                   </div>
-                  
+
                   <div style={styles.formGroup}>
                     <label style={styles.label}>تاريخ الجلسة المقبلة:
                       <input style={styles.inputDate} type="date" value={s.nextSessionDate} onChange={(e) => updateSession(s.id, "nextSessionDate", e.target.value)} />
@@ -422,12 +451,12 @@ export default function AddCase() {
       {tab === "subject" && (
         <div style={styles.section}>
           <h3 style={styles.subTitle}>📝 موضوع الدعوى (ملخص وقائع العريضة والطلبات)</h3>
-          <textarea 
-            style={styles.textareaMain} 
-            name="caseSubject" 
-            placeholder="اكتب هنا تفاصيل ووقائع الدعوى أو ملخص لما تم في صحيفة الدعوى لتسهيل مراجعته من أي مستخدم للمكتب..." 
-            value={form.caseSubject} 
-            onChange={handleChange} 
+          <textarea
+            style={styles.textareaMain}
+            name="caseSubject"
+            placeholder="اكتب هنا تفاصيل ووقائع الدعوى أو ملخص لما تم في صحيفة الدعوى لتسهيل مراجعته من أي مستخدم للمكتب..."
+            value={form.caseSubject}
+            onChange={handleChange}
           />
         </div>
       )}

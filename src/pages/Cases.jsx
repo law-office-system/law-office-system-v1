@@ -1,17 +1,19 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { collection, getDocs, query, where, limit, startAfter, orderBy } from "firebase/firestore";
+import {
+  collection, getDocs, query, where, limit, startAfter, orderBy,
+  deleteDoc, doc, documentId
+} from "firebase/firestore";
+import { Trash2 } from "lucide-react";
 import Card from "../components/ui/Card";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebaseDb";
 import { parseDate } from "../utils/date";
 import { syncNotifications } from "../utils/syncNotifications";
 
-// ✅ Constants
 const PAGE_SIZE = 20;
 const DEBOUNCE_MS = 300;
 
-// ✅ Skeleton Loading Component
 function CaseCardSkeleton() {
   return (
     <div style={{ 
@@ -55,7 +57,7 @@ function TableSkeleton() {
   return (
     <div style={{ background: "#fff", padding: "16px", borderRadius: "12px" }}>
       <div style={{ display: "flex", marginBottom: "12px" }}>
-        {[...Array(7)].map((_, i) => (
+        {[...Array(8)].map((_, i) => (
           <div key={i} style={{ 
             flex: 1, 
             height: "24px", 
@@ -68,7 +70,7 @@ function TableSkeleton() {
       </div>
       {[...Array(5)].map((_, row) => (
         <div key={row} style={{ display: "flex", marginBottom: "8px" }}>
-          {[...Array(7)].map((_, i) => (
+          {[...Array(8)].map((_, i) => (
             <div key={i} style={{ 
               flex: 1, 
               height: "40px", 
@@ -85,7 +87,6 @@ function TableSkeleton() {
   );
 }
 
-// ✅ Load More Button
 function LoadMoreButton({ loading, hasMore, onClick }) {
   if (!hasMore) return null;
   return (
@@ -130,10 +131,11 @@ export default function Cases() {
   const lastDocRef = useRef(null);
   const searchTimeoutRef = useRef(null);
 
+  const isAdmin = userData?.role === "admin" || userData?.role === "superadmin";
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  /* ================= RESPONSIVE DETECTION ================= */
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth <= 768);
     check();
@@ -141,7 +143,6 @@ export default function Cases() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  /* ================= DEBOUNCED SEARCH ================= */
   useEffect(() => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
@@ -157,7 +158,6 @@ export default function Cases() {
     };
   }, [search]);
 
-  /* ================= LOAD CASES WITH PAGINATION ================= */
   const loadCases = useCallback(async (isInitial = true) => {
     if (!userData?.officeId) return;
 
@@ -199,7 +199,6 @@ export default function Cases() {
       lastDocRef.current = snap.docs[snap.docs.length - 1] || null;
       setHasMore(snap.docs.length === PAGE_SIZE);
 
-      // ✅ Sync notifications (مرة واحدة فقط)
       if (isInitial && !hasSynced.current) {
         hasSynced.current = true;
         await syncNotifications(data, userData.officeId);
@@ -213,25 +212,21 @@ export default function Cases() {
     }
   }, [userData?.officeId]);
 
-  // ✅ التحميل الأولي
   useEffect(() => {
     loadCases(true);
   }, [loadCases]);
 
-  // ✅ تحميل المزيد
   const loadMore = useCallback(() => {
     if (!loadingMore && hasMore) {
       loadCases(false);
     }
   }, [loadingMore, hasMore, loadCases]);
 
-  /* ================= LOAD CLIENTS (OPTIMIZED) ================= */
   useEffect(() => {
     if (!userData?.officeId || cases.length === 0) return;
 
     const loadClients = async () => {
       try {
-        // ✅ جلب IDs فريدة فقط
         const allClientIds = new Set();
         cases.forEach((c) => {
           if (Array.isArray(c.clients)) {
@@ -247,7 +242,6 @@ export default function Cases() {
 
         const newCache = { ...clientsMap };
 
-        // ✅ Batch fetch (30 IDs at a time)
         for (let i = 0; i < idsArray.length; i += 30) {
           const chunk = idsArray.slice(i, i + 30);
           const q = query(
@@ -269,14 +263,12 @@ export default function Cases() {
     loadClients();
   }, [cases, userData?.officeId]);
 
-  /* ================= دالة مستقرة تقرأ المعرف النصي أو كائن الموكل المطور ================= */
   const getClientName = useCallback((clientItem) => {
     if (!clientItem) return "موكل غير معروف";
     const id = typeof clientItem === "object" ? clientItem.id : clientItem;
     return clientsMap[id]?.fullName || clientsMap[id]?.name || "موكل غير معروف";
   }, [clientsMap]);
 
-  /* ================= دالة استخراج وتنسيق أقرب جلسة مستقبلية فقط ================= */
   const getUpcomingSessionString = useCallback((sessions) => {
     if (!Array.isArray(sessions) || sessions.length === 0) return "";
 
@@ -295,7 +287,25 @@ export default function Cases() {
     return `${yyyy}-${mm}-${dd}`;
   }, []);
 
-  /* ================= FILTER & SEARCH (MEMOIZED) ================= */
+  /* ================= DELETE HANDLER ================= */
+  const handleDeleteCase = async (e, caseId, caseSerial) => {
+    e.stopPropagation(); // منع فتح صفحة التفاصيل
+    e.preventDefault();
+    
+    if (!window.confirm(`هل أنت متأكد من حذف القضية رقم ${caseSerial || caseId}؟\n\n⚠️ هذا الإجراء لا يمكن التراجع عنه!`)) {
+      return;
+    }
+    
+    try {
+      await deleteDoc(doc(db, "cases", caseId));
+      setCases(prev => prev.filter(c => c.id !== caseId));
+      alert("✅ تم حذف القضية بنجاح");
+    } catch (err) {
+      console.error("Error deleting case:", err);
+      alert("❌ حدث خطأ أثناء حذف القضية");
+    }
+  };
+
   const filtered = useMemo(() => {
     return cases.filter((c) => {
       const text = debouncedSearch;
@@ -340,7 +350,6 @@ export default function Cases() {
     [...new Set(cases.map((c) => c.caseType).filter(Boolean))],
   [cases]);
 
-  // ✅ Loading state
   if (loading && cases.length === 0) {
     return (
       <div style={{ ...styles.page, direction: "rtl" }}>
@@ -361,7 +370,6 @@ export default function Cases() {
     );
   }
 
-  // ✅ Error state
   if (error && cases.length === 0) {
     return (
       <div style={{ ...styles.page, direction: "rtl", textAlign: "center", padding: "40px" }}>
@@ -386,7 +394,6 @@ export default function Cases() {
 
   return (
     <div style={{ ...styles.page, direction: "rtl" }}>
-      {/* HEADER & CONTROLS */}
       <div style={styles.card}>
         <h1 style={{ margin: "0 0 10px 0", fontSize: "22px", color: "#1e3a8a" }}>
           📊 أرشيف وجدول كافة القضايا
@@ -422,6 +429,7 @@ export default function Cases() {
           </select>
         </div>
       </div>
+
       {/* ================= MOBILE VIEW ================= */}
       {isMobile ? (
         <div style={styles.grid}>
@@ -433,10 +441,23 @@ export default function Cases() {
                 const sessionStr = getUpcomingSessionString(c.sessions);
                 return (
                   <Card key={c.id}>
-                    <div style={{ marginBottom: "8px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
                       <Link to={`/case/${c.id}`} style={styles.link}>
                         ⚖️ ق رقم: {c.caseSerial || c.caseNumber || "بدون رقم"} / {c.caseYear || "-"}
                       </Link>
+                      {isAdmin && (
+                        <button
+                          onClick={(e) => handleDeleteCase(e, c.id, c.caseSerial || c.caseNumber)}
+                          style={{
+                            background: "none", border: "none", cursor: "pointer",
+                            padding: 4, borderRadius: 6, color: "#dc2626",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                          }}
+                          title="حذف القضية"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                     </div>
 
                     <p style={styles.mobileText}>📌 <strong>النوع:</strong> {c.caseType || "-"}</p>
@@ -471,7 +492,7 @@ export default function Cases() {
         </div>
       ) : (
         /* ================= DESKTOP VIEW ================= */
-        (<div style={styles.cardTable}>
+        <div style={styles.cardTable}>
           {filtered.length === 0 ? (
             <p style={styles.noData}>لا توجد دعاوى مطابقة لخيارات البحث الفعلي.</p>
           ) : (
@@ -486,6 +507,7 @@ export default function Cases() {
                     <th style={styles.th}>الموكلين والصفة</th>
                     <th style={styles.th}>الخصوم المقابلين</th>
                     <th style={styles.th}>ميعاد أقرب جلسة</th>
+                    {isAdmin && <th style={{ ...styles.th, width: 50 }}>حذف</th>}
                   </tr>
                 </thead>
 
@@ -535,6 +557,22 @@ export default function Cases() {
                             <span style={{ color: "#94a3b8", fontWeight: "normal" }}>-</span>
                           )}
                         </td>
+
+                        {isAdmin && (
+                          <td style={styles.td} onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={(e) => handleDeleteCase(e, c.id, c.caseSerial || c.caseNumber)}
+                              style={{
+                                background: "none", border: "none", cursor: "pointer",
+                                padding: 6, borderRadius: 6, color: "#dc2626",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                              }}
+                              title="حذف القضية"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -547,13 +585,12 @@ export default function Cases() {
               />
             </>
           )}
-        </div>)
+        </div>
       )}
     </div>
   );
 }
 
-/* ================= MODERNIZED COMPREHENSIVE STYLES ================= */
 const styles = {
   page: { padding: "16px", background: "#f5f7fb", minHeight: "100vh", fontFamily: "Segoe UI, Tahoma" },
   card: { background: "#fff", padding: "16px", borderRadius: "12px", marginBottom: "12px", borderRight: "5px solid #1e3a8a", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" },

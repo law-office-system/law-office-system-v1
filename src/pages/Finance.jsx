@@ -24,6 +24,20 @@ export default function Finance() {
   const [filterScope, setFilterScope] = useState("all");
   const [search, setSearch] = useState("");
 
+  // ======== NEW: Date Filtering State ========
+  const [dateFilterMode, setDateFilterMode] = useState("month"); // "all" | "day" | "week" | "month" | "year"
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const now = new Date();
+    return now.toISOString().split("T")[0]; // YYYY-MM-DD format
+  });
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`; // YYYY-MM
+  });
+  const [selectedYear, setSelectedYear] = useState(() => {
+    return new Date().getFullYear().toString();
+  });
+
   const [form, setForm] = useState({
     type: "income",
     amount: "",
@@ -34,7 +48,7 @@ export default function Finance() {
 
   const canAddTransaction = userData?.role === "admin" || userData?.role === "staff";
 
-  // ================= LOAD CLIENT PROFILES MAP (🛡️ TO RESOLVE CLIENT NAMES IN DROPDOWN) =================
+  // ================= LOAD CLIENT PROFILES MAP =================
   useEffect(() => {
     if (!userData?.officeId) return;
 
@@ -69,10 +83,8 @@ export default function Finance() {
 
       snapshot.docs.forEach((doc) => {
         const data = doc.data();
-
-        // 🛡️ دعم قراءة الموكلين سواء بالطريقة القديمة (نص) أو البنية الجديدة (كائن/معرف)
         let resolvedClientName = data.clientName || data.client || "";
-        
+
         if (!resolvedClientName && Array.isArray(data.clients) && data.clients.length > 0) {
           const firstClient = data.clients[0];
           const clientId = typeof firstClient === "object" ? firstClient.id : firstClient;
@@ -95,31 +107,31 @@ export default function Finance() {
     return () => unsub();
   }, [userData, clientsMap]);
 
-  // ================= LOAD TRANSACTIONS (MULTI-TENANT CONTROL WITH METADATA FIXED) =================
+  // ================= LOAD TRANSACTIONS (MULTI-TENANT CONTROL) =================
   useEffect(() => {
     if (!userData?.officeId) return;
 
+    // 🔥 Fallback: بدون orderBy لتجنب مشاكل الـ index المفقود
+    // المعاملات هتتفرز محلياً بعدين
     const q = query(
       collection(db, "transactions"),
-      where("officeId", "==", userData.officeId),
-      orderBy("createdAt", "desc")
+      where("officeId", "==", userData.officeId)
     );
 
-    // 🔥 تضمين خيار الاستماع للمتغيرات المحلية الفورية لضمان تحديث الدفتر في نفس اللحظة
     const unsub = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
       const data = snapshot.docs.map((doc) => {
         const docData = doc.data();
         return {
           id: doc.id,
           ...docData,
-          // حماية للتحديث الفوري: إذا كان وقت السيرفر لم يرجع بعد، نضع وقت الجهاز مؤقتاً لئلا يختفي القيد
+          // حماية: إذا كان وقت السيرفر لم يرجع بعد، نضع وقت الجهاز مؤقتاً
           createdAt: docData.createdAt || new Date(),
         };
       });
 
       setTransactions(data);
     }, (err) => {
-      console.error("Firestore ordering error or empty collection:", err);
+      console.error("Firestore transactions error:", err);
     });
 
     return () => unsub();
@@ -150,7 +162,7 @@ export default function Finance() {
         caseId: form.scope === "case" ? form.caseId : null,
         caseNumber: form.scope === "case" ? (casesMap[form.caseId]?.caseNumber || "") : "",
 
-        officeId: userData.officeId, // حماية الخزينة المنفصلة للمكتب الحالي
+        officeId: userData.officeId,
 
         createdAt: serverTimestamp(),
         createdBy: userData?.uid || "unknown",
@@ -172,6 +184,39 @@ export default function Finance() {
     }
   };
 
+  // ================= HELPER: Extract Date from Timestamp =================
+  const getTransactionDate = (t) => {
+    if (!t.createdAt) return new Date(0);
+    if (t.createdAt.seconds) {
+      return new Date(t.createdAt.seconds * 1000);
+    }
+    if (t.createdAt instanceof Date) {
+      return t.createdAt;
+    }
+    return new Date(t.createdAt);
+  };
+
+  // ================= HELPER: Format Date for Display =================
+  const formatDate = (dateObj) => {
+    if (!dateObj || isNaN(dateObj.getTime())) return "—";
+    const d = dateObj;
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, "0");
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    return `${day}/${month}/${year} — ${hours}:${minutes}`;
+  };
+
+  const formatDateShort = (dateObj) => {
+    if (!dateObj || isNaN(dateObj.getTime())) return "—";
+    const d = dateObj;
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
   // ================= NORMALIZATION =================
   const normalizeScope = (value) => {
     const s = (value || "").toString().toLowerCase().trim();
@@ -181,31 +226,72 @@ export default function Finance() {
     return s;
   };
 
-  // ================= FILTER & SAFE SORT TRANSACTIONS (OPTIMIZED WITH useMemo) =================
+  // ================= DATE FILTER LOGIC =================
+  const isDateInFilter = (transactionDate) => {
+    if (dateFilterMode === "all") return true;
+
+    const tYear = transactionDate.getFullYear();
+    const tMonth = transactionDate.getMonth();
+    const tDay = transactionDate.getDate();
+
+    switch (dateFilterMode) {
+      case "day": {
+        const [y, m, d] = selectedDate.split("-").map(Number);
+        return tYear === y && tMonth === m - 1 && tDay === d;
+      }
+      case "week": {
+        const [y, m, d] = selectedDate.split("-").map(Number);
+        const selected = new Date(y, m - 1, d);
+        const dayOfWeek = selected.getDay();
+        const startOfWeek = new Date(selected);
+        startOfWeek.setDate(selected.getDate() - dayOfWeek);
+        startOfWeek.setHours(0, 0, 0, 0);
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6);
+        endOfWeek.setHours(23, 59, 59, 999);
+        return transactionDate >= startOfWeek && transactionDate <= endOfWeek;
+      }
+      case "month": {
+        const [y, m] = selectedMonth.split("-").map(Number);
+        return tYear === y && tMonth === m - 1;
+      }
+      case "year": {
+        return tYear === Number(selectedYear);
+      }
+      default:
+        return true;
+    }
+  };
+
+  // ================= FILTER & SORT TRANSACTIONS =================
   const filteredTransactions = useMemo(() => {
     const result = transactions.filter((t) => {
       const matchType = filterType === "all" || t.type === filterType;
       const matchScope = filterScope === "all" || normalizeScope(t.scope) === filterScope;
 
+      const tDate = getTransactionDate(t);
+      const matchDate = isDateInFilter(tDate);
+
       const text = search.toLowerCase().trim();
       const matchSearch =
+        text === "" ||
         (t.description || "").toLowerCase().includes(text) ||
         String(t.amount).includes(text) ||
         (t.caseNumber && String(t.caseNumber).includes(text));
 
-      return matchType && matchScope && matchSearch;
+      return matchType && matchScope && matchDate && matchSearch;
     });
 
-    // فرز محلي إضافي صارم لضمان هبوط القيد الجديد في أول الدفتر فورا دون انتظار السيرفر
+    // فرز تنازلي حسب التاريخ
     return result.sort((a, b) => {
-      const aTime = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (a.createdAt instanceof Date ? a.createdAt.getTime() : 0);
-      const bTime = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (b.createdAt instanceof Date ? b.createdAt.getTime() : 0);
-      return bTime - aTime;
+      const aDate = getTransactionDate(a);
+      const bDate = getTransactionDate(b);
+      return bDate.getTime() - aDate.getTime();
     });
-  }, [transactions, filterType, filterScope, search]);
+  }, [transactions, filterType, filterScope, search, dateFilterMode, selectedDate, selectedMonth, selectedYear]);
 
-  // ================= CALCULATIONS (useMemo for optimal rendering) =================
-  const { totalIncome, totalExpenses, profit } = useMemo(() => {
+  // ================= CALCULATIONS =================
+  const { totalIncome, totalExpenses, profit, transactionCount } = useMemo(() => {
     let inc = 0;
     let exp = 0;
     filteredTransactions.forEach((t) => {
@@ -216,11 +302,32 @@ export default function Finance() {
     return {
       totalIncome: inc,
       totalExpenses: exp,
-      profit: inc - exp
+      profit: inc - exp,
+      transactionCount: filteredTransactions.length,
     };
   }, [filteredTransactions]);
 
-  // ================= LOADING & SECURITY CHECKS =================
+  // ================= NAVIGATE MONTHS =================
+  const goToPrevMonth = () => {
+    const [y, m] = selectedMonth.split("-").map(Number);
+    const date = new Date(y, m - 1, 1);
+    date.setMonth(date.getMonth() - 1);
+    setSelectedMonth(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`);
+  };
+
+  const goToNextMonth = () => {
+    const [y, m] = selectedMonth.split("-").map(Number);
+    const date = new Date(y, m - 1, 1);
+    date.setMonth(date.getMonth() + 1);
+    setSelectedMonth(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`);
+  };
+
+  const goToCurrentMonth = () => {
+    const now = new Date();
+    setSelectedMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
+  };
+
+  // ================= LOADING & SECURITY =================
   if (!userData) return <div style={styles.centerText}><p>جاري التحقق من الهوية...</p></div>;
 
   if (userData.role === "client") {
@@ -231,9 +338,59 @@ export default function Finance() {
     );
   }
 
+  // ================= RENDER DATE FILTER CONTROLS =================
+  const renderDateFilterControls = () => {
+    switch (dateFilterMode) {
+      case "day":
+        return (
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            style={styles.dateInput}
+          />
+        );
+      case "week":
+        return (
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            style={styles.dateInput}
+          />
+        );
+      case "month":
+        return (
+          <div style={styles.monthNavigator}>
+            <button onClick={goToPrevMonth} style={styles.navArrow}>◀</button>
+            <span style={styles.monthLabel}>
+              {selectedMonth.split("-")[1]} / {selectedMonth.split("-")[0]}
+            </span>
+            <button onClick={goToNextMonth} style={styles.navArrow}>▶</button>
+            <button onClick={goToCurrentMonth} style={styles.todayBtn}>اليوم</button>
+          </div>
+        );
+      case "year":
+        return (
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(e.target.value)}
+            style={styles.yearSelect}
+          >
+            {Array.from({ length: 10 }, (_, i) => {
+              const year = new Date().getFullYear() - 5 + i;
+              return <option key={year} value={year}>{year}</option>;
+            })}
+          </select>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div style={styles.page}>
-      
+
       {/* TITLE */}
       <div style={styles.headerCard}>
         <h2 style={styles.pageTitle}>💰 الحسابات الختامية وخزينة المكتب العامة</h2>
@@ -253,8 +410,13 @@ export default function Finance() {
         </div>
 
         <div style={styles.card(profit >= 0 ? "#f0fdf4" : "#fff5f5", profit >= 0 ? "#22c55e" : "#f43f5e")}>
-          <span style={styles.cardLabel}>📊 صافي الدخل الحلي</span>
+          <span style={styles.cardLabel}>📊 صافي الدخل الحالي</span>
           <b style={styles.cardValue}>{profit.toLocaleString()} ج.م</b>
+        </div>
+
+        <div style={styles.card("#eff6ff", "#3b82f6")}>
+          <span style={styles.cardLabel}>📋 عدد المعاملات</span>
+          <b style={styles.cardValue}>{transactionCount.toLocaleString()}</b>
         </div>
       </div>
 
@@ -286,6 +448,32 @@ export default function Finance() {
           <option value="office">🏢 مصروفات تشغيل المكتب</option>
           <option value="case">⚖️ ميزانيات القضايا المنفردة</option>
         </select>
+      </div>
+
+      {/* ======== NEW: DATE FILTER BAR ======== */}
+      <div style={styles.dateFilterBar}>
+        <label style={styles.dateFilterLabel}>🗓️ تصفية حسب الفترة:</label>
+        <select
+          value={dateFilterMode}
+          onChange={(e) => setDateFilterMode(e.target.value)}
+          style={styles.dateFilterSelect}
+        >
+          <option value="all">📋 الكل</option>
+          <option value="day">📅 يوم محدد</option>
+          <option value="week">🗓️ أسبوع محدد</option>
+          <option value="month">📆 شهر محدد</option>
+          <option value="year">📊 سنة محددة</option>
+        </select>
+
+        {renderDateFilterControls()}
+
+        <span style={styles.dateFilterHint}>
+          {dateFilterMode === "month" && `عرض: ${selectedMonth.split("-")[1]}/${selectedMonth.split("-")[0]}`}
+          {dateFilterMode === "year" && `عرض: ${selectedYear}`}
+          {dateFilterMode === "day" && `عرض: ${formatDateShort(new Date(selectedDate))}`}
+          {dateFilterMode === "week" && `عرض: أسبوع ${formatDateShort(new Date(selectedDate))}`}
+          {dateFilterMode === "all" && "عرض: جميع الفترات"}
+        </span>
       </div>
 
       {/* ENTRY FORM */}
@@ -368,35 +556,54 @@ export default function Finance() {
       )}
 
       {/* TRANSACTION LEDGER LIST */}
-      <h3 style={styles.sectionTitle}>📒 دفتر حركة الخزينة المتطابق</h3>
+      <h3 style={styles.sectionTitle}>
+        📒 دفتر حركة الخزينة المتطابق
+        <span style={styles.ledgerCount}>({filteredTransactions.length} معاملة)</span>
+      </h3>
 
       <div style={styles.ledgerContainer}>
         {filteredTransactions.length === 0 ? (
-          <p style={styles.noData}>لا توجد قيود مالية مقيدة تطابق خيارات الفرز والبحث المحددة.</p>
+          <p style={styles.noData}>
+            لا توجد قيود مالية مقيدة تطابق خيارات الفرز والبحث المحددة.
+          </p>
         ) : (
-          filteredTransactions.map((t) => (
-            <div key={t.id} style={styles.item(t.type)}>
-              <div style={styles.itemRight}>
-                <span style={styles.badge(t.type)}>{t.type === "income" ? "💵 تحصيل" : "💸 مخرج"}</span>
-                <strong style={styles.amountText(t.type)}>{Number(t.amount).toLocaleString()} ج.م</strong>
-                <span style={styles.divider}>|</span>
-                <span style={styles.descText}>{t.description}</span>
+          filteredTransactions.map((t) => {
+            const tDate = getTransactionDate(t);
+            return (
+              <div key={t.id} style={styles.item(t.type)}>
+                <div style={styles.itemRight}>
+                  <span style={styles.badge(t.type)}>
+                    {t.type === "income" ? "💵 تحصيل" : "💸 مخرج"}
+                  </span>
+                  <strong style={styles.amountText(t.type)}>
+                    {Number(t.amount).toLocaleString()} ج.م
+                  </strong>
+                  <span style={styles.divider}>|</span>
+                  <span style={styles.descText}>{t.description}</span>
+                </div>
+
+                <div style={styles.itemMiddle}>
+                  {/* ======== NEW: DATE DISPLAY ======== */}
+                  <span style={styles.dateBadge}>
+                    📅 {formatDate(tDate)}
+                  </span>
+                </div>
+
+                <span style={styles.scopeBadge(t.scope)}>
+                  {normalizeScope(t.scope) === "case"
+                    ? `⚖️ قضية: ${casesMap[t.caseId]?.caseNumber || "ملف محذوف"}`
+                    : "🏢 مصاريف عمومية"}
+                </span>
               </div>
-              
-              <span style={styles.scopeBadge(t.scope)}>
-                {normalizeScope(t.scope) === "case"
-                  ? `⚖️ قضية: ${casesMap[t.caseId]?.caseNumber || "ملف محذوف"}`
-                  : "🏢 مصاريف عمومية"}
-              </span>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
   );
 }
 
-/* ================= COMPREHENSIVE LUXURY STYLES (FIXED) ================= */
+/* ================= COMPREHENSIVE LUXURY STYLES ================= */
 const styles = {
   page: { padding: 20, direction: "rtl", background: "#f5f7fb", minHeight: "100vh", fontFamily: "Segoe UI, Tahoma" },
   centerText: { textAlign: "center", padding: "40px" },
@@ -404,26 +611,116 @@ const styles = {
   pageTitle: { margin: "0 0 4px 0", fontSize: "20px", color: "#1e293b" },
   pageSubtitle: { margin: 0, fontSize: "13px", color: "#64748b" },
   summary: { display: "flex", gap: 12, marginBottom: 15, flexWrap: "wrap" },
-  
-  card: (bg, borderRightColor) => ({ 
-    flex: 1, 
-    minWidth: "200px", 
-    padding: 15, 
-    background: bg, 
-    borderRadius: 12, 
-    textAlign: "center", 
-    boxShadow: "0 1px 3px rgba(0,0,0,0.04)", 
-    display: "flex", 
-    flexDirection: "column", 
+
+  card: (bg, borderRightColor) => ({
+    flex: 1,
+    minWidth: "180px",
+    padding: 15,
+    background: bg,
+    borderRadius: 12,
+    textAlign: "center",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+    display: "flex",
+    flexDirection: "column",
     gap: "4px",
     borderRight: `5px solid ${borderRightColor}`
   }),
-  
+
   cardLabel: { fontSize: "13px", color: "#475569", fontWeight: "600" },
   cardValue: { fontSize: "18px", fontFamily: "sans-serif", fontWeight: "bold" },
-  filterBar: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 15 },
+
+  // Filter Bar
+  filterBar: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 },
   input: { padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none", fontSize: "13px", boxSizing: "border-box" },
   select: { padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none", fontSize: "13px", background: "#fff", flex: 1, minWidth: "150px" },
+
+  // ======== NEW: Date Filter Bar Styles ========
+  dateFilterBar: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
+    background: "#fff",
+    padding: "12px 16px",
+    borderRadius: "12px",
+    marginBottom: 15,
+    boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+    border: "1px solid #e2e8f0",
+  },
+  dateFilterLabel: { fontSize: "13px", fontWeight: "600", color: "#475569", whiteSpace: "nowrap" },
+  dateFilterSelect: {
+    padding: "8px 12px",
+    borderRadius: "8px",
+    border: "1px solid #cbd5e1",
+    outline: "none",
+    fontSize: "13px",
+    background: "#fff",
+    minWidth: "140px",
+  },
+  dateInput: {
+    padding: "8px 12px",
+    borderRadius: "8px",
+    border: "1px solid #cbd5e1",
+    outline: "none",
+    fontSize: "13px",
+    fontFamily: "inherit",
+    background: "#fff",
+  },
+  monthNavigator: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    background: "#f1f5f9",
+    padding: "4px 12px",
+    borderRadius: "8px",
+  },
+  navArrow: {
+    border: "none",
+    background: "transparent",
+    fontSize: "16px",
+    cursor: "pointer",
+    padding: "4px 8px",
+    borderRadius: "6px",
+    color: "#475569",
+    transition: "background 0.2s",
+  },
+  monthLabel: {
+    fontSize: "14px",
+    fontWeight: "600",
+    color: "#1e293b",
+    minWidth: "80px",
+    textAlign: "center",
+  },
+  todayBtn: {
+    border: "none",
+    background: "#3b82f6",
+    color: "#fff",
+    fontSize: "12px",
+    fontWeight: "600",
+    padding: "4px 10px",
+    borderRadius: "6px",
+    cursor: "pointer",
+    marginRight: "8px",
+  },
+  yearSelect: {
+    padding: "8px 12px",
+    borderRadius: "8px",
+    border: "1px solid #cbd5e1",
+    outline: "none",
+    fontSize: "13px",
+    background: "#fff",
+    minWidth: "100px",
+  },
+  dateFilterHint: {
+    fontSize: "12px",
+    color: "#64748b",
+    marginRight: "auto",
+    background: "#f8fafc",
+    padding: "4px 10px",
+    borderRadius: "6px",
+  },
+
+  // Form
   formBox: { background: "#fff", padding: 16, borderRadius: 12, marginBottom: 15, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" },
   sectionTitle: { margin: "0 0 15px 0", fontSize: "15px", color: "#475569", fontWeight: "600" },
   row: { display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" },
@@ -432,13 +729,59 @@ const styles = {
   selectInput: { padding: "9px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none", fontSize: "13px", background: "#fff" },
   textInput: { padding: "9px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none", fontSize: "13px" },
   addBtn: { width: "100%", fontWeight: "600", padding: "10px" },
+
+  // Ledger
   ledgerContainer: { background: "#fff", padding: "12px", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" },
+  ledgerCount: { fontSize: "13px", color: "#64748b", fontWeight: "400", marginRight: "8px" },
   noData: { textAlign: "center", color: "#94a3b8", margin: 0, padding: "20px" },
-  item: (type) => ({ padding: "12px", marginBottom: "8px", borderRadius: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", background: type === "income" ? "#f0fdf4" : "#fff5f5", borderRight: type === "income" ? "4px solid #16a34a" : "4px solid #dc2626" }),
-  itemRight: { display: "flex", alignItems: "center", gap: "10px" },
-  badge: (type) => ({ fontSize: "11px", fontWeight: "bold", padding: "2px 6px", borderRadius: "4px", background: type === "income" ? "#bbf7d0" : "#fecaca", color: type === "income" ? "#15803d" : "#991b1b" }),
+
+  item: (type) => ({
+    padding: "12px",
+    marginBottom: "8px",
+    borderRadius: "8px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: "10px",
+    background: type === "income" ? "#f0fdf4" : "#fff5f5",
+    borderRight: type === "income" ? "4px solid #16a34a" : "4px solid #dc2626"
+  }),
+
+  itemRight: { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" },
+  itemMiddle: { display: "flex", alignItems: "center", marginRight: "auto", marginLeft: "12px" },
+
+  badge: (type) => ({
+    fontSize: "11px",
+    fontWeight: "bold",
+    padding: "2px 6px",
+    borderRadius: "4px",
+    background: type === "income" ? "#bbf7d0" : "#fecaca",
+    color: type === "income" ? "#15803d" : "#991b1b"
+  }),
+
   amountText: (type) => ({ fontSize: "14px", color: type === "income" ? "#15803d" : "#b91c1c", fontFamily: "sans-serif" }),
   divider: { color: "#cbd5e1" },
   descText: { fontSize: "13.5px", color: "#334155" },
-  scopeBadge: (scope) => ({ fontSize: "12px", background: "rgba(255,255,255,0.7)", padding: "3px 8px", borderRadius: "6px", color: "#475569", border: "1px solid #e2e8f0" })
+
+  // ======== NEW: Date Badge Style ========
+  dateBadge: {
+    fontSize: "12px",
+    color: "#64748b",
+    background: "#f1f5f9",
+    padding: "3px 10px",
+    borderRadius: "6px",
+    fontFamily: "monospace",
+    direction: "ltr",
+    display: "inline-block",
+  },
+
+  scopeBadge: (scope) => ({
+    fontSize: "12px",
+    background: "rgba(255,255,255,0.7)",
+    padding: "3px 8px",
+    borderRadius: "6px",
+    color: "#475569",
+    border: "1px solid #e2e8f0"
+  })
 };
