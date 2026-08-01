@@ -485,18 +485,26 @@ export default function CaseDetails() {
   const safeClients = useMemo(() => caseData?.clients || [], [caseData?.clients]);
   const safeOpponents = useMemo(() => caseData?.opponents || [], [caseData?.opponents]);
 
+    // ═══════════════════════════════════════════════════════════════════
+  // FIXED: levelSessions — now handles old sessions without levelId
+  // Old sessions (without levelId) are assigned to the first level
+  // because they existed before the litigation levels system
+  // ═══════════════════════════════════════════════════════════════════
   const levelSessions = useMemo(() => {
     if (!selectedLevel) return [];
+
     return safeSessions.filter(s => {
+      // Sessions with explicit levelId → match directly
       if (s.levelId) {
         return s.levelId === selectedLevel.id;
       }
-      if (!activeLevel) {
-        return selectedLevel.id === (levels[0]?.id || selectedLevel.id);
-      }
-      return selectedLevel.id === activeLevel.id;
+
+      // Old sessions without levelId → assign to first level (oldest)
+      // because they existed before the litigation levels system
+      const firstLevel = levels[0];
+      return selectedLevel.id === firstLevel?.id;
     });
-  }, [safeSessions, selectedLevel, activeLevel, levels]);
+  }, [safeSessions, selectedLevel, levels]);
 
   const levelJudgments = useMemo(() => {
     if (!selectedLevel) return [];
