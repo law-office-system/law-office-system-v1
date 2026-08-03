@@ -104,8 +104,27 @@ export function AuthProvider({ children }) {
             console.log("🔥 AuthProvider: userData loaded:", data);
             setUserData(data);
           } else {
-            console.error("❌ AuthProvider: User document not found in Firestore for UID:", user.uid);
-            setUserData(null);
+            console.warn("⚠️ AuthProvider: User document not found, auto-creating...");
+
+            // Auto-create user document from Auth data
+            const fallbackData = {
+              uid: user.uid,
+              name: user.displayName || "مستخدم",
+              email: user.email,
+              role: "client",
+              officeId: "",
+              emailVerified: user.emailVerified,
+              createdAt: new Date().toISOString(),
+            };
+
+            try {
+              await setDoc(doc(db, "users", user.uid), fallbackData);
+              console.log("✅ AuthProvider: Auto-created user document:", fallbackData);
+              setUserData(fallbackData);
+            } catch (createErr) {
+              console.error("❌ AuthProvider: Failed to auto-create user document:", createErr);
+              setUserData(null);
+            }
           }
         } catch (err) {
           console.error("❌ AuthProvider: Error fetching user data:", err);

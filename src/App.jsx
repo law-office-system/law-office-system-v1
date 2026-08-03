@@ -39,6 +39,8 @@ const Chat = lazy(() => import("./pages/Chat"));
 const SharedRooms = lazy(() => import("./pages/SharedRooms"));
 const SharedRoomChat = lazy(() => import("./pages/SharedRoomChat"));
 const OfficeConnections = lazy(() => import("./pages/OfficeConnections"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 
 import './styles/chat-animations.css';
 import { AuthProvider } from "./context/AuthContext";
@@ -159,6 +161,14 @@ function NotificationSync() {
 /* ================= HOME REDIRECT ================= */
 function HomeRedirect() {
   const { user, userData, loading } = useAuth();
+  const location = window.location;
+
+  // Don't redirect if on public pages
+  const publicPaths = ["/verify-email", "/forgot-password", "/login", "/register", "/home"];
+  if (publicPaths.includes(location.pathname)) {
+    return null;
+  }
+
   if (loading) {
     return <LoadingScreen />;
   }
@@ -178,6 +188,8 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/super-login" element={<SuperAdminLogin />} />
               <Route path="/home" element={<Home />} />
               <Route path="/" element={<Layout />}>

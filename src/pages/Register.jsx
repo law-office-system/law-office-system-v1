@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { nanoid } from "nanoid";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from "firebase/auth";
 import { doc, setDoc, Timestamp } from "firebase/firestore";
 import { auth } from "../firebaseAuth";
 import { db } from "../firebaseDb";
@@ -33,6 +33,35 @@ export default function Register() {
 
       await updateProfile(user, { displayName: name });
 
+      // Send email verification via Firebase (EmailJS as backup)
+      try {
+        await sendEmailVerification(user);
+        console.log("✅ Firebase verification email sent");
+      } catch (firebaseErr) {
+        console.error("❌ Firebase email failed:", firebaseErr);
+
+        // Fallback to EmailJS
+        try {
+          const templateParams = {
+            to_name: name,
+            to_email: email,
+            email: email,  // Required by EmailJS template
+            verification_link: "https://law-office-78a96.web.app/login",
+          };
+
+          const response = await emailjs.send(
+            "service_83c997s",
+            "template_pvllp4d",
+            templateParams,
+            "ZWRWlbpfVQegdwz9I"
+          );
+
+          console.log("✅ EmailJS fallback sent:", response.status);
+        } catch (emailjsErr) {
+          console.error("❌ EmailJS also failed:", emailjsErr);
+        }
+      }
+
       let officeId = "";
 
       if (mode === "create") {
@@ -47,14 +76,26 @@ export default function Register() {
           createdAt: Timestamp.now(),
         });
 
-        await setDoc(doc(db, "users", user.uid), {
+        // Store user with retry logic
+        const userData = {
           uid: user.uid,
           name,
           email,
           role: "admin",
           officeId,
+          emailVerified: false,
           createdAt: Timestamp.now(),
-        });
+        };
+
+        try {
+          await setDoc(doc(db, "users", user.uid), userData);
+          console.log("✅ User document created successfully");
+        } catch (docErr) {
+          console.error("❌ Failed to create user document:", docErr);
+          setError("حدث خطأ أثناء حفظ بيانات المستخدم");
+          setLoading(false);
+          return;
+        }
 
         alert("كود المكتب: " + code);
       }
@@ -80,17 +121,35 @@ export default function Register() {
 
         officeId = found.id;
 
-        await setDoc(doc(db, "users", user.uid), {
+        // Store user with retry logic
+        const userData = {
           uid: user.uid,
           name,
           email,
           role: "client",
           officeId,
+          emailVerified: false,
           createdAt: Timestamp.now(),
-        });
+        };
+
+        try {
+          await setDoc(doc(db, "users", user.uid), userData);
+          console.log("✅ User document created successfully");
+        } catch (docErr) {
+          console.error("❌ Failed to create user document:", docErr);
+          setError("حدث خطأ أثناء حفظ بيانات المستخدم");
+          setLoading(false);
+          return;
+        }
       }
 
-      navigate("/");
+      // Sign out the user - they must verify email before using the system
+      await auth.signOut();
+
+      // Store email in sessionStorage so verify page can show it
+      sessionStorage.setItem("pendingVerificationEmail", email);
+
+      navigate("/verify-email");
     } catch (err) {
   console.error(err);
 

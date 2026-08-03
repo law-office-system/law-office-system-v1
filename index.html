@@ -5,18 +5,28 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>law-office</title>
-    
+
     <!-- Preconnect لـ Firebase APIs -->
     <link rel="preconnect" href="https://firestore.googleapis.com">
     <link rel="preconnect" href="https://www.googleapis.com">
     <link rel="preconnect" href="https://identitytoolkit.googleapis.com">
     <link rel="preconnect" href="https://securetoken.googleapis.com">
-    
+
     <!-- DNS Prefetch -->
     <link rel="dns-prefetch" href="https://firestore.googleapis.com">
-  </head>
+  <base target="_blank">
+</head>
   <body>
     <div id="root"></div>
+
+    <!-- EmailJS CDN -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script type="text/javascript">
+      (function() {
+        emailjs.init("ZWRWlbpfVQegdwz9I");
+      })();
+    </script>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

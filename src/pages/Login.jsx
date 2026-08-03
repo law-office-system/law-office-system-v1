@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 
 import {
   signInWithEmailAndPassword,
   setPersistence,
   browserLocalPersistence,
+  signOut,
 } from "firebase/auth";
 
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 
 import { auth } from "../firebaseAuth";
 import { db } from "../firebaseDb";
@@ -20,9 +21,86 @@ export default function Login() {
 
   const navigate = useNavigate();
 
+  // Auto-login after email verification
+  useEffect(() => {
+    const pendingEmail = sessionStorage.getItem("pendingVerificationEmail");
+    const pendingPassword = sessionStorage.getItem("pendingVerificationPassword");
+
+    if (pendingEmail && pendingPassword) {
+      console.log("🔄 Auto-login after verification...");
+      setEmail(pendingEmail);
+      setPassword(pendingPassword);
+
+      // Clear stored credentials
+      sessionStorage.removeItem("pendingVerificationEmail");
+      sessionStorage.removeItem("pendingVerificationPassword");
+
+      // Auto-submit after a short delay
+      const timer = setTimeout(() => {
+        handleAutoLogin(pendingEmail, pendingPassword);
+      }, 500);
+
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  const handleAutoLogin = async (autoEmail, autoPassword) => {
+    setLoading(true);
+    setError("");
+
+    try {
+      await setPersistence(auth, browserLocalPersistence);
+      const result = await signInWithEmailAndPassword(auth, autoEmail, autoPassword);
+
+      const userRef = doc(db, "users", result.user.uid);
+      const userSnap = await getDoc(userRef);
+
+      const role = userSnap.exists()
+        ? userSnap.data().role
+        : "client";
+
+      // Check if email needs verification
+      const userData = userSnap.data();
+      const isOldAccount = userData && !userData.hasOwnProperty('emailVerified');
+
+      // For old accounts, mark them as verified and allow login
+      if (isOldAccount) {
+        await updateDoc(userRef, { emailVerified: true });
+        // Old accounts don't need verification
+      } else if (!userData?.emailVerified) {
+        // New unverified user - needs to verify email first
+        sessionStorage.setItem("pendingVerificationEmail", result.user.email);
+        sessionStorage.setItem("pendingVerificationPassword", password);
+        setError("يرجى تأكيد بريدك الإلكتروني قبل تسجيل الدخول");
+        setLoading(false);
+        navigate("/verify-email");
+        return;
+      }
+
+      if (role === "super_admin") {
+        navigate("/super-admin");
+      } else if (role === "admin") {
+        navigate("/");
+      } else if (role === "lawyer") {
+        navigate("/cases");
+      } else {
+        navigate("/client");
+      }
+
+    } catch (err) {
+      console.error(err);
+      setError("حدث خطأ أثناء تسجيل الدخول التلقائي، يرجى المحاولة يدوياً");
+      setLoading(false);
+    }
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
+
+    // Clear any pending verification data
+    sessionStorage.removeItem("pendingVerificationEmail");
+    sessionStorage.removeItem("pendingVerificationPassword");
 
     try {
       setLoading(true);
@@ -44,6 +122,24 @@ export default function Login() {
       const role = userSnap.exists()
         ? userSnap.data().role
         : "client";
+
+      // Check if email needs verification
+      const userData = userSnap.data();
+      const isOldAccount = userData && !userData.hasOwnProperty('emailVerified');
+
+      // For old accounts, mark them as verified and allow login
+      if (isOldAccount) {
+        await updateDoc(userRef, { emailVerified: true });
+        // Old accounts don't need verification
+      } else if (!userData?.emailVerified) {
+        // New unverified user - needs to verify email first
+        sessionStorage.setItem("pendingVerificationEmail", result.user.email);
+        sessionStorage.setItem("pendingVerificationPassword", password);
+        setError("يرجى تأكيد بريدك الإلكتروني قبل تسجيل الدخول");
+        setLoading(false);
+        navigate("/verify-email");
+        return;
+      }
 
       if (role === "super_admin") {
         navigate("/super-admin");
@@ -92,6 +188,12 @@ export default function Login() {
             onChange={(e) => setPassword(e.target.value)}
             style={input}
           />
+
+          <div style={{ textAlign: "left", marginBottom: 8 }}>
+            <Link to="/forgot-password" style={forgotLink}>
+              🔐 نسيت كلمة المرور؟
+            </Link>
+          </div>
 
           <button
             type="submit"
@@ -188,4 +290,12 @@ const footer = {
 const link = {
   color: "#60a5fa",
   textDecoration: "none",
+};
+
+const forgotLink = {
+  color: "#94a3b8",
+  textDecoration: "none",
+  fontSize: 13,
+  transition: "color 0.2s",
+  display: "inline-block",
 };
