@@ -1,21 +1,34 @@
-import { theme } from "../../styles/theme";
+import React from 'react';
+import { button, createButton, transitions } from '../../styles/design-system';
 
 export default function Button({
   children,
   onClick,
-  variant = "primary",
+  variant = 'primary',
+  size = 'md',
+  color = null,
   style = {},
   disabled = false,
-  type = "button",
+  type = 'button',
+  icon: Icon = null,
+  ...props
 }) {
-  const colors = {
-    primary: theme.colors.primary,
-    success: theme.colors.success,
-    danger: theme.colors.danger,
-    gray: theme.colors.muted,
+  const sizes = {
+    sm: { padding: '8px 12px', fontSize: '12px' },
+    md: { padding: '10px 16px', fontSize: '14px' },
+    lg: { padding: '12px 20px', fontSize: '15px' },
   };
 
-  const baseColor = colors[variant] || theme.colors.primary;
+  const variants = {
+    primary: button.primary,
+    secondary: button.secondary,
+    success: button.success,
+    danger: button.danger,
+    ghost: button.ghost,
+  };
+
+  const baseColor = color || variants[variant];
+  const baseStyle = color ? createButton(color) : { ...button.base, ...variants[variant] };
 
   return (
     <button
@@ -23,41 +36,27 @@ export default function Button({
       onClick={onClick}
       disabled={disabled}
       style={{
-        padding: "10px 14px",
-        border: "none",
-        borderRadius: theme.radius.sm,
-        cursor: disabled ? "not-allowed" : "pointer",
-        fontWeight: "600",
-        color: "#fff",
-        background: disabled ? theme.colors.border : baseColor,
-        transition: "all 0.2s ease",
+        ...baseStyle,
+        ...sizes[size],
         opacity: disabled ? 0.6 : 1,
-        transform: "scale(1)",
+        cursor: disabled ? 'not-allowed' : 'pointer',
         ...style,
       }}
       onMouseOver={(e) => {
-        if (!disabled) {
-          e.currentTarget.style.background = `${baseColor}dd`;
-          e.currentTarget.style.transform = "scale(1.03)";
+        if (!disabled && !color) {
+          e.currentTarget.style.filter = 'brightness(1.1)';
+          e.currentTarget.style.transform = 'translateY(-1px)';
         }
       }}
       onMouseOut={(e) => {
         if (!disabled) {
-          e.currentTarget.style.background = baseColor;
-          e.currentTarget.style.transform = "scale(1)";
+          e.currentTarget.style.filter = 'none';
+          e.currentTarget.style.transform = 'translateY(0)';
         }
       }}
-      onMouseDown={(e) => {
-        if (!disabled) {
-          e.currentTarget.style.transform = "scale(0.97)";
-        }
-      }}
-      onMouseUp={(e) => {
-        if (!disabled) {
-          e.currentTarget.style.transform = "scale(1.03)";
-        }
-      }}
+      {...props}
     >
+      {Icon && <Icon size={size === 'sm' ? 14 : 16} />}
       {children}
     </button>
   );

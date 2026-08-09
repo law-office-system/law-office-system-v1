@@ -17,6 +17,7 @@ export default function EditCase() {
   const [showSearch, setShowSearch] = useState(false);
 
   const [form, setForm] = useState({
+    caseName: "",
     caseNumber: "",
     caseYear: "",
     caseType: "",
@@ -42,7 +43,7 @@ export default function EditCase() {
         if (snap.exists()) {
           const data = snap.data();
           let normalizedClients = Array.isArray(data.clients) ? data.clients.map(c => typeof c === "string" ? { id: c, caseRole: "مدعي" } : { id: c.id || "", caseRole: c.caseRole || "" }) : [];
-          
+
           const namesMap = {};
           const clientIds = normalizedClients.map(c => c.id).filter(Boolean);
           if (clientIds.length > 0) {
@@ -53,6 +54,7 @@ export default function EditCase() {
           }
 
           setForm({
+            caseName: data.caseName || "",
             caseNumber: data.caseNumber || data.caseSerial || "",
             caseYear: data.caseYear || "",
             caseType: data.caseType || "",
@@ -88,11 +90,14 @@ export default function EditCase() {
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>✏️ تعديل بيانات القضية</h1>
+      <h1 style={styles.title}>
+        {form.caseName ? `✏️ ${form.caseName}` : "✏️ تعديل بيانات القضية"}
+      </h1>
       <form onSubmit={handleUpdate}>
         <div style={styles.section}>
           <h3 style={styles.sectionTitle}>🏛️ البيانات القضائية</h3>
           <div style={styles.grid}>
+            {/* ❌ حُذف حقل caseName من هنا */}
             <input name="caseNumber" value={form.caseNumber} onChange={handleChange} placeholder="رقم القضية" style={styles.input} />
             <input name="caseYear" value={form.caseYear} onChange={handleChange} placeholder="السنة" style={styles.input} />
             <input name="caseType" value={form.caseType} onChange={handleChange} placeholder="نوع الدعوى" style={styles.input} />
@@ -105,7 +110,25 @@ export default function EditCase() {
               <option value={CASE_STATUS.CLOSED}>منتهية</option>
             </select>
           </div>
-          <textarea name="caseSubject" value={form.caseSubject} onChange={handleChange} placeholder="موضوع الدعوى" style={styles.textarea} />
+        </div>
+
+        {/* ✅ عنوان القضية + موضوع الدعوى مجتمعان */}
+        <div style={styles.section}>
+          <h3 style={styles.sectionTitle}>📝 موضوع الدعوى</h3>
+          <input
+            name="caseName"
+            value={form.caseName}
+            onChange={handleChange}
+            placeholder="عنوان القضية (اسم القضية)"
+            style={{ ...styles.input, width: "100%", marginBottom: 12, fontWeight: 600, boxSizing: "border-box" }}
+          />
+          <textarea
+            name="caseSubject"
+            value={form.caseSubject}
+            onChange={handleChange}
+            placeholder="موضوع الدعوى"
+            style={styles.textarea}
+          />
         </div>
 
         <div style={styles.section}>
@@ -158,7 +181,7 @@ const styles = {
   sectionTitle: { fontSize: 16, marginBottom: 10, borderBottom: '2px solid #e2e8f0', paddingBottom: 5 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 },
   input: { padding: 8, borderRadius: 6, border: '1px solid #cbd5e1', width: '100%', boxSizing: 'border-box' },
-  textarea: { width: '100%', height: 70, marginTop: 10, padding: 8, borderRadius: 6, border: '1px solid #cbd5e1', boxSizing: 'border-box' },
+  textarea: { width: '100%', height: 100, marginTop: 10, padding: 8, borderRadius: 6, border: '1px solid #cbd5e1', boxSizing: 'border-box' },
   addBtn: { background: '#059669', color: '#fff', border: 'none', padding: 8, borderRadius: 6, cursor: 'pointer', marginBottom: 10 },
   addSmallBtn: { background: '#2563eb', color: '#fff', border: 'none', padding: 4, borderRadius: 4, cursor: 'pointer', fontSize: 12 },
   searchBox: { border: '1px solid #cbd5e1', padding: 10, marginBottom: 10, borderRadius: 8, background: '#f8fafc' },

@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  X, Calendar, Clock, MapPin, FileText, Landmark, AlertCircle, CheckCircle2,
+  Calendar, Clock, MapPin, FileText, Landmark, AlertCircle, CheckCircle2,
   Gavel, Scale, ArrowRight, Sparkles, ChevronDown, RotateCcw, Send,
   UserCheck, FileCheck, Briefcase, Plus, Trash2, Upload, Building2,
   Hash, StickyNote, ChevronRight
 } from 'lucide-react';
+import { Modal } from '../ui';
+import { formSection, colors, spacing, radius, shadows, transitions } from '../../styles/design-system';
 
 // ─── Decision Types & Auto-Stage Mapping ─────────────────────────
 const DECISION_TYPES = [
@@ -67,7 +69,6 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
 
   // ── Form State ──
   const [formData, setFormData] = useState({
-    // Session Core (auto-filled from caseData)
     title: '',
     date: '',
     time: '',
@@ -78,24 +79,16 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
     description: '',
     notes: '',
     attachments: [],
-
-    // Decision
     decisionType: 'pending',
     decisionDetails: '',
-
-    // Next Session (auto for adjourned types)
     nextSessionDate: '',
     nextSessionTime: '',
     nextSessionLocation: caseData.court || '',
     autoCreateNextSession: true,
-
-    // Judgment (conditional)
     judgmentType: '',
     judgmentSummary: '',
     judgmentAppealable: true,
     appealDeadline: '',
-
-    // Admin Tasks (optional)
     hasAdminTasks: false,
     adminTasks: [],
   });
@@ -126,7 +119,6 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
         setExpandedSections(prev => ({ ...prev, judgment: true }));
       }
     } else {
-      // Auto-generate title for new sessions
       const sessionCount = (caseData.sessions || []).length + 1;
       setFormData(prev => ({
         ...prev,
@@ -150,7 +142,6 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
         suggestedTask: decisionMeta.stage ? SUGGESTED_TASKS[decisionMeta.stage] || '' : '',
       };
 
-      // Auto-show/hide judgment section
       if (type === 'judgment') {
         setExpandedSections(prev => ({ ...prev, judgment: true }));
       } else {
@@ -159,7 +150,6 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
         updates.judgmentSummary = '';
       }
 
-      // Auto-suggest next session date for adjourned types
       if (decisionMeta.hasNextSession && !formData.nextSessionDate) {
         const nextDate = new Date();
         nextDate.setDate(nextDate.getDate() + 30);
@@ -187,7 +177,6 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
-  // Admin Tasks
   const addAdminTask = () => {
     setFormData(prev => ({
       ...prev,
@@ -230,7 +219,6 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
       const decisionMeta = DECISION_TYPES.find(d => d.value === formData.decisionType);
 
       const data = {
-        // Core session
         title: formData.title || `الجلسة ${(caseData.sessions || []).length + 1}`,
         date: formData.date,
         time: formData.time,
@@ -241,40 +229,27 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
         description: formData.description,
         notes: formData.notes,
         attachments: formData.attachments,
-        nextSessionDate: formData.date,
-
-        // Decision
         decisionType: formData.decisionType,
         decisionDetails: formData.decisionDetails,
         decisionLabel: decisionMeta?.label || '',
-
-        // Next Session (if applicable)
-        ...(decisionMeta?.hasNextSession && formData.autoCreateNextSession ? {
+        ...(decisionMeta?.hasNextSession && formData.autoCreateNextSession && formData.nextSessionDate ? {
           nextSessionAuto: true,
           nextSessionDate: formData.nextSessionDate,
           nextSessionTime: formData.nextSessionTime,
           nextSessionLocation: formData.nextSessionLocation,
         } : {}),
-
-        // Judgment (if applicable)
         ...(formData.decisionType === 'judgment' ? {
           judgmentType: formData.judgmentType,
           judgmentSummary: formData.judgmentSummary,
           judgmentAppealable: formData.judgmentAppealable,
           appealDeadline: formData.appealDeadline,
         } : {}),
-
-        // Admin Tasks (if any)
         ...(formData.hasAdminTasks && formData.adminTasks.length > 0 ? {
           adminTasks: formData.adminTasks,
         } : {}),
-
-        // Workflow
         suggestedStage: formData.suggestedStage || '',
         suggestedTask: formData.suggestedTask || '',
         stageLabel: STAGE_LABELS[formData.suggestedStage] || '',
-
-        // Metadata
         caseId,
         tenantId: caseData.tenantId || '',
         updatedAt: new Date().toISOString(),
@@ -289,600 +264,451 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
     }
   }, [formData, validate, onSave, onClose, caseId, caseData]);
 
-  // ─── Modal effects ───────────────────────────────────────────────
-  useEffect(() => {
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = originalOverflow; };
-  }, []);
-
-  useEffect(() => {
-    const handleEscape = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [onClose]);
-
-  const handleOverlayClick = useCallback((e) => {
-    if (e.target === e.currentTarget) onClose();
-  }, [onClose]);
-
   const selectedDecision = DECISION_TYPES.find(d => d.value === formData.decisionType);
   const showJudgment = formData.decisionType === 'judgment';
   const showNextSession = selectedDecision?.hasNextSession;
 
-  // ═════════════════════════════════════════════════════════════════
   return (
-    <div style={styles.overlay} onClick={handleOverlayClick} onMouseDown={(e) => e.stopPropagation()}>
-      <div style={styles.modal}>
-        {/* ═══ HEADER ═══ */}
-        <div style={styles.header}>
-          <div style={styles.headerLeft}>
-            <div style={styles.headerIcon}>
-              <Calendar color="#fbbf24" size={22} strokeWidth={2.5} />
-            </div>
-            <div>
-              <h2 style={styles.headerTitle}>
-                {session ? 'تعديل الجلسة' : 'إضافة جلسة جديدة'}
-              </h2>
-              <p style={styles.headerSubtitle}>
-                {session ? 'تحديث بيانات الجلسة والنتيجة' : 'سجّل الجلسة والنتيجة والأعمال في نموذج واحد'}
-              </p>
-            </div>
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title={session ? 'تعديل الجلسة' : 'إضافة جلسة جديدة'}
+      subtitle={session ? 'تحديث بيانات الجلسة والنتيجة' : 'سجّل الجلسة والنتيجة والأعمال في نموذج واحد'}
+      icon={Calendar}
+      iconColor={colors.accent.amber.light}
+      maxWidth="640px"
+    >
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: spacing.xl }}>
+
+        {/* ═══════════════════════════════════════
+            CARD 1: بيانات الجلسة
+        ═══════════════════════════════════════ */}
+        <FormCard
+          title="بيانات الجلسة"
+          icon={Calendar}
+          iconColor={colors.accent.blue.light}
+          expanded={expandedSections.session}
+          onToggle={() => toggleSection('session')}
+        >
+          <div style={formSection.fieldGroup}>
+            <label style={formSection.label}>
+              <Hash size={14} color={colors.text.muted} />
+              عنوان الجلسة (تلقائي)
+            </label>
+            <input
+              type="text"
+              name="title"
+              value={formData.title}
+              onChange={handleChange}
+              style={{ ...formSection.input, background: 'rgba(15, 23, 42, 0.4)', color: colors.text.muted }}
+              placeholder="يُولد تلقائياً"
+            />
           </div>
-          <button onClick={(e) => { e.stopPropagation(); onClose(); }} style={styles.closeBtn} type="button">
-            <X size={20} color="#9ca3af" />
-          </button>
-        </div>
 
-        <form onSubmit={handleSubmit} style={styles.form} onClick={(e) => e.stopPropagation()}>
-
-          {/* ═══════════════════════════════════════
-              CARD 1: بيانات الجلسة
-          ═══════════════════════════════════════ */}
-          <Card
-            title="بيانات الجلسة"
-            icon={Calendar}
-            iconColor="#60a5fa"
-            expanded={expandedSections.session}
-            onToggle={() => toggleSection('session')}
-          >
-            {/* Auto Title (read-only) */}
-            <div style={styles.fieldGroup}>
-              <label style={styles.label}>
-                <Hash size={14} color="#6b7280" />
-                عنوان الجلسة (تلقائي)
+          <div style={formSection.twoCols}>
+            <div style={formSection.fieldGroup}>
+              <label style={formSection.label}>
+                <span style={formSection.required}>*</span> التاريخ
               </label>
               <input
-                type="text"
-                name="title"
-                value={formData.title}
+                type="date"
+                name="date"
+                value={formData.date}
                 onChange={handleChange}
-                style={{ ...styles.input, background: 'rgba(15, 23, 42, 0.4)', color: '#9ca3af' }}
-                placeholder="يُولد تلقائياً"
+                style={{ ...formSection.input, borderColor: errors.date ? colors.accent.red.main : colors.border.default }}
               />
+              {errors.date && <div style={formSection.error}><AlertCircle size={14} color={colors.accent.red.main} />{errors.date}</div>}
             </div>
 
-            {/* Date & Time */}
-            <div style={styles.twoCols}>
-              <div style={styles.fieldGroup}>
-                <label style={styles.label}>
-                  <span style={styles.required}>*</span> التاريخ
-                </label>
-                <div style={styles.inputWrapper}>
-                  <Calendar size={16} color="#6b7280" style={styles.inputIcon} />
-                  <input
-                    type="date"
-                    name="date"
-                    value={formData.date}
-                    onChange={handleChange}
-                    style={{ ...styles.input, paddingRight: '40px', borderColor: errors.date ? '#ef4444' : 'rgba(55, 65, 81, 0.5)' }}
-                  />
-                </div>
-                {errors.date && <div style={styles.error}><AlertCircle size={14} color="#ef4444" />{errors.date}</div>}
-              </div>
-
-              <div style={styles.fieldGroup}>
-                <label style={styles.label}>الوقت</label>
-                <div style={styles.inputWrapper}>
-                  <Clock size={16} color="#6b7280" style={styles.inputIcon} />
-                  <input type="time" name="time" value={formData.time} onChange={handleChange}
-                    style={{ ...styles.input, paddingRight: '40px' }} />
-                </div>
-              </div>
+            <div style={formSection.fieldGroup}>
+              <label style={formSection.label}>الوقت</label>
+              <input type="time" name="time" value={formData.time} onChange={handleChange}
+                style={formSection.input} />
             </div>
+          </div>
 
-            {/* Court & Department (auto-filled) */}
-            <div style={styles.twoCols}>
-              <div style={styles.fieldGroup}>
-                <label style={styles.label}>
-                  <Building2 size={14} color="#6b7280" />
-                  المحكمة
-                </label>
-                <input
-                  type="text"
-                  name="court"
-                  value={formData.court}
-                  onChange={handleChange}
-                  style={styles.input}
-                />
-              </div>
-
-              <div style={styles.fieldGroup}>
-                <label style={styles.label}>الدائرة</label>
-                <input
-                  type="text"
-                  name="department"
-                  value={formData.department}
-                  onChange={handleChange}
-                  style={styles.input}
-                />
-              </div>
-            </div>
-
-            {/* Location & Roll */}
-            <div style={styles.twoCols}>
-              <div style={styles.fieldGroup}>
-                <label style={styles.label}>
-                  <MapPin size={14} color="#6b7280" />
-                  مكان الانعقاد
-                </label>
-                <div style={styles.inputWrapper}>
-                  <input
-                    type="text"
-                    name="location"
-                    value={formData.location}
-                    onChange={handleChange}
-                    style={styles.input}
-                    placeholder="يُملأ تلقائياً من بيانات القضية"
-                  />
-                </div>
-              </div>
-
-              <div style={styles.fieldGroup}>
-                <label style={styles.label}>
-                  <Hash size={14} color="#6b7280" />
-                  رقم الرول
-                </label>
-                <div style={styles.inputWrapper}>
-                  <input
-                    type="text"
-                    name="roll"
-                    value={formData.roll}
-                    onChange={handleChange}
-                    style={styles.input}
-                    placeholder="مثال: 12"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div style={styles.fieldGroup}>
-              <label style={styles.label}>
-                <StickyNote size={14} color="#6b7280" />
-                ملاحظات
+          <div style={formSection.twoCols}>
+            <div style={formSection.fieldGroup}>
+              <label style={formSection.label}>
+                <Building2 size={14} color={colors.text.muted} />
+                المحكمة
               </label>
-              <textarea
-                name="notes"
-                value={formData.notes}
-                onChange={handleChange}
-                rows={2}
-                style={styles.textarea}
-                placeholder="ملاحظات عن الجلسة..."
-              />
+              <input type="text" name="court" value={formData.court} onChange={handleChange}
+                style={formSection.input} />
             </div>
-          </Card>
 
-          {/* ═══════════════════════════════════════
-              CARD 2: نتيجة الجلسة
-          ═══════════════════════════════════════ */}
-          <Card
-            title="نتيجة الجلسة"
-            icon={Scale}
-            iconColor="#f59e0b"
-            expanded={expandedSections.result}
-            onToggle={() => toggleSection('result')}
+            <div style={formSection.fieldGroup}>
+              <label style={formSection.label}>الدائرة</label>
+              <input type="text" name="department" value={formData.department} onChange={handleChange}
+                style={formSection.input} />
+            </div>
+          </div>
+
+          <div style={formSection.twoCols}>
+            <div style={formSection.fieldGroup}>
+              <label style={formSection.label}>
+                <MapPin size={14} color={colors.text.muted} />
+                مكان الانعقاد
+              </label>
+              <input type="text" name="location" value={formData.location} onChange={handleChange}
+                style={formSection.input} placeholder="يُملأ تلقائياً من بيانات القضية" />
+            </div>
+
+            <div style={formSection.fieldGroup}>
+              <label style={formSection.label}>
+                <Hash size={14} color={colors.text.muted} />
+                رقم الرول
+              </label>
+              <input type="text" name="roll" value={formData.roll} onChange={handleChange}
+                style={formSection.input} placeholder="مثال: 12" />
+            </div>
+          </div>
+
+          <div style={formSection.fieldGroup}>
+            <label style={formSection.label}>
+              <StickyNote size={14} color={colors.text.muted} />
+              ملاحظات
+            </label>
+            <textarea name="notes" value={formData.notes} onChange={handleChange} rows={2}
+              style={formSection.textarea} placeholder="ملاحظات عن الجلسة..." />
+          </div>
+        </FormCard>
+
+        {/* ═══════════════════════════════════════
+            CARD 2: نتيجة الجلسة
+        ═══════════════════════════════════════ */}
+        <FormCard
+          title="نتيجة الجلسة"
+          icon={Scale}
+          iconColor={colors.accent.amber.light}
+          expanded={expandedSections.result}
+          onToggle={() => toggleSection('result')}
+        >
+          <div style={formSection.fieldGroup}>
+            <label style={formSection.label}>نوع القرار</label>
+            <div style={styles.decisionGrid}>
+              {DECISION_TYPES.map((dt) => {
+                const Icon = dt.icon;
+                const isSelected = formData.decisionType === dt.value;
+                return (
+                  <button
+                    key={dt.value}
+                    type="button"
+                    onClick={() => handleDecisionTypeSelect(dt.value)}
+                    style={{
+                      ...styles.decisionBtn,
+                      borderColor: isSelected ? dt.color : colors.border.default,
+                      background: isSelected ? `${dt.color}15` : 'rgba(15, 23, 42, 0.4)',
+                      color: isSelected ? dt.color : colors.text.muted,
+                    }}
+                  >
+                    <Icon size={14} />
+                    <span style={{ fontSize: '12px', fontWeight: 600 }}>{dt.label}</span>
+                    {isSelected && <CheckCircle2 size={12} color={dt.color} />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={formSection.fieldGroup}>
+            <label style={formSection.label}>تفاصيل القرار</label>
+            <textarea name="decisionDetails" value={formData.decisionDetails} onChange={handleChange}
+              rows={2} style={formSection.textarea} placeholder="مثال: تأجيل لجلسة 15/10 لإعلان الخصم..." />
+          </div>
+
+          {showNextSession && (
+            <div style={{
+              background: `${colors.accent.amber.main}08`,
+              border: `1px solid ${colors.accent.amber.main}18`,
+              borderRadius: radius.md,
+              padding: spacing.lg,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: spacing.md,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+                <input
+                  type="checkbox"
+                  name="autoCreateNextSession"
+                  checked={formData.autoCreateNextSession}
+                  onChange={handleChange}
+                  style={{ width: 18, height: 18, accentColor: colors.accent.amber.main }}
+                />
+                <label style={{ fontSize: '14px', fontWeight: 600, color: colors.accent.amber.light, cursor: 'pointer' }}>
+                  إنشاء الجلسة القادمة تلقائياً
+                </label>
+              </div>
+
+              {formData.autoCreateNextSession && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+                  <div style={formSection.twoCols}>
+                    <div style={formSection.fieldGroup}>
+                      <label style={{ ...formSection.label, fontSize: '13px' }}>تاريخ الجلسة القادمة</label>
+                      <input type="date" name="nextSessionDate" value={formData.nextSessionDate}
+                        onChange={handleChange} style={{ ...formSection.input, fontSize: '13px' }} />
+                    </div>
+                    <div style={formSection.fieldGroup}>
+                      <label style={{ ...formSection.label, fontSize: '13px' }}>الوقت</label>
+                      <input type="time" name="nextSessionTime" value={formData.nextSessionTime}
+                        onChange={handleChange} style={{ ...formSection.input, fontSize: '13px' }} />
+                    </div>
+                  </div>
+                  <div style={formSection.fieldGroup}>
+                    <label style={{ ...formSection.label, fontSize: '13px' }}>المكان</label>
+                    <input type="text" name="nextSessionLocation" value={formData.nextSessionLocation}
+                      onChange={handleChange} style={{ ...formSection.input, fontSize: '13px' }} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </FormCard>
+
+        {/* ═══════════════════════════════════════
+            CARD 3: الحكم (conditional)
+        ═══════════════════════════════════════ */}
+        {showJudgment && (
+          <FormCard
+            title="بيانات الحكم"
+            icon={Gavel}
+            iconColor={colors.accent.green.light}
+            expanded={expandedSections.judgment}
+            onToggle={() => toggleSection('judgment')}
+            accentColor={colors.accent.green.main}
           >
-            {/* Decision Type Grid */}
-            <div style={styles.fieldGroup}>
-              <label style={styles.label}>نوع القرار</label>
-              <div style={styles.decisionGrid}>
-                {DECISION_TYPES.map((dt) => {
-                  const Icon = dt.icon;
-                  const isSelected = formData.decisionType === dt.value;
+            <div style={formSection.fieldGroup}>
+              <label style={formSection.label}>
+                <span style={formSection.required}>*</span> نوع الحكم
+              </label>
+              <div style={formSection.twoCols}>
+                {JUDGMENT_TYPES.map((jt) => {
+                  const isSelected = formData.judgmentType === jt.value;
                   return (
                     <button
-                      key={dt.value}
+                      key={jt.value}
                       type="button"
-                      onClick={() => handleDecisionTypeSelect(dt.value)}
+                      onClick={() => setFormData(prev => ({ ...prev, judgmentType: jt.value }))}
                       style={{
-                        ...styles.decisionBtn,
-                        borderColor: isSelected ? dt.color : 'rgba(55, 65, 81, 0.4)',
-                        background: isSelected ? `${dt.color}15` : 'rgba(15, 23, 42, 0.4)',
-                        color: isSelected ? dt.color : '#9ca3af',
+                        ...styles.judgmentTypeBtn,
+                        borderColor: isSelected ? jt.color : colors.border.default,
+                        background: isSelected ? `${jt.color}18` : 'rgba(15, 23, 42, 0.4)',
+                        color: isSelected ? jt.color : colors.text.muted,
                       }}
                     >
-                      <Icon size={14} />
-                      <span style={{ fontSize: '12px', fontWeight: 600 }}>{dt.label}</span>
-                      {isSelected && <CheckCircle2 size={12} color={dt.color} />}
+                      {jt.label}
+                      {isSelected && <CheckCircle2 size={14} color={jt.color} />}
                     </button>
                   );
                 })}
               </div>
+              {errors.judgmentType && <div style={formSection.error}><AlertCircle size={14} color={colors.accent.red.main} />{errors.judgmentType}</div>}
             </div>
 
-            {/* Decision Details */}
-            <div style={styles.fieldGroup}>
-              <label style={styles.label}>تفاصيل القرار</label>
-              <textarea
-                name="decisionDetails"
-                value={formData.decisionDetails}
-                onChange={handleChange}
-                rows={2}
-                style={styles.textarea}
-                placeholder="مثال: تأجيل لجلسة 15/10 لإعلان الخصم..."
-              />
-            </div>
-
-            {/* Next Session (conditional) */}
-            {showNextSession && (
-              <div style={{
-                background: 'rgba(245, 158, 11, 0.06)',
-                border: '1px solid rgba(245, 158, 11, 0.15)',
-                borderRadius: '12px',
-                padding: '14px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '12px',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input
-                    type="checkbox"
-                    name="autoCreateNextSession"
-                    checked={formData.autoCreateNextSession}
-                    onChange={handleChange}
-                    style={{ width: '18px', height: '18px', accentColor: '#f59e0b' }}
-                  />
-                  <label style={{ fontSize: '14px', fontWeight: 600, color: '#f59e0b', cursor: 'pointer' }}>
-                    إنشاء الجلسة القادمة تلقائياً
-                  </label>
-                </div>
-
-                {formData.autoCreateNextSession && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div style={styles.twoCols}>
-                      <div style={styles.fieldGroup}>
-                        <label style={{ ...styles.label, fontSize: '13px' }}>تاريخ الجلسة القادمة</label>
-                        <input
-                          type="date"
-                          name="nextSessionDate"
-                          value={formData.nextSessionDate}
-                          onChange={handleChange}
-                          style={{ ...styles.input, fontSize: '13px' }}
-                        />
-                      </div>
-                      <div style={styles.fieldGroup}>
-                        <label style={{ ...styles.label, fontSize: '13px' }}>الوقت</label>
-                        <input
-                          type="time"
-                          name="nextSessionTime"
-                          value={formData.nextSessionTime}
-                          onChange={handleChange}
-                          style={{ ...styles.input, fontSize: '13px' }}
-                        />
-                      </div>
-                    </div>
-                    <div style={styles.fieldGroup}>
-                      <label style={{ ...styles.label, fontSize: '13px' }}>المكان</label>
-                      <input
-                        type="text"
-                        name="nextSessionLocation"
-                        value={formData.nextSessionLocation}
-                        onChange={handleChange}
-                        style={{ ...styles.input, fontSize: '13px' }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </Card>
-
-          {/* ═══════════════════════════════════════
-              CARD 3: الحكم (conditional)
-          ═══════════════════════════════════════ */}
-          {showJudgment && (
-            <Card
-              title="بيانات الحكم"
-              icon={Gavel}
-              iconColor="#10b981"
-              expanded={expandedSections.judgment}
-              onToggle={() => toggleSection('judgment')}
-              accentColor="#10b981"
-            >
-              {/* Judgment Type */}
-              <div style={styles.fieldGroup}>
-                <label style={styles.label}>
-                  <span style={styles.required}>*</span> نوع الحكم
-                </label>
-                <div style={styles.twoCols}>
-                  {JUDGMENT_TYPES.map((jt) => {
-                    const isSelected = formData.judgmentType === jt.value;
-                    return (
-                      <button
-                        key={jt.value}
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, judgmentType: jt.value }))}
-                        style={{
-                          ...styles.judgmentTypeBtn,
-                          borderColor: isSelected ? jt.color : 'rgba(55, 65, 81, 0.4)',
-                          background: isSelected ? `${jt.color}18` : 'rgba(15, 23, 42, 0.4)',
-                          color: isSelected ? jt.color : '#9ca3af',
-                        }}
-                      >
-                        {jt.label}
-                        {isSelected && <CheckCircle2 size={14} color={jt.color} />}
-                      </button>
-                    );
-                  })}
-                </div>
-                {errors.judgmentType && <div style={styles.error}><AlertCircle size={14} color="#ef4444" />{errors.judgmentType}</div>}
-              </div>
-
-              {/* Judgment Summary */}
-              <div style={styles.fieldGroup}>
-                <label style={styles.label}>
-                  <span style={styles.required}>*</span> منطوق الحكم
-                </label>
-                <textarea
-                  name="judgmentSummary"
-                  value={formData.judgmentSummary}
-                  onChange={handleChange}
-                  rows={4}
-                  style={{
-                    ...styles.textarea,
-                    borderColor: errors.judgmentSummary ? '#ef4444' : 'rgba(55, 65, 81, 0.5)',
-                  }}
-                  placeholder="اكتب منطوق الحكم كاملاً..."
-                />
-                {errors.judgmentSummary && <div style={styles.error}><AlertCircle size={14} color="#ef4444" />{errors.judgmentSummary}</div>}
-              </div>
-
-              {/* Appealable & Deadline */}
-              <div style={styles.twoCols}>
-                <div style={styles.fieldGroup}>
-                  <label style={{ ...styles.label, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input
-                      type="checkbox"
-                      name="judgmentAppealable"
-                      checked={formData.judgmentAppealable}
-                      onChange={handleChange}
-                      style={{ width: '18px', height: '18px', accentColor: '#10b981' }}
-                    />
-                    قابل للاستئناف
-                  </label>
-                </div>
-
-                {formData.judgmentAppealable && (
-                  <div style={styles.fieldGroup}>
-                    <label style={styles.label}>آخر موعد للاستئناف</label>
-                    <div style={styles.inputWrapper}>
-                      <Calendar size={16} color="#6b7280" style={styles.inputIcon} />
-                      <input
-                        type="date"
-                        name="appealDeadline"
-                        value={formData.appealDeadline}
-                        onChange={handleChange}
-                        style={{ ...styles.input, paddingRight: '40px' }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Card>
-          )}
-
-          {/* ═══════════════════════════════════════
-              CARD 4: الأعمال الإدارية (optional)
-          ═══════════════════════════════════════ */}
-          <Card
-            title="الأعمال الإدارية"
-            icon={Briefcase}
-            iconColor="#d97706"
-            expanded={expandedSections.adminTasks}
-            onToggle={() => toggleSection('adminTasks')}
-            badge={formData.adminTasks.length > 0 ? `${formData.adminTasks.length} عمل` : null}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-              <input
-                type="checkbox"
-                name="hasAdminTasks"
-                checked={formData.hasAdminTasks}
-                onChange={handleChange}
-                style={{ width: '18px', height: '18px', accentColor: '#d97706' }}
-              />
-              <label style={{ fontSize: '14px', fontWeight: 600, color: '#d1d5db', cursor: 'pointer' }}>
-                هل يوجد عمل إداري بعد هذه الجلسة؟
+            <div style={formSection.fieldGroup}>
+              <label style={formSection.label}>
+                <span style={formSection.required}>*</span> منطوق الحكم
               </label>
+              <textarea name="judgmentSummary" value={formData.judgmentSummary} onChange={handleChange}
+                rows={4} style={{ ...formSection.textarea, borderColor: errors.judgmentSummary ? colors.accent.red.main : colors.border.default }}
+                placeholder="اكتب منطوق الحكم كاملاً..." />
+              {errors.judgmentSummary && <div style={formSection.error}><AlertCircle size={14} color={colors.accent.red.main} />{errors.judgmentSummary}</div>}
             </div>
 
-            {formData.hasAdminTasks && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {formData.adminTasks.map((task, idx) => (
-                  <div key={task.id} style={{
-                    background: 'rgba(15, 23, 42, 0.5)',
-                    border: '1px solid rgba(55, 65, 81, 0.4)',
-                    borderRadius: '12px',
-                    padding: '12px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '10px',
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 600, color: '#d97706' }}>
-                        العمل {idx + 1}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeAdminTask(task.id)}
-                        style={{
-                          background: 'none', border: 'none', color: '#ef4444',
-                          cursor: 'pointer', padding: '4px', borderRadius: '6px',
-                        }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+            <div style={formSection.twoCols}>
+              <div style={formSection.fieldGroup}>
+                <label style={{ ...formSection.label, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+                  <input type="checkbox" name="judgmentAppealable" checked={formData.judgmentAppealable}
+                    onChange={handleChange} style={{ width: 18, height: 18, accentColor: colors.accent.green.main }} />
+                  قابل للاستئناف
+                </label>
+              </div>
 
-                    <div style={styles.twoCols}>
-                      <div style={styles.fieldGroup}>
-                        <label style={{ ...styles.label, fontSize: '12px' }}>النوع</label>
-                        <select
-                          value={task.type}
-                          onChange={(e) => updateAdminTask(task.id, 'type', e.target.value)}
-                          style={{ ...styles.input, fontSize: '13px' }}
-                        >
-                          <option value="">اختر...</option>
-                          {ADMIN_TASK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                      </div>
-                      <div style={styles.fieldGroup}>
-                        <label style={{ ...styles.label, fontSize: '12px' }}>ميعاد التنفيذ</label>
-                        <input
-                          type="date"
-                          value={task.dueDate}
-                          onChange={(e) => updateAdminTask(task.id, 'dueDate', e.target.value)}
-                          style={{ ...styles.input, fontSize: '13px' }}
-                        />
-                      </div>
-                    </div>
+              {formData.judgmentAppealable && (
+                <div style={formSection.fieldGroup}>
+                  <label style={formSection.label}>آخر موعد للاستئناف</label>
+                  <input type="date" name="appealDeadline" value={formData.appealDeadline}
+                    onChange={handleChange} style={formSection.input} />
+                </div>
+              )}
+            </div>
+          </FormCard>
+        )}
 
-                    <div style={styles.fieldGroup}>
-                      <label style={{ ...styles.label, fontSize: '12px' }}>الوصف</label>
-                      <input
-                        type="text"
-                        value={task.description}
-                        onChange={(e) => updateAdminTask(task.id, 'description', e.target.value)}
-                        style={{ ...styles.input, fontSize: '13px' }}
-                        placeholder="وصف العمل..."
-                      />
-                    </div>
+        {/* ═══════════════════════════════════════
+            CARD 4: الأعمال الإدارية (optional)
+        ═══════════════════════════════════════ */}
+        <FormCard
+          title="الأعمال الإدارية"
+          icon={Briefcase}
+          iconColor={colors.accent.amber.light}
+          expanded={expandedSections.adminTasks}
+          onToggle={() => toggleSection('adminTasks')}
+          badge={formData.adminTasks.length > 0 ? `${formData.adminTasks.length} عمل` : null}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md }}>
+            <input type="checkbox" name="hasAdminTasks" checked={formData.hasAdminTasks}
+              onChange={handleChange} style={{ width: 18, height: 18, accentColor: colors.accent.amber.main }} />
+            <label style={{ fontSize: '14px', fontWeight: 600, color: colors.text.secondary, cursor: 'pointer' }}>
+              هل يوجد عمل إداري بعد هذه الجلسة؟
+            </label>
+          </div>
 
-                    <div style={styles.fieldGroup}>
-                      <label style={{ ...styles.label, fontSize: '12px' }}>الموظف المسؤول</label>
-                      <input
-                        type="text"
-                        value={task.assignee}
-                        onChange={(e) => updateAdminTask(task.id, 'assignee', e.target.value)}
-                        style={{ ...styles.input, fontSize: '13px' }}
-                        placeholder="اسم الموظف..."
-                      />
+          {formData.hasAdminTasks && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+              {formData.adminTasks.map((task, idx) => (
+                <div key={task.id} style={{
+                  background: 'rgba(15, 23, 42, 0.5)',
+                  border: `1px solid ${colors.border.default}`,
+                  borderRadius: radius.md,
+                  padding: spacing.md,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: spacing.sm,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: colors.accent.amber.light }}>
+                      العمل {idx + 1}
+                    </span>
+                    <button type="button" onClick={() => removeAdminTask(task.id)}
+                      style={{ background: 'none', border: 'none', color: colors.accent.red.main,
+                        cursor: 'pointer', padding: '4px', borderRadius: radius.sm }}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+
+                  <div style={formSection.twoCols}>
+                    <div style={formSection.fieldGroup}>
+                      <label style={{ ...formSection.label, fontSize: '12px' }}>النوع</label>
+                      <select value={task.type} onChange={(e) => updateAdminTask(task.id, 'type', e.target.value)}
+                        style={{ ...formSection.input, fontSize: '13px' }}>
+                        <option value="">اختر...</option>
+                        {ADMIN_TASK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div style={formSection.fieldGroup}>
+                      <label style={{ ...formSection.label, fontSize: '12px' }}>ميعاد التنفيذ</label>
+                      <input type="date" value={task.dueDate}
+                        onChange={(e) => updateAdminTask(task.id, 'dueDate', e.target.value)}
+                        style={{ ...formSection.input, fontSize: '13px' }} />
                     </div>
                   </div>
-                ))}
 
-                <button
-                  type="button"
-                  onClick={addAdminTask}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                    padding: '10px', background: 'rgba(217, 119, 6, 0.1)',
-                    border: '1px dashed rgba(217, 119, 6, 0.3)', borderRadius: '12px',
-                    color: '#d97706', fontSize: '13px', fontWeight: 600,
-                    cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s',
-                  }}
-                >
-                  <Plus size={16} />
-                  إضافة عمل إداري
-                </button>
-              </div>
-            )}
-          </Card>
+                  <div style={formSection.fieldGroup}>
+                    <label style={{ ...formSection.label, fontSize: '12px' }}>الوصف</label>
+                    <input type="text" value={task.description}
+                      onChange={(e) => updateAdminTask(task.id, 'description', e.target.value)}
+                      style={{ ...formSection.input, fontSize: '13px' }} placeholder="وصف العمل..." />
+                  </div>
 
-          {/* ═══════════════════════════════════════
-              CARD 5: المرفقات
-          ═══════════════════════════════════════ */}
-          <Card
-            title="المرفقات"
-            icon={Upload}
-            iconColor="#8b5cf6"
-            expanded={expandedSections.attachments}
-            onToggle={() => toggleSection('attachments')}
-          >
-            <div style={{
-              border: '2px dashed rgba(139, 92, 246, 0.3)',
-              borderRadius: '12px',
-              padding: '24px',
-              textAlign: 'center',
-              color: '#9ca3af',
-              fontSize: '14px',
-            }}>
-              <Upload size={32} color="#8b5cf6" style={{ marginBottom: '8px' }} />
-              <div>اسحب الملفات هنا أو اضغط للاختيار</div>
-              <div style={{ fontSize: '12px', marginTop: '4px', color: '#6b7280' }}>
-                محضر الجلسة، الحكم، مستندات أخرى
-              </div>
-            </div>
-          </Card>
+                  <div style={formSection.fieldGroup}>
+                    <label style={{ ...formSection.label, fontSize: '12px' }}>الموظف المسؤول</label>
+                    <input type="text" value={task.assignee}
+                      onChange={(e) => updateAdminTask(task.id, 'assignee', e.target.value)}
+                      style={{ ...formSection.input, fontSize: '13px' }} placeholder="اسم الموظف..." />
+                  </div>
+                </div>
+              ))}
 
-          {/* ═══ WORKFLOW PREVIEW ═══ */}
-          {formData.suggestedStage && (
-            <div style={{
-              background: 'rgba(30, 64, 175, 0.08)',
-              border: '1px solid rgba(30, 64, 175, 0.2)',
-              borderRadius: '14px',
-              padding: '14px 18px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Sparkles size={16} color="#60a5fa" />
-                <span style={{ fontSize: '14px', fontWeight: 700, color: '#60a5fa' }}>
-                  ما سيحدث عند الحفظ
-                </span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <WorkflowItem icon={CheckCircle2} color="#10b981" text="إنشاء/تحديث الجلسة" />
-                <WorkflowItem icon={Scale} color="#f59e0b" text={`تحديث مرحلة القضية إلى: ${STAGE_LABELS[formData.suggestedStage]}`} />
-                {formData.suggestedTask && (
-                  <WorkflowItem icon={Briefcase} color="#d97706" text={`إنشاء مهمة: ${formData.suggestedTask}`} />
-                )}
-                {showNextSession && formData.autoCreateNextSession && formData.nextSessionDate && (
-                  <WorkflowItem icon={Calendar} color="#60a5fa" text={`إنشاء جلسة قادمة: ${new Date(formData.nextSessionDate).toLocaleDateString('ar-EG')}`} />
-                )}
-                {formData.hasAdminTasks && formData.adminTasks.length > 0 && (
-                  <WorkflowItem icon={Briefcase} color="#8b5cf6" text={`إنشاء ${formData.adminTasks.length} عمل إداري`} />
-                )}
-                {showJudgment && (
-                  <WorkflowItem icon={Gavel} color="#10b981" text="إنشاء سجل الحكم" />
-                )}
-              </div>
+              <button type="button" onClick={addAdminTask}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+                  padding: spacing.md, background: `${colors.accent.amber.main}10`,
+                  border: `1px dashed ${colors.accent.amber.main}30`, borderRadius: radius.md,
+                  color: colors.accent.amber.light, fontSize: '13px', fontWeight: 600,
+                  cursor: 'pointer', fontFamily: 'inherit', transition: transitions.default,
+                }}>
+                <Plus size={16} />
+                إضافة عمل إداري
+              </button>
             </div>
           )}
+        </FormCard>
 
-          {/* ═══ BUTTONS ═══ */}
-          <div style={styles.buttons}>
-            <button type="button" onClick={(e) => { e.stopPropagation(); onClose(); }} style={styles.cancelBtn}>
-              إلغاء
-            </button>
-            <button type="submit" disabled={loading}
-              style={{ ...styles.submitBtn, opacity: loading ? 0.7 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
-              {loading ? (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={styles.spinner} />جاري الحفظ...
-                </span>
-              ) : (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <CheckCircle2 size={18} />
-                  حفظ الجلسة والنتيجة
-                </span>
-              )}
-            </button>
+        {/* ═══════════════════════════════════════
+            CARD 5: المرفقات
+        ═══════════════════════════════════════ */}
+        <FormCard
+          title="المرفقات"
+          icon={Upload}
+          iconColor={colors.accent.purple.light}
+          expanded={expandedSections.attachments}
+          onToggle={() => toggleSection('attachments')}
+        >
+          <div style={{
+            border: `2px dashed ${colors.accent.purple.main}30`,
+            borderRadius: radius.md,
+            padding: spacing['2xl'],
+            textAlign: 'center',
+            color: colors.text.muted,
+            fontSize: '14px',
+          }}>
+            <Upload size={32} color={colors.accent.purple.light} style={{ marginBottom: spacing.sm }} />
+            <div>اسحب الملفات هنا أو اضغط للاختيار</div>
+            <div style={{ fontSize: '12px', marginTop: spacing.xs, color: colors.text.disabled }}>
+              محضر الجلسة، الحكم، مستندات أخرى
+            </div>
           </div>
-        </form>
-      </div>
-    </div>
+        </FormCard>
+
+        {/* ═══ WORKFLOW PREVIEW ═══ */}
+        {formData.suggestedStage && (
+          <div style={{
+            background: `${colors.accent.blue.main}08`,
+            border: `1px solid ${colors.accent.blue.main}18`,
+            borderRadius: radius.lg,
+            padding: `${spacing.md} ${spacing.lg}`,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: spacing.sm,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+              <Sparkles size={16} color={colors.accent.blue.light} />
+              <span style={{ fontSize: '14px', fontWeight: 700, color: colors.accent.blue.light }}>
+                ما سيحدث عند الحفظ
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.xs }}>
+              <WorkflowItem icon={CheckCircle2} color={colors.accent.green.main} text="إنشاء/تحديث الجلسة" />
+              <WorkflowItem icon={Scale} color={colors.accent.amber.main} text={`تحديث مرحلة القضية إلى: ${STAGE_LABELS[formData.suggestedStage]}`} />
+              {formData.suggestedTask && (
+                <WorkflowItem icon={Briefcase} color={colors.accent.amber.main} text={`إنشاء مهمة: ${formData.suggestedTask}`} />
+              )}
+              {showNextSession && formData.autoCreateNextSession && formData.nextSessionDate && (
+                <WorkflowItem icon={Calendar} color={colors.accent.blue.light} text={`إنشاء جلسة قادمة: ${new Date(formData.nextSessionDate).toLocaleDateString('ar-EG')}`} />
+              )}
+              {formData.hasAdminTasks && formData.adminTasks.length > 0 && (
+                <WorkflowItem icon={Briefcase} color={colors.accent.purple.main} text={`إنشاء ${formData.adminTasks.length} عمل إداري`} />
+              )}
+              {showJudgment && (
+                <WorkflowItem icon={Gavel} color={colors.accent.green.main} text="إنشاء سجل الحكم" />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══ BUTTONS ═══ */}
+        <div style={formSection.buttons}>
+          <button type="button" onClick={(e) => { e.stopPropagation(); onClose(); }}
+            style={formSection.cancelBtn}>
+            إلغاء
+          </button>
+          <button type="submit" disabled={loading}
+            style={{ ...formSection.submitBtn(colors.accent.blue.main), opacity: loading ? 0.7 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
+            {loading ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+                <span style={formSection.spinner} />جاري الحفظ...
+              </span>
+            ) : (
+              <span style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+                <CheckCircle2 size={18} />
+                حفظ الجلسة والنتيجة
+              </span>
+            )}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -890,59 +716,46 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
 // SUB COMPONENTS
 // ═══════════════════════════════════════════════════════════════════
 
-function Card({ title, icon: Icon, iconColor, children, expanded, onToggle, badge = null, accentColor = null }) {
+function FormCard({ title, icon: Icon, iconColor, children, expanded, onToggle, badge = null, accentColor = null }) {
   return (
     <div style={{
       background: 'rgba(15, 23, 42, 0.4)',
-      border: `1px solid ${accentColor ? `${accentColor}30` : 'rgba(55, 65, 81, 0.3)'}`,
-      borderRadius: '16px',
+      border: `1px solid ${accentColor ? `${accentColor}30` : colors.border.default}`,
+      borderRadius: radius.lg,
       overflow: 'hidden',
-      transition: 'all 0.2s ease',
+      transition: transitions.default,
     }}>
-      <button
-        type="button"
-        onClick={onToggle}
+      <button type="button" onClick={onToggle}
         style={{
-          width: '100%',
-          padding: '14px 18px',
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          fontFamily: 'inherit',
-          textAlign: 'right',
-          direction: 'rtl',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          width: '100%', padding: `${spacing.md} ${spacing.lg}`,
+          background: 'none', border: 'none', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          fontFamily: 'inherit', textAlign: 'right', direction: 'rtl',
+          color: colors.text.primary,
+        }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md }}>
           <div style={{
-            width: '32px', height: '32px',
-            background: `${iconColor}15`,
-            borderRadius: '10px',
+            width: 32, height: 32,
+            background: `${iconColor}15`, borderRadius: radius.md,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <Icon size={16} color={iconColor} />
           </div>
-          <span style={{ fontSize: '15px', fontWeight: 700, color: '#e5e7eb' }}>{title}</span>
+          <span style={{ fontSize: '15px', fontWeight: 700, color: colors.text.primary }}>{title}</span>
           {badge && (
             <span style={{
               background: `${iconColor}15`, color: iconColor,
-              padding: '2px 10px', borderRadius: '20px',
+              padding: `${spacing.xs} ${spacing.md}`, borderRadius: radius.full,
               fontSize: '12px', fontWeight: 700,
             }}>{badge}</span>
           )}
         </div>
-        <ChevronRight
-          size={18}
-          color="#6b7280"
-          style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
-        />
+        <ChevronRight size={18} color={colors.text.muted}
+          style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: transitions.default }} />
       </button>
 
       {expanded && (
-        <div style={{ padding: '0 18px 18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div style={{ padding: `0 ${spacing.lg} ${spacing.lg}`, display: 'flex', flexDirection: 'column', gap: spacing.md }}>
           {children}
         </div>
       )}
@@ -952,7 +765,7 @@ function Card({ title, icon: Icon, iconColor, children, expanded, onToggle, badg
 
 function WorkflowItem({ icon: Icon, color, text }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#9ca3af' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, fontSize: '13px', color: colors.text.muted }}>
       <Icon size={14} color={color} />
       <span>{text}</span>
     </div>
@@ -960,97 +773,24 @@ function WorkflowItem({ icon: Icon, color, text }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// STYLES
+// LOCAL STYLES (only for decision grid & judgment buttons)
 // ═══════════════════════════════════════════════════════════════════
 const styles = {
-  overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.75)',
-    backdropFilter: 'blur(10px)', zIndex: 99999,
-    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
-  },
-  modal: {
-    background: '#1e293b', border: '1px solid rgba(55, 65, 81, 0.5)',
-    borderRadius: '24px', width: '100%', maxWidth: '640px',
-    maxHeight: '92vh', overflow: 'auto',
-    boxShadow: '0 32px 64px rgba(0, 0, 0, 0.5)', position: 'relative',
-  },
-  header: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '24px 24px 16px', borderBottom: '1px solid rgba(55, 65, 81, 0.3)',
-    position: 'sticky', top: 0, background: '#1e293b', zIndex: 10,
-    borderRadius: '24px 24px 0 0',
-  },
-  headerLeft: { display: 'flex', alignItems: 'center', gap: '12px' },
-  headerIcon: {
-    width: '44px', height: '44px',
-    background: 'linear-gradient(135deg, #1e3a8a, #1e40af)',
-    borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    boxShadow: '0 8px 24px rgba(30, 64, 175, 0.25)',
-  },
-  headerTitle: { fontSize: '18px', fontWeight: 700, color: '#f3f4f6', margin: 0 },
-  headerSubtitle: { fontSize: '13px', color: '#9ca3af', margin: '4px 0 0 0' },
-  closeBtn: {
-    background: 'none', border: 'none', cursor: 'pointer', padding: '8px',
-    borderRadius: '10px', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center',
-  },
-  form: {
-    padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: '16px',
-  },
-  fieldGroup: { display: 'flex', flexDirection: 'column', gap: '6px' },
-  label: { fontSize: '14px', fontWeight: 600, color: '#d1d5db', display: 'flex', alignItems: 'center', gap: '4px' },
-  required: { color: '#ef4444', fontSize: '16px' },
-  inputWrapper: { position: 'relative' },
-  inputIcon: { position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' },
-  input: {
-    width: '100%', padding: '12px 16px', background: 'rgba(15, 23, 42, 0.6)',
-    border: '1px solid rgba(55, 65, 81, 0.5)', borderRadius: '12px',
-    color: '#f3f4f6', fontSize: '14px', fontFamily: 'inherit', outline: 'none',
-    transition: 'all 0.2s', boxSizing: 'border-box',
-  },
-  textarea: {
-    width: '100%', padding: '12px 16px', background: 'rgba(15, 23, 42, 0.6)',
-    border: '1px solid rgba(55, 65, 81, 0.5)', borderRadius: '12px',
-    color: '#f3f4f6', fontSize: '14px', fontFamily: 'inherit', outline: 'none',
-    transition: 'all 0.2s', resize: 'vertical', minHeight: '80px', boxSizing: 'border-box',
-  },
-  twoCols: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' },
   decisionGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
-    gap: '8px',
+    gap: spacing.sm,
   },
   decisionBtn: {
     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-    gap: '5px', padding: '10px 6px', borderRadius: '12px', border: '1px solid',
+    gap: spacing.xs, padding: '10px 6px', borderRadius: radius.md, border: '1px solid',
     background: 'none', cursor: 'pointer', fontFamily: 'inherit',
-    transition: 'all 0.2s ease', minHeight: '64px',
+    transition: transitions.default, minHeight: '64px',
   },
   judgmentTypeBtn: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-    padding: '12px', borderRadius: '12px', border: '1px solid',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+    padding: spacing.md, borderRadius: radius.md, border: '1px solid',
     background: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 600,
-    fontFamily: 'inherit', transition: 'all 0.2s ease',
-  },
-  error: { display: 'flex', alignItems: 'center', gap: '6px', color: '#ef4444', fontSize: '13px', marginTop: '4px' },
-  buttons: {
-    display: 'flex', gap: '12px', marginTop: '8px',
-    paddingTop: '16px', borderTop: '1px solid rgba(55, 65, 81, 0.3)',
-  },
-  cancelBtn: {
-    flex: 1, padding: '12px 24px', background: 'transparent',
-    border: '1px solid rgba(55, 65, 81, 0.5)', borderRadius: '14px',
-    color: '#9ca3af', fontSize: '15px', fontWeight: 600, cursor: 'pointer',
-    transition: 'all 0.2s ease', fontFamily: 'inherit',
-  },
-  submitBtn: {
-    flex: 1, padding: '12px 24px', background: '#1e40af', border: 'none',
-    borderRadius: '14px', color: 'white', fontSize: '15px', fontWeight: 600,
-    cursor: 'pointer', transition: 'all 0.2s ease', fontFamily: 'inherit',
-    boxShadow: '0 4px 16px rgba(30, 64, 175, 0.3)',
-  },
-  spinner: {
-    width: '18px', height: '18px', border: '2px solid rgba(255, 255, 255, 0.3)',
-    borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.8s linear infinite',
-    display: 'inline-block',
+    fontFamily: 'inherit', transition: transitions.default,
   },
 };

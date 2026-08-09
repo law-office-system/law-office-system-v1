@@ -1,19 +1,39 @@
+/* ═══════════════════════════════════════════════════════════════
+   APP STYLES — Dark Mode Unified
+   يتوافق مع design-system.js
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── CSS Variables (Dark Mode) ── */
 :root {
-  --primary: #2c3e50;
-  --primary-dark: #1f2d3a;
+  --bg-page:     #0f172a;
+  --bg-card:     #1e293b;
+  --bg-input:    rgba(15, 23, 42, 0.6);
+  --bg-hover:    rgba(255, 255, 255, 0.03);
 
-  --wood: #6b4f3b;
-  --wood-dark: #4a3426;
+  --border-default: rgba(55, 65, 81, 0.5);
+  --border-focus:   rgba(96, 165, 250, 0.5);
 
-  --gold: #b08d57;
+  --text-primary:   #f3f4f6;
+  --text-secondary: #d1d5db;
+  --text-muted:     #9ca3af;
+  --text-disabled:  #6b7280;
 
-  --background: #f5f7fb;
-  --card-bg: #ffffff;
+  --accent-blue:   #3b82f6;
+  --accent-amber:  #d97706;
+  --accent-green:  #10b981;
+  --accent-red:    #ef4444;
+  --accent-purple: #8b5cf6;
+  --accent-cyan:   #06b6d4;
 
-  --text-main: #2b2b2b;
-  --text-light: #666;
+  --wood:        #8b5a2b;
+  --wood-dark:   #6b4423;
+  --wood-light:  #a67c52;
+  --gold:        #b08d57;
 
-  --border: #e6e6e6;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
 }
 
 /* =========================
@@ -28,14 +48,10 @@ html, body, #root {
 }
 
 body {
-  font-family: Arial, sans-serif;
-
-  background: var(--background);
-  color: var(--text-main);
-
+  font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+  background: var(--bg-page);
+  color: var(--text-primary);
   overflow-x: hidden;
-
-  /* 🔥 أهم تعديل في المشروع كله */
   direction: rtl;
   text-align: right;
 }
@@ -46,6 +62,7 @@ body {
 
 img {
   max-width: 100%;
+  display: block;
 }
 
 /* =========================
@@ -56,46 +73,21 @@ img {
   display: flex;
   min-height: 100vh;
   width: 100%;
-
-  /* RTL support */
   flex-direction: row;
 }
 
 .main-area {
   flex: 1;
   min-width: 0;
-
   display: flex;
   flex-direction: column;
-
   transition: 0.3s ease;
 }
 
 .page-content {
-  padding: 20px;
+  padding: clamp(12px, 3vw, 20px);
   flex: 1;
-
-  background: var(--background);
-}
-
-/* =========================
-   CARD SYSTEM
-========================= */
-
-.card {
-  background: var(--card-bg);
-  border-radius: 12px;
-  padding: 20px;
-
-  border-right: 5px solid var(--wood);
-
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
-
-  transition: 0.2s;
-}
-
-.card:hover {
-  transform: translateY(-2px);
+  background: var(--bg-page);
 }
 
 /* =========================
@@ -103,85 +95,8 @@ img {
 ========================= */
 
 h1, h2, h3 {
-  color: var(--wood-dark);
+  color: var(--text-primary);
   margin-top: 0;
-}
-
-/* =========================
-   BUTTON SYSTEM (GLOBAL FIX)
-========================= */
-
-button {
-  border: none;
-  cursor: pointer;
-  transition: 0.2s;
-  font-family: inherit;
-}
-
-.btn-primary {
-  background: var(--wood);
-  color: white;
-  padding: 10px 16px;
-  border-radius: 8px;
-}
-
-.btn-primary:hover {
-  background: var(--wood-dark);
-}
-
-.btn-secondary {
-  background: var(--primary);
-  color: white;
-  padding: 10px 16px;
-  border-radius: 8px;
-}
-
-.btn-secondary:hover {
-  background: var(--primary-dark);
-}
-
-/* =========================
-   TABLE SYSTEM (FIXED RTL)
-========================= */
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: white;
-}
-
-th {
-  background: var(--primary);
-  color: white;
-  text-align: right;
-}
-
-td {
-  text-align: right;
-}
-
-th, td {
-  padding: 12px;
-  border: 1px solid var(--border);
-}
-
-/* =========================
-   INPUT SYSTEM
-========================= */
-
-input, select, textarea {
-  width: 100%;
-  padding: 10px;
-
-  border: 1px solid var(--border);
-  border-radius: 8px;
-
-  font-family: inherit;
-}
-
-input:focus, select:focus, textarea:focus {
-  outline: none;
-  border-color: var(--wood);
 }
 
 /* =========================
@@ -196,14 +111,14 @@ input:focus, select:focus, textarea:focus {
 .profile-title {
   margin-bottom: 20px;
   font-size: 24px;
+  color: var(--text-primary);
 }
 
 .profile-card {
-  background: var(--card-bg);
-  border-radius: 14px;
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
   padding: 20px;
-
-  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
   border-right: 5px solid var(--wood);
 }
 
@@ -211,9 +126,8 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   justify-content: space-between;
   align-items: center;
-
   padding: 14px 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .profile-row:last-child {
@@ -221,18 +135,18 @@ input:focus, select:focus, textarea:focus {
 }
 
 .profile-row span {
-  color: var(--text-light);
+  color: var(--text-muted);
   font-size: 14px;
 }
 
 .profile-row strong {
-  color: var(--text-main);
+  color: var(--text-primary);
 }
 
 .profile-row small {
   font-size: 12px;
   word-break: break-all;
-  color: var(--text-light);
+  color: var(--text-muted);
 }
 
 /* =========================
@@ -260,7 +174,7 @@ input:focus, select:focus, textarea:focus {
   .admin-tasks-page {
     padding: 12px !important;
   }
-  
+
   .judgments-header,
   .admin-tasks-header {
     flex-direction: column !important;
@@ -268,54 +182,54 @@ input:focus, select:focus, textarea:focus {
     gap: 12px !important;
     margin-bottom: 16px !important;
   }
-  
+
   .judgments-stats-grid,
   .admin-tasks-stats-grid {
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 8px !important;
   }
-  
+
   .judgments-stats-grid > div,
   .admin-tasks-stats-grid > div {
     padding: 12px 8px !important;
   }
-  
+
   .judgments-stats-grid > div > div:first-child,
   .admin-tasks-stats-grid > div > div:first-child {
     width: 32px !important;
     height: 32px !important;
     margin-bottom: 6px !important;
   }
-  
+
   .judgments-stats-grid > div > div:nth-child(2),
   .admin-tasks-stats-grid > div > div:nth-child(2) {
     font-size: 18px !important;
   }
-  
+
   .judgments-stats-grid > div > div:nth-child(3),
   .admin-tasks-stats-grid > div > div:nth-child(3) {
     font-size: 11px !important;
   }
-  
+
   .judgments-controls,
   .admin-tasks-controls {
     flex-direction: column !important;
     align-items: stretch !important;
     gap: 10px !important;
   }
-  
+
   .admin-tasks-filter-group {
     overflow-x: auto !important;
     width: 100% !important;
     -webkit-overflow-scrolling: touch !important;
   }
-  
+
   .judgments-search-box,
   .admin-tasks-search-box {
     width: 100% !important;
     max-width: 100% !important;
   }
-  
+
   .judgments-search-box input,
   .admin-tasks-search-box input {
     width: 100% !important;
@@ -327,214 +241,104 @@ input:focus, select:focus, textarea:focus {
   .admin-tasks-stats-grid > div > div:nth-child(2) {
     font-size: 16px !important;
   }
-  
+
   .judgments-stats-grid > div > div:nth-child(3),
   .admin-tasks-stats-grid > div > div:nth-child(3) {
     font-size: 10px !important;
   }
 }
+
 /* ===== Chat Sidebar Animations ===== */
 
-/* Slide In Animation for Mobile Drawer */
 @keyframes slideIn {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
 }
 
-/* Slide Out Animation for Mobile Drawer */
 @keyframes slideOut {
-  from {
-    transform: translateX(0);
-    opacity: 1;
-  }
-  to {
-    transform: translateX(100%);
-    opacity: 0;
-  }
+  from { transform: translateX(0); opacity: 1; }
+  to   { transform: translateX(100%); opacity: 0; }
 }
 
-/* Fade In Animation */
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
-/* Fade In Up Animation */
 @keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Pulse Animation for Unread Badge */
 @keyframes pulse {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.1);
-  }
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.1); }
 }
 
-/* Typing Dots Animation */
 @keyframes typingBounce {
-  0%, 80%, 100% {
-    transform: scale(0);
-    opacity: 0.5;
-  }
-  40% {
-    transform: scale(1);
-    opacity: 1;
-  }
+  0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+  40%             { transform: scale(1); opacity: 1; }
 }
 
-/* Spin Animation for Loading */
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 
-/* Shake Animation for Notifications */
 @keyframes shake {
-  0%, 100% {
-    transform: translateX(0);
-  }
-  10%, 30%, 50%, 70%, 90% {
-    transform: translateX(-2px);
-  }
-  20%, 40%, 60%, 80% {
-    transform: translateX(2px);
-  }
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+  20%, 40%, 60%, 80% { transform: translateX(2px); }
 }
 
-/* Glow Animation for Active Room */
 @keyframes glow {
-  0%, 100% {
-    box-shadow: 0 0 5px rgba(233, 69, 96, 0.3);
-  }
-  50% {
-    box-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
-  }
+  0%, 100% { box-shadow: 0 0 5px rgba(233, 69, 96, 0.3); }
+  50%      { box-shadow: 0 0 20px rgba(233, 69, 96, 0.5); }
 }
 
-/* Slide In Left Animation */
 @keyframes slideInLeft {
-  from {
-    transform: translateX(-100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
+  from { transform: translateX(-100%); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
 }
 
-/* Slide In Right Animation */
 @keyframes slideInRight {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
 }
 
-/* Scale In Animation */
 @keyframes scaleIn {
-  from {
-    transform: scale(0.8);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
+  from { transform: scale(0.8); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
 }
 
-/* Bounce Animation */
 @keyframes bounce {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-5px);
-  }
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-5px); }
 }
 
-/* Ripple Effect for Buttons */
 @keyframes ripple {
-  0% {
-    transform: scale(0);
-    opacity: 0.5;
-  }
-  100% {
-    transform: scale(4);
-    opacity: 0;
-  }
+  0%   { transform: scale(0); opacity: 0.5; }
+  100% { transform: scale(4); opacity: 0; }
 }
 
-/* Progress Bar Animation */
 @keyframes progress {
-  0% {
-    width: 0%;
-  }
-  100% {
-    width: 100%;
-  }
+  0%   { width: 0%; }
+  100% { width: 100%; }
 }
 
-/* Shimmer Effect for Loading */
 @keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
-/* Toast Notification Animation */
 @keyframes toastIn {
-  from {
-    transform: translateY(-100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+  from { transform: translateY(-100%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
 }
 
 @keyframes toastOut {
-  from {
-    transform: translateY(0);
-    opacity: 1;
-  }
-  to {
-    transform: translateY(-100%);
-    opacity: 0;
-  }
+  from { transform: translateY(0); opacity: 1; }
+  to   { transform: translateY(-100%); opacity: 0; }
 }
 
 /* ===== Utility Classes ===== */
@@ -604,40 +408,22 @@ input:focus, select:focus, textarea:focus {
 
 /* ===== Responsive Breakpoints ===== */
 
-/* Mobile: < 768px */
 @media (max-width: 767px) {
-  .chat-sidebar-desktop {
-    display: none !important;
-  }
-
-  .chat-sidebar-mobile {
-    display: flex !important;
-  }
+  .chat-sidebar-desktop { display: none !important; }
+  .chat-sidebar-mobile   { display: flex !important; }
 }
 
-/* Tablet: 768px - 1024px */
 @media (min-width: 768px) and (max-width: 1024px) {
-  .chat-sidebar-desktop {
-    display: flex !important;
-  }
-
-  .chat-sidebar-mobile {
-    display: none !important;
-  }
+  .chat-sidebar-desktop { display: flex !important; }
+  .chat-sidebar-mobile   { display: none !important; }
 }
 
-/* Desktop: > 1024px */
 @media (min-width: 1025px) {
-  .chat-sidebar-desktop {
-    display: flex !important;
-  }
-
-  .chat-sidebar-mobile {
-    display: none !important;
-  }
+  .chat-sidebar-desktop { display: flex !important; }
+  .chat-sidebar-mobile   { display: none !important; }
 }
 
-/* ===== Dark Mode Variables ===== */
+/* ===== Dark Mode Variables (Chat) ===== */
 
 :root {
   --chat-bg: #0f172a;

@@ -38,9 +38,13 @@ export const generateNotifications = (cases, adminTasks = [], judgments = []) =>
     const clientNames = c.clientNames || [];
     const opponentNames = c.opponentNames || [];
 
-    // فلترة الجلسات: استبعد المكتملة والملغاة
+    // فلترة الجلسات: استبعد المكتملة والملغاة واللي فيها قرار
     const validSessions = sessions.filter((s) => {
+      // النظام الجديد: decisionType
+      if (s.decisionType && s.decisionType !== 'pending') return false;
+      // النظام القديم: decision
       if (s.decision && s.decision.trim() !== "") return false;
+      // status
       if (s.status === "completed" || s.status === "مكتملة") return false;
       if (s.status === "cancelled" || s.status === "ملغاة") return false;
       return true;
@@ -82,7 +86,8 @@ export const generateNotifications = (cases, adminTasks = [], judgments = []) =>
       caseType,
       sessionDate: sessionDateStr,
       sessionRoll: closestLate.roll || "",
-      sessionDecision: closestLate.decision || "",
+      sessionDecision: closestLate.decisionDetails || closestLate.decision || "",
+      sessionDecisionType: closestLate.decisionType || "",
       sessionAction: closestLate.action || "",
       clientNames,
       opponentNames,

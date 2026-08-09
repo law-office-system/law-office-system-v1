@@ -22,6 +22,7 @@ export default function AddCase() {
   const [loading, setLoading] = useState(false);
 
   const [form, setForm] = useState({
+    caseName: "",
     caseSerial: "",
     caseYear: "",
     caseType: "",
@@ -196,7 +197,7 @@ export default function AddCase() {
         createdBy: userData.uid,
         currentLevel: "first_instance",
         currentStatus: "new",
-        activeLevelId: null, // will be updated after creating the level
+        activeLevelId: null,
         totalSessions: 0,
         totalExpenses: 0,
         createdAt: serverTimestamp(),
@@ -216,6 +217,7 @@ export default function AddCase() {
       alert("✔ تم حفظ القضية بنجاح وإنشاء درجة التقاضي الأولى");
 
       setForm({
+        caseName: "",
         caseSerial: "",
         caseYear: "",
         caseType: "",
@@ -451,6 +453,16 @@ export default function AddCase() {
       {tab === "subject" && (
         <div style={styles.section}>
           <h3 style={styles.subTitle}>📝 موضوع الدعوى (ملخص وقائع العريضة والطلبات)</h3>
+
+          {/* عنوان القضية نُقل إلى هنا */}
+          <input
+            style={{ ...styles.inputFull, marginBottom: 15, fontWeight: 600 }}
+            name="caseName"
+            placeholder="عنوان القضية (اسم القضية) *"
+            value={form.caseName}
+            onChange={handleChange}
+          />
+
           <textarea
             style={styles.textareaMain}
             name="caseSubject"

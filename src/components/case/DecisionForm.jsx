@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   X, CheckCircle2, FileText, AlertCircle, Calendar, Link2,
-  Scale, ChevronDown, Gavel
+  Scale, ChevronDown, Gavel, Clock, MapPin
 } from 'lucide-react';
 
-// ─── Decision Types (sync with SessionForm) ──────────────────────
 const DECISION_TYPES = [
   { value: 'adjourned',       label: 'تأجيل',         color: '#f59e0b', icon: Calendar },
   { value: 'adjourned_notice',label: 'تأجيل لإعلان',  color: '#f97316', icon: Calendar },
@@ -19,14 +18,17 @@ const DECISION_TYPES = [
 ];
 
 export default function DecisionForm({ session, onClose, onSave }) {
+  // FIX: use `date` ONLY — never fall back to `nextSessionDate`
   const [formData, setFormData] = useState({
     decisionType: session?.decisionType || '',
     decisionDetails: session?.decisionDetails || session?.decision || '',
     notes: session?.notes || '',
-    // ── NEW: Session Link ──
     sessionId: session?.id || '',
     sessionTitle: session?.title || '',
     sessionDate: session?.date || '',
+    nextSessionDate: '',
+    nextSessionTime: session?.time || '',
+    nextSessionLocation: session?.location || '',
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -83,11 +85,11 @@ export default function DecisionForm({ session, onClose, onSave }) {
   }, [onClose]);
 
   const selectedType = DECISION_TYPES.find(d => d.value === formData.decisionType);
+  const needsNextSession = ['adjourned', 'adjourned_notice', 'referred', 'expert', 'absence'].includes(formData.decisionType);
 
   return (
     <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
-      {/* ── Session Info Banner (NEW) ── */}
       {session && (
         <div style={{
           padding: '12px 16px',
@@ -101,7 +103,7 @@ export default function DecisionForm({ session, onClose, onSave }) {
           <Link2 size={16} color="#60a5fa" />
           <div>
             <div style={{ fontSize: '13px', fontWeight: 600, color: '#60a5fa' }}>
-              مرتبط بالجلسة: {session.title || `الجلسة (${session.date})`}
+              مرتبط بالجلسة: {session.title || `الجلسة (${session.date || session.nextSessionDate})`}
             </div>
             <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>
               {new Date(session.date || session.nextSessionDate).toLocaleDateString('ar-EG')}
@@ -110,7 +112,6 @@ export default function DecisionForm({ session, onClose, onSave }) {
         </div>
       )}
 
-      {/* ── Decision Type (NEW: structured) ── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <label style={{ fontSize: 14, fontWeight: 600, color: "#d1d5db", display: "flex", alignItems: "center", gap: 4 }}>
           <span style={{ color: "#ef4444", fontSize: 16 }}>*</span>
@@ -161,7 +162,6 @@ export default function DecisionForm({ session, onClose, onSave }) {
         )}
       </div>
 
-      {/* ── Decision Details ── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <label style={{ fontSize: 14, fontWeight: 600, color: "#d1d5db", display: "flex", alignItems: "center", gap: 4 }}>
           <span style={{ color: "#ef4444", fontSize: 16 }}>*</span>
@@ -196,7 +196,96 @@ export default function DecisionForm({ session, onClose, onSave }) {
         )}
       </div>
 
-      {/* ── Notes ── */}
+      {needsNextSession && (
+        <div style={{
+          padding: '16px',
+          background: 'rgba(245, 158, 11, 0.05)',
+          border: '1px solid rgba(245, 158, 11, 0.2)',
+          borderRadius: 12,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#f59e0b', fontWeight: 700, fontSize: 14 }}>
+            <Calendar size={16} />
+            بيانات الجلسة القادمة
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: '#d1d5db' }}>
+              تاريخ الجلسة القادمة <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <input
+              type="date"
+              name="nextSessionDate"
+              value={formData.nextSessionDate}
+              onChange={handleChange}
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                background: "rgba(15, 23, 42, 0.6)",
+                border: `1px solid ${!formData.nextSessionDate ? 'rgba(239, 68, 68, 0.4)' : 'rgba(55, 65, 81, 0.5)'}`,
+                borderRadius: 10,
+                color: "#f3f4f6",
+                fontSize: 14,
+                fontFamily: "inherit",
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+            {!formData.nextSessionDate && (
+              <span style={{ fontSize: 12, color: '#f59e0b' }}>⚠️ يرجى تحديد تاريخ الجلسة القادمة</span>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: '#d1d5db' }}>الوقت</label>
+              <input
+                type="time"
+                name="nextSessionTime"
+                value={formData.nextSessionTime}
+                onChange={handleChange}
+                style={{
+                  width: "100%",
+                  padding: "10px 14px",
+                  background: "rgba(15, 23, 42, 0.6)",
+                  border: "1px solid rgba(55, 65, 81, 0.5)",
+                  borderRadius: 10,
+                  color: "#f3f4f6",
+                  fontSize: 14,
+                  fontFamily: "inherit",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: '#d1d5db' }}>المكان</label>
+              <input
+                type="text"
+                name="nextSessionLocation"
+                value={formData.nextSessionLocation}
+                onChange={handleChange}
+                placeholder="المحكمة / مكان الانعقاد"
+                style={{
+                  width: "100%",
+                  padding: "10px 14px",
+                  background: "rgba(15, 23, 42, 0.6)",
+                  border: "1px solid rgba(55, 65, 81, 0.5)",
+                  borderRadius: 10,
+                  color: "#f3f4f6",
+                  fontSize: 14,
+                  fontFamily: "inherit",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <label style={{ fontSize: 14, fontWeight: 600, color: "#d1d5db" }}>
           ملاحظات إضافية
@@ -223,12 +312,10 @@ export default function DecisionForm({ session, onClose, onSave }) {
         />
       </div>
 
-      {/* ── Hidden Session Data ── */}
       <input type="hidden" name="sessionId" value={formData.sessionId} />
       <input type="hidden" name="sessionTitle" value={formData.sessionTitle} />
       <input type="hidden" name="sessionDate" value={formData.sessionDate} />
 
-      {/* Buttons */}
       <div style={{ display: "flex", gap: 12, marginTop: 8, paddingTop: 16, borderTop: "1px solid rgba(55, 65, 81, 0.3)" }}>
         <button
           type="button"

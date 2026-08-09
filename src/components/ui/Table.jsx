@@ -1,13 +1,37 @@
-export default function Table({ columns = [], data = [], renderRow }) {
-  return (
-    <div style={styles.wrapper}>
-      <table style={styles.table}>
+import React from 'react';
+import { table as tableStyles, colors, typography } from '../../styles/design-system';
 
+/**
+ * Table — جدول موحد
+ * 
+ * Usage:
+ * <Table
+ *   columns={['العمود 1', 'العمود 2']}
+ *   data={items}
+ *   renderRow={(item, index) => (
+ *     <tr key={index}>
+ *       <td style={Table.td}>{item.col1}</td>
+ *       <td style={Table.td}>{item.col2}</td>
+ *     </tr>
+ *   )}
+ *   emptyMessage="لا توجد بيانات"
+ * />
+ */
+export default function Table({
+  columns = [],
+  data = [],
+  renderRow,
+  emptyMessage = 'لا توجد بيانات',
+  hoverable = true,
+}) {
+  return (
+    <div style={tableStyles.wrapper}>
+      <table style={tableStyles.table}>
         {/* HEADER */}
         <thead>
           <tr>
             {columns.map((col, i) => (
-              <th key={i} style={styles.th}>
+              <th key={i} style={tableStyles.th}>
                 {col}
               </th>
             ))}
@@ -16,36 +40,52 @@ export default function Table({ columns = [], data = [], renderRow }) {
 
         {/* BODY */}
         <tbody>
-          {data.map((item, index) =>
-            renderRow ? renderRow(item, index) : null
+          {data.length === 0 ? (
+            <tr>
+              <td
+                colSpan={columns.length}
+                style={tableStyles.empty}
+              >
+                {emptyMessage}
+              </td>
+            </tr>
+          ) : (
+            data.map((item, index) =>
+              renderRow ? (
+                <HoverableRow key={index} hoverable={hoverable}>
+                  {renderRow(item, index)}
+                </HoverableRow>
+              ) : null
+            )
           )}
         </tbody>
-
       </table>
     </div>
   );
 }
 
-const styles = {
-  wrapper: {
-    width: "100%",
-    background: "#fff",
-    borderRadius: "12px",
-    overflow: "hidden",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-  },
+/** صف قابل للـ hover */
+function HoverableRow({ children, hoverable }) {
+  const [hovered, setHovered] = React.useState(false);
 
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-    fontSize: "14px",
-  },
+  return (
+    <tr
+      style={{
+        ...tableStyles.tr,
+        ...(hoverable && hovered ? tableStyles.hoverRow : {}),
+      }}
+      onMouseEnter={() => hoverable && setHovered(true)}
+      onMouseLeave={() => hoverable && setHovered(false)}
+    >
+      {children}
+    </tr>
+  );
+}
 
-  th: {
-    background: "#f0f2f5",
-    padding: "12px",
-    textAlign: "center",
-    fontWeight: "bold",
-    borderBottom: "1px solid #ddd",
-  },
-};
+// ═══════════════════════════════════════════════════════════════
+//  STATIC STYLE EXPORTS (for use in renderRow)
+// ═══════════════════════════════════════════════════════════════
+
+export const td = tableStyles.td;
+export const tr = tableStyles.tr;
+export const hoverRow = tableStyles.hoverRow;

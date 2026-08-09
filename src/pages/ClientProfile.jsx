@@ -33,7 +33,7 @@ export default function ClientProfile() {
   useEffect(() => {
     const fetchClientAndCases = async () => {
       if (!userData?.officeId) return;
-      
+
       try {
         // 1. جلب بيانات الموكل الأساسية
         const ref = doc(db, "clientProfiles", id);
@@ -41,7 +41,7 @@ export default function ClientProfile() {
 
         if (snap.exists()) {
           const data = snap.data();
-          
+
           if (data.officeId !== userData.officeId) {
             alert("عفواً، لا تملك صلاحية الوصول لملف هذا الموكل.");
             return navigate("/clients");
@@ -66,21 +66,38 @@ export default function ClientProfile() {
             powerOffice: data.powerOfAttorney?.office || "",
           });
 
-          // 2. جلب القضايا (دعم الطريقتين: مصفوفة clientIds أو نص مفرد clientId)
+          // ✅ FIXED: جلب كل قضايا المكتب ثم فلترة client-side
+          // لأن clients هي مصفوفة كائنات ولا يمكن البحث فيها بـ array-contains
           const casesRef = collection(db, "cases");
-          let loadedCases = [];
+          const q = query(casesRef, where("officeId", "==", userData.officeId));
+          const casesSnap = await getDocs(q);
 
-          // الاستعلام الأول: لو الموكل مخزن جوه مصفوفة الموكلين المتعددة
-          const qMultiple = query(casesRef, where("officeId", "==", userData.officeId), where("clientIds", "array-contains", id));
-          const snapMultiple = await getDocs(qMultiple);
-          snapMultiple.forEach(doc => loadedCases.push({ id: doc.id, ...doc.data() }));
+          const loadedCases = [];
+          casesSnap.forEach((docSnap) => {
+            const caseData = docSnap.data();
+            const caseClients = caseData.clients || [];
 
-          // الاستعلام الثاني: لو الموكل مخزن كـ ID مفرد (للقضايا القديمة بالسيستم)
-          const qSingle = query(casesRef, where("officeId", "==", userData.officeId), where("clientId", "==", id));
-          const snapSingle = await await getDocs(qSingle);
-          snapSingle.forEach(doc => {
-            if (!loadedCases.some(c => c.id === doc.id)) {
-              loadedCases.push({ id: doc.id, ...doc.data() });
+            // البحث إذا كان الموكل موجود في مصفوفة clients
+            const isLinked = caseClients.some((clientItem) => {
+              const clientId = typeof clientItem === "object" ? clientItem.id : clientItem;
+              return clientId === id;
+            });
+
+            if (isLinked) {
+              // استخراج صفة الموكل في هذه القضية
+              const clientEntry = caseClients.find((clientItem) => {
+                const clientId = typeof clientItem === "object" ? clientItem.id : clientItem;
+                return clientId === id;
+              });
+              const clientRole = typeof clientEntry === "object" 
+                ? (clientEntry.clientRole || "غير محدد") 
+                : "غير محدد";
+
+              loadedCases.push({ 
+                id: docSnap.id, 
+                ...caseData,
+                _clientRole: clientRole  // إضافة الصفة للعرض
+              });
             }
           });
 
@@ -151,7 +168,7 @@ export default function ClientProfile() {
         <Button variant="secondary" onClick={() => navigate("/clients")} style={styles.backBtn}>
           🔀 عودة لسجل الموكلين
         </Button>
-        
+
         {!editMode ? (
           <Button variant="primary" onClick={() => setEditMode(true)} style={styles.editBtn}>
             ✏️ تعديل بيانات الملف
@@ -170,13 +187,13 @@ export default function ClientProfile() {
       {/* VIEW & EDIT DASHBOARD */}
       {!editMode ? (
         <div style={styles.gridContainer}>
-          
+
           {/* ================= 👤 يمين الشاشة: جدول بيانات الموكل المضمونة ================= */}
           <div style={styles.infoCard}>
             <div style={styles.cardHeader}>
               <h2 style={styles.clientTitle}>👤 ملف الموكل: {client.fullName}</h2>
             </div>
-            
+
             <h3 style={styles.subSectionTitle}>📋 البيانات الشخصية وبيانات الاتصال</h3>
             <div style={styles.profileTable}>
               <div style={styles.tableRow}><div style={styles.tableLabel}>الاسم الكامل:</div><div style={styles.tableValue}><strong>{client.fullName || "—"}</strong></div></div>
@@ -208,11 +225,20 @@ export default function ClientProfile() {
             ) : (
               <div style={styles.casesList}>
                 {clientCases.map((c) => (
-                  <div key={c.id} style={styles.caseItem} onClick={() => navigate(`/cases/${c.id}`)}>
+                  <div key={c.id} style={styles.caseItem} onClick={() => navigate(`/case/${c.id}`)}>
                     <div style={{ flex: 1 }}>
-                      <strong style={styles.caseTitle}>⚖️ قضية رقم: {c.caseNumber || "بدون رقم تعريفي"} / {c.caseYear || "—"}</strong>
-                      <div style={{ fontSize: "12.5px", color: "#475569", marginTop: "4px" }}>🏢 {c.courtName || "المحكمة غير محددة"}</div>
-                      <p style={styles.caseSubtitle}>نوع الدعوى: {c.caseType || "غير محدد"} | صفته: {c.clientRole || "غير محدد"}</p>
+                      <strong style={styles.caseTitle}>⚖️ قضية رقم: {c.caseNumber || c.caseSerial || "بدون رقم"} / {c.caseYear || "—"}</strong>
+                      <div style={{ fontSize: "12.5px", color: "#475569", marginTop: "4px" }}>🏢 {c.court || c.courtName || "المحكمة غير محددة"}</div>
+                      <p style={styles.caseSubtitle}>
+                        نوع الدعوى: {c.caseType || "غير محدد"} 
+                        <span style={{ margin: "0 8px", color: "#cbd5e1" }}>|</span>
+                        صفته: <span style={{ color: "#2563eb", fontWeight: 600 }}>{c._clientRole}</span>
+                        <span style={{ margin: "0 8px", color: "#cbd5e1" }}>|</span>
+                        الحالة: <span style={{ 
+                          color: c.status === 'ACTIVE' ? '#16a34a' : c.status === 'CLOSED' ? '#64748b' : '#d97706',
+                          fontWeight: 600 
+                        }}>{c.status === 'ACTIVE' ? 'نشطة' : c.status === 'CLOSED' ? 'مغلقة' : (c.status || 'غير محدد')}</span>
+                      </p>
                     </div>
                     <span style={styles.arrowIcon}>👁️ عرض</span>
                   </div>
@@ -304,14 +330,14 @@ const styles = {
   editBtn: { background: "#2c3e50" },
   saveBtn: { background: "#16a34a" },
   cancelBtn: { background: "#64748b", color: "#fff" },
-  
+
   gridContainer: { display: "flex", gap: "20px", flexWrap: "wrap", width: "100%" },
   infoCard: { background: "#fff", padding: "20px", borderRadius: "12px", border: "1px solid #e2e8f0", flex: "1.2", minWidth: "300px", boxShadow: "0 1px 3px rgba(0,0,0,0.03)", height: "fit-content" },
   casesCard: { background: "#fff", padding: "20px", borderRadius: "12px", border: "1px solid #e2e8f0", flex: "1.2", minWidth: "300px", boxShadow: "0 1px 3px rgba(0,0,0,0.03)", height: "fit-content" },
-  
+
   cardHeader: { borderBottom: "2px solid #f1f5f9", paddingBottom: "10px", marginBottom: "15px" },
   clientTitle: { margin: 0, fontSize: "16px", color: "#1e293b", fontWeight: "700" },
-  
+
   profileTable: { display: "flex", flexDirection: "column", border: "1px solid #e2e8f0", borderRadius: "8px", overflow: "hidden" },
   tableRow: { display: "flex", borderBottom: "1px solid #e2e8f0", background: "#fff" },
   tableLabel: { width: "110px", background: "#f8fafc", padding: "10px 12px", fontSize: "12.5px", fontWeight: "600", color: "#475569", borderLeft: "1px solid #e2e8f0", flexShrink: 0 },
@@ -319,10 +345,10 @@ const styles = {
 
   badge: { fontSize: "11px", background: "#eff6ff", color: "#2563eb", border: "1px solid #bfdbfe", padding: "2px 8px", borderRadius: "4px", fontWeight: "600" },
   divider: { border: "none", borderTop: "1px dashed #e2e8f0", margin: "20px 0" },
-  
+
   sectionTitle: { margin: "0 0 15px 0", fontSize: "15px", color: "#1e293b", fontWeight: "600" },
   subSectionTitle: { margin: "0 0 8px 0", fontSize: "13px", color: "#475569", fontWeight: "600", borderRight: "3px solid #2c3e50", paddingRight: "6px" },
-  
+
   noDataBox: { padding: "30px", textAlign: "center", color: "#94a3b8", background: "#f8fafc", borderRadius: "8px", border: "1px dashed #cbd5e1", fontSize: "13px" },
   casesList: { display: "flex", flexDirection: "column", gap: "10px" },
   caseItem: { padding: "14px", border: "1px solid #e2e8f0", borderRadius: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", background: "#fff", transition: "transform 0.2s, box-shadow 0.2s" },
