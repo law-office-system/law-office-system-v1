@@ -263,10 +263,11 @@ export default function Cases() {
     loadClients();
   }, [cases, userData?.officeId]);
 
+  // ✅ تم التعديل هنا — قراءة الاسم مباشرة من الـ string
   const getClientName = useCallback((clientItem) => {
     if (!clientItem) return "موكل غير معروف";
     const id = typeof clientItem === "object" ? clientItem.id : clientItem;
-    return clientsMap[id]?.fullName || clientsMap[id]?.name || "موكل غير معروف";
+    return clientsMap[id] || "موكل غير معروف";
   }, [clientsMap]);
 
   const getUpcomingSessionString = useCallback((sessions) => {
@@ -289,7 +290,7 @@ export default function Cases() {
 
   /* ================= DELETE HANDLER ================= */
   const handleDeleteCase = async (e, caseId, caseSerial) => {
-    e.stopPropagation(); // منع فتح صفحة التفاصيل
+    e.stopPropagation();
     e.preventDefault();
     
     if (!window.confirm(`هل أنت متأكد من حذف القضية رقم ${caseSerial || caseId}؟\n\n⚠️ هذا الإجراء لا يمكن التراجع عنه!`)) {
