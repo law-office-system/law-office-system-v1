@@ -1,7 +1,9 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, onSnapshot, query, where, documentId, getDocs, doc, getDoc, limit, orderBy } from "firebase/firestore";
+import { useLitigationLevels } from "../hooks/useLitigationLevels";
 import { CASE_STATUS } from "../constants/caseStatus";
+import { getLitigationLevelLabel } from "../constants/caseStatusLabels";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebaseDb";
 import { parseDate } from "../utils/date";
@@ -145,6 +147,7 @@ const formatDate = (dateObj) => {
 export default function Dashboard() {
   const [cases, setCases] = useState([]);
   const [clientNamesCache, setClientNamesCache] = useState({});
+  const [levelDataCache, setLevelDataCache] = useState({});
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -245,6 +248,55 @@ export default function Dashboard() {
     unsubRef.current = unsub;
     return () => unsub();
   }, [userData?.officeId, authLoading, userDataLoading]);
+
+  // ✅ Fetch missing level data for cases without denormalized fields
+  useEffect(() => {
+    if (cases.length === 0) return;
+
+    const fetchMissingLevelData = async () => {
+      const newCache = { ...levelDataCache };
+      let hasChanges = false;
+
+      for (const c of cases) {
+        // Skip if case already has all denormalized fields
+        if (c.caseNumber && c.court) continue;
+        // Skip if already in cache
+        if (newCache[c.id]) continue;
+
+        try {
+          // Try activeLevelId first
+          if (c.activeLevelId) {
+            const levelDoc = await getDoc(doc(db, "litigation_levels", c.activeLevelId));
+            if (levelDoc.exists()) {
+              newCache[c.id] = levelDoc.data();
+              hasChanges = true;
+              continue;
+            }
+          }
+
+          // Try to find any level for this case
+          const levelsQuery = query(
+            collection(db, "litigation_levels"),
+            where("caseId", "==", c.id),
+            limit(1)
+          );
+          const levelsSnap = await getDocs(levelsQuery);
+          if (!levelsSnap.empty) {
+            newCache[c.id] = levelsSnap.docs[0].data();
+            hasChanges = true;
+          }
+        } catch (err) {
+          console.warn(`Error fetching level for case ${c.id}:`, err);
+        }
+      }
+
+      if (hasChanges) {
+        setLevelDataCache(newCache);
+      }
+    };
+
+    fetchMissingLevelData();
+  }, [cases]);
 
   // ✅ Optimized client loading with batching
   useEffect(() => {
@@ -561,6 +613,13 @@ export default function Dashboard() {
             ? (clientNamesCache[typeof c.clients[0] === "object" ? c.clients[0].id : c.clients[0]] || "...")
             : "-";
 
+          // ✅ Fallback: use level data cache if denormalized fields are missing
+          const levelData = levelDataCache[c.id];
+          const displayCaseNumber = c.caseSerial || c.caseNumber || levelData?.caseNumber || "-";
+          const displayCaseYear = c.caseYear || levelData?.caseYear || "-";
+          const displayCourt = c.court || levelData?.court || "-";
+          const displayCircuit = c.circuit || levelData?.circuit || "";
+
           return (
             <div 
               key={c.id} 
@@ -586,7 +645,16 @@ export default function Dashboard() {
               <div style={styles.cardContent}>
                 <div style={styles.cardHeader}>
                   <h3 style={styles.caseNumber}>
-                    {Icons.gavel} ق رقم: {c.caseSerial || c.caseNumber || "-"} / {c.caseYear}
+                    {Icons.gavel} ق رقم: {displayCaseNumber} / {displayCaseYear}
+                    {c.currentLevel && (
+                      <span style={{
+                        fontSize: "12px", fontWeight: "500", color: THEME.gold,
+                        marginRight: "8px", padding: "2px 8px", background: "#fdf6e3",
+                        borderRadius: "6px", border: `1px solid ${THEME.gold}30`,
+                      }}>
+                        {getLitigationLevelLabel(c.currentLevel)}
+                      </span>
+                    )}
                   </h3>
                   {getStatusBadge(c.status)}
                 </div>
@@ -600,7 +668,8 @@ export default function Dashboard() {
 
                 <div style={styles.caseInfo}>
                   <InfoRow icon={Icons.person} label="الموكل" value={clientName} />
-                  <InfoRow icon={Icons.building} label="المحكمة" value={c.court || "-"} />
+                  <InfoRow icon={Icons.building} label="المحكمة" value={displayCourt} />
+                  {displayCircuit && <InfoRow icon="⚡" label="الدائرة" value={displayCircuit} />}
                 </div>
 
                 <div style={styles.datesBox}>

@@ -609,7 +609,7 @@ const styles = {
   centerText: { textAlign: "center", padding: "40px" },
   headerCard: { background: "#ffffff", padding: "16px", borderRadius: "12px", border: "1px solid #e2e8f0", marginBottom: "15px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" },
   pageTitle: { margin: "0 0 4px 0", fontSize: "20px", color: "#1e293b" },
-  pageSubtitle: { margin: 0, fontSize: "13px", color: "#64748b" },
+  pageSubtitle: { margin: 0, fontSize: "13px", color: "#334155", fontWeight: 500 },
   summary: { display: "flex", gap: 12, marginBottom: 15, flexWrap: "wrap" },
 
   card: (bg, borderRightColor) => ({
@@ -626,13 +626,13 @@ const styles = {
     borderRight: `5px solid ${borderRightColor}`
   }),
 
-  cardLabel: { fontSize: "13px", color: "#475569", fontWeight: "600" },
-  cardValue: { fontSize: "18px", fontFamily: "sans-serif", fontWeight: "bold" },
+  cardLabel: { fontSize: "13px", color: "#1e293b", fontWeight: "700" },
+  cardValue: { fontSize: "18px", fontFamily: "sans-serif", fontWeight: "bold", color: "#0f172a" },
 
   // Filter Bar
   filterBar: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 },
-  input: { padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none", fontSize: "13px", boxSizing: "border-box" },
-  select: { padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none", fontSize: "13px", background: "#fff", flex: 1, minWidth: "150px" },
+  input: { padding: "10px", borderRadius: "8px", border: "1px solid #94a3b8", outline: "none", fontSize: "13px", boxSizing: "border-box", color: "#1e293b", fontWeight: 500 },
+  select: { padding: "10px", borderRadius: "8px", border: "1px solid #94a3b8", outline: "none", fontSize: "13px", background: "#fff", flex: 1, minWidth: "150px", color: "#1e293b", fontWeight: 500 },
 
   // ======== NEW: Date Filter Bar Styles ========
   dateFilterBar: {
@@ -647,7 +647,7 @@ const styles = {
     boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
     border: "1px solid #e2e8f0",
   },
-  dateFilterLabel: { fontSize: "13px", fontWeight: "600", color: "#475569", whiteSpace: "nowrap" },
+  dateFilterLabel: { fontSize: "13px", fontWeight: "700", color: "#1e293b", whiteSpace: "nowrap" },
   dateFilterSelect: {
     padding: "8px 12px",
     borderRadius: "8px",
@@ -713,27 +713,28 @@ const styles = {
   },
   dateFilterHint: {
     fontSize: "12px",
-    color: "#64748b",
+    color: "#475569",
     marginRight: "auto",
-    background: "#f8fafc",
+    background: "#e2e8f0",
     padding: "4px 10px",
     borderRadius: "6px",
+    fontWeight: 600,
   },
 
   // Form
   formBox: { background: "#fff", padding: 16, borderRadius: 12, marginBottom: 15, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" },
-  sectionTitle: { margin: "0 0 15px 0", fontSize: "15px", color: "#475569", fontWeight: "600" },
+  sectionTitle: { margin: "0 0 15px 0", fontSize: "16px", color: "#1e293b", fontWeight: "700" },
   row: { display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" },
   field: { flex: 1, minWidth: "160px", display: "flex", flexDirection: "column", gap: "5px" },
-  label: { fontSize: "12px", fontWeight: "600", color: "#64748b" },
+  label: { fontSize: "12px", fontWeight: "700", color: "#374151" },
   selectInput: { padding: "9px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none", fontSize: "13px", background: "#fff" },
   textInput: { padding: "9px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none", fontSize: "13px" },
   addBtn: { width: "100%", fontWeight: "600", padding: "10px" },
 
   // Ledger
   ledgerContainer: { background: "#fff", padding: "12px", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" },
-  ledgerCount: { fontSize: "13px", color: "#64748b", fontWeight: "400", marginRight: "8px" },
-  noData: { textAlign: "center", color: "#94a3b8", margin: 0, padding: "20px" },
+  ledgerCount: { fontSize: "13px", color: "#475569", fontWeight: "600", marginRight: "8px" },
+  noData: { textAlign: "center", color: "#64748b", margin: 0, padding: "20px", fontWeight: 500 },
 
   item: (type) => ({
     padding: "12px",
@@ -762,26 +763,28 @@ const styles = {
 
   amountText: (type) => ({ fontSize: "14px", color: type === "income" ? "#15803d" : "#b91c1c", fontFamily: "sans-serif" }),
   divider: { color: "#cbd5e1" },
-  descText: { fontSize: "13.5px", color: "#334155" },
+  descText: { fontSize: "14px", color: "#1e293b", fontWeight: 500 },
 
   // ======== NEW: Date Badge Style ========
   dateBadge: {
     fontSize: "12px",
-    color: "#64748b",
-    background: "#f1f5f9",
+    color: "#374151",
+    background: "#e2e8f0",
     padding: "3px 10px",
     borderRadius: "6px",
     fontFamily: "monospace",
     direction: "ltr",
     display: "inline-block",
+    fontWeight: 600,
   },
 
   scopeBadge: (scope) => ({
     fontSize: "12px",
-    background: "rgba(255,255,255,0.7)",
+    background: "#f8fafc",
     padding: "3px 8px",
     borderRadius: "6px",
-    color: "#475569",
-    border: "1px solid #e2e8f0"
+    color: "#1e293b",
+    border: "1px solid #cbd5e1",
+    fontWeight: 600,
   })
 };
