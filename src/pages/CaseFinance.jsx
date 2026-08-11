@@ -24,6 +24,7 @@ export default function CaseFinance() {
 
   const [caseData, setCaseData] = useState(null);
   const [transactions, setTransactions] = useState([]);
+  const [clientsMap, setClientsMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [editItem, setEditItem] = useState(null);
 
@@ -41,7 +42,6 @@ export default function CaseFinance() {
         const snap = await getDoc(doc(db, "cases", id));
         if (snap.exists()) {
           const data = snap.data();
-          // حماية أمنية: التحقق من تبعية القضية للمكتب الحالي
           if (data.officeId !== userData.officeId) {
             console.error("🚫 أمن النظام: محاولة وصول غير مصرح بها لقضية مكتب آخر.");
             setCaseData(null);
@@ -49,6 +49,25 @@ export default function CaseFinance() {
             return;
           }
           setCaseData({ id: snap.id, ...data });
+
+          // 👤 بناء خريطة الموكلين المرتبطين بالقضية
+          const cMap = {};
+          if (Array.isArray(data.clients)) {
+            for (const c of data.clients) {
+              const clientId = typeof c === "object" ? c.id : c;
+              if (clientId) {
+                try {
+                  const clientSnap = await getDoc(doc(db, "clientProfiles", clientId));
+                  if (clientSnap.exists()) {
+                    cMap[clientId] = clientSnap.data().fullName || "موكل غير معروف";
+                  }
+                } catch (e) {
+                  console.error("Error loading client name:", e);
+                }
+              }
+            }
+          }
+          setClientsMap(cMap);
         } else {
           setCaseData(null);
         }
@@ -66,7 +85,6 @@ export default function CaseFinance() {
   useEffect(() => {
     if (!userData?.officeId || !id) return;
 
-    // تم تدعيم الشرط بـ officeId لضمان أمان عزل الحسابات المالية للمكاتب
     const q = query(
       collection(db, "transactions"),
       where("caseId", "==", id),
@@ -113,7 +131,7 @@ export default function CaseFinance() {
       const payload = {
         caseId: id,
         caseNumber: caseData.caseSerial || caseData.caseNumber || "",
-        officeId: userData.officeId, // تضمين المعرف لتأمين الحسابات مستقبلاً
+        officeId: userData.officeId,
 
         type: form.type, 
         amount: Number(form.amount),
@@ -194,7 +212,7 @@ export default function CaseFinance() {
   const profit = totalIncome - totalExpenses;
 
   // =========================
-  // SORT SAFE (تجنب أخطاء الفايربيس ومخزن كائنات الـ Timestamps)
+  // SORT SAFE
   // =========================
   const sortedTransactions = useMemo(() => {
     return [...transactions].sort((a, b) => {
@@ -221,7 +239,7 @@ export default function CaseFinance() {
 
   return (
     <div style={styles.page}>
-      
+
       {/* HEADER */}
       <div style={styles.header}>
         <div>
@@ -259,7 +277,7 @@ export default function CaseFinance() {
       {canAddFinance && (
         <div style={styles.card}>
           <h3 style={styles.sectionTitle}>➕ قيد حركة مالية جديدة بالدفتر</h3>
-          
+
           <div style={styles.formGrid}>
             <div style={styles.fieldBox}>
               <label style={styles.label}>نوع الحركة</label>
@@ -333,7 +351,7 @@ export default function CaseFinance() {
       {editItem && (
         <div style={{ ...styles.card, background: "#f8fafc", border: "1px solid #cbd5e1" }}>
           <h3 style={{ ...styles.sectionTitle, color: "#0f172a" }}>✏️ تعديل قيود الإدخال المالي</h3>
-          
+
           <div style={styles.formGrid}>
             <div style={styles.fieldBox}>
               <label style={styles.label}>المبلغ المطلوب تعديله</label>
@@ -374,7 +392,7 @@ export default function CaseFinance() {
 
       {/* LEDGER RECORD LIST */}
       <h3 style={{ ...styles.sectionTitle, marginTop: "20px" }}>📒 دفتر المسيرات المالي للملف</h3>
-      
+
       <div style={styles.ledgerContainer}>
         {sortedTransactions.length === 0 ? (
           <p style={{ textAlign: "center", color: "#94a3b8", margin: 0, padding: "20px" }}>لا توجد أي معاملات مالية مقيدة لهذه القضية حتى الآن.</p>
@@ -396,6 +414,15 @@ export default function CaseFinance() {
                 <span style={styles.ledgerDivider}>|</span>
                 <span style={styles.ledgerDesc}>{item.description}</span>
                 {item.notes && <span style={styles.ledgerNotes}>({item.notes})</span>}
+                {/* 👤 عرض اسم الموكل لو موجود */}
+                {item.clientId && (
+                  <>
+                    <span style={styles.ledgerDivider}>|</span>
+                    <span style={styles.clientBadge}>
+                      👤 {clientsMap[item.clientId] || item.clientName || "موكل"}
+                    </span>
+                  </>
+                )}
               </div>
 
               {canAddFinance && (
@@ -437,5 +464,6 @@ const styles = {
   ledgerDivider: { color: "#cbd5e1" },
   ledgerDesc: { fontSize: "14px", color: "#334155" },
   ledgerNotes: { fontSize: "12px", color: "#64748b", fontStyle: "italic" },
+  clientBadge: { fontSize: "11px", background: "#eff6ff", color: "#2563eb", padding: "2px 8px", borderRadius: "4px", fontWeight: "600", border: "1px solid #bfdbfe" },
   actionBtn: { border: "none", background: "#fff", padding: "5px 8px", borderRadius: "6px", cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,0.05)", transition: "background 0.2s" }
 };

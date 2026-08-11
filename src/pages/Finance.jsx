@@ -1,11 +1,10 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import {
   collection,
   onSnapshot,
   query,
   where,
   addDoc,
-  orderBy,
   serverTimestamp,
 } from "firebase/firestore";
 import Button from "../components/ui/Button";
@@ -24,15 +23,15 @@ export default function Finance() {
   const [filterScope, setFilterScope] = useState("all");
   const [search, setSearch] = useState("");
 
-  // ======== NEW: Date Filtering State ========
-  const [dateFilterMode, setDateFilterMode] = useState("month"); // "all" | "day" | "week" | "month" | "year"
+  // ======== Date Filtering State ========
+  const [dateFilterMode, setDateFilterMode] = useState("month");
   const [selectedDate, setSelectedDate] = useState(() => {
     const now = new Date();
-    return now.toISOString().split("T")[0]; // YYYY-MM-DD format
+    return now.toISOString().split("T")[0];
   });
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`; // YYYY-MM
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
   const [selectedYear, setSelectedYear] = useState(() => {
     return new Date().getFullYear().toString();
@@ -44,7 +43,13 @@ export default function Finance() {
     description: "",
     scope: "office",
     caseId: "",
+    clientId: "",
   });
+
+  // 🔍 حالة البحث في الموكلين
+  const [clientSearch, setClientSearch] = useState("");
+  const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
+  const clientDropdownRef = useRef(null);
 
   const canAddTransaction = userData?.role === "admin" || userData?.role === "staff";
 
@@ -111,8 +116,6 @@ export default function Finance() {
   useEffect(() => {
     if (!userData?.officeId) return;
 
-    // 🔥 Fallback: بدون orderBy لتجنب مشاكل الـ index المفقود
-    // المعاملات هتتفرز محلياً بعدين
     const q = query(
       collection(db, "transactions"),
       where("officeId", "==", userData.officeId)
@@ -124,7 +127,6 @@ export default function Finance() {
         return {
           id: doc.id,
           ...docData,
-          // حماية: إذا كان وقت السيرفر لم يرجع بعد، نضع وقت الجهاز مؤقتاً
           createdAt: docData.createdAt || new Date(),
         };
       });
@@ -136,6 +138,26 @@ export default function Finance() {
 
     return () => unsub();
   }, [userData]);
+
+  // ================= CLOSE DROPDOWN ON CLICK OUTSIDE =================
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (clientDropdownRef.current && !clientDropdownRef.current.contains(event.target)) {
+        setClientDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // ================= FILTERED CLIENTS FOR SEARCH =================
+  const filteredClients = useMemo(() => {
+    const text = clientSearch.trim().toLowerCase();
+    if (!text) return Object.entries(clientsMap);
+    return Object.entries(clientsMap).filter(([cid, name]) =>
+      name.toLowerCase().includes(text)
+    );
+  }, [clientSearch, clientsMap]);
 
   // ================= ADD TRANSACTION =================
   const addTransaction = async () => {
@@ -153,6 +175,10 @@ export default function Finance() {
       return alert("يرجى اختيار ملف القضية المرتبطة بهذه الحركة المالية.");
     }
 
+    if (form.scope === "client" && !form.clientId) {
+      return alert("يرجى اختيار الموكل المرتبط بهذه الحركة المالية.");
+    }
+
     try {
       const payload = {
         type: form.type,
@@ -161,6 +187,8 @@ export default function Finance() {
         scope: form.scope,
         caseId: form.scope === "case" ? form.caseId : null,
         caseNumber: form.scope === "case" ? (casesMap[form.caseId]?.caseNumber || "") : "",
+        clientId: form.scope === "client" ? form.clientId : null,
+        clientName: form.scope === "client" ? (clientsMap[form.clientId] || "") : "",
 
         officeId: userData.officeId,
 
@@ -176,7 +204,9 @@ export default function Finance() {
         description: "",
         scope: "office",
         caseId: "",
+        clientId: "",
       });
+      setClientSearch("");
 
     } catch (err) {
       console.error("Error posting global transaction:", err);
@@ -223,6 +253,7 @@ export default function Finance() {
     if (!s) return "office";
     if (s === "مكتب" || s === "office") return "office";
     if (s === "قضية" || s === "case") return "case";
+    if (s === "موكل" || s === "client") return "client";
     return s;
   };
 
@@ -277,12 +308,12 @@ export default function Finance() {
         text === "" ||
         (t.description || "").toLowerCase().includes(text) ||
         String(t.amount).includes(text) ||
-        (t.caseNumber && String(t.caseNumber).includes(text));
+        (t.caseNumber && String(t.caseNumber).includes(text)) ||
+        (t.clientName && String(t.clientName).includes(text));
 
       return matchType && matchScope && matchDate && matchSearch;
     });
 
-    // فرز تنازلي حسب التاريخ
     return result.sort((a, b) => {
       const aDate = getTransactionDate(a);
       const bDate = getTransactionDate(b);
@@ -394,7 +425,7 @@ export default function Finance() {
       {/* TITLE */}
       <div style={styles.headerCard}>
         <h2 style={styles.pageTitle}>💰 الحسابات الختامية وخزينة المكتب العامة</h2>
-        <p style={styles.pageSubtitle}>عرض مالي شامل لجميع التحصيلات، الرسوم، ومصروفات القضايا الجارية.</p>
+        <p style={styles.pageSubtitle}>عرض مالي شامل لجميع التحصيلات، الرسوم، ومصروفات القضايا الجارية والموكلين.</p>
       </div>
 
       {/* SUMMARY */}
@@ -423,7 +454,7 @@ export default function Finance() {
       {/* FILTER BAR */}
       <div style={styles.filterBar}>
         <input
-          placeholder="بحث سريع بالوصف أو رقم القضية المقيدة..."
+          placeholder="بحث سريع بالوصف أو رقم القضية أو اسم الموكل..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{ ...styles.input, flex: 2 }}
@@ -447,10 +478,11 @@ export default function Finance() {
           <option value="all">🌐 النطاق العام للدفتر</option>
           <option value="office">🏢 مصروفات تشغيل المكتب</option>
           <option value="case">⚖️ ميزانيات القضايا المنفردة</option>
+          <option value="client">👤 حسابات الموكلين</option>
         </select>
       </div>
 
-      {/* ======== NEW: DATE FILTER BAR ======== */}
+      {/* DATE FILTER BAR */}
       <div style={styles.dateFilterBar}>
         <label style={styles.dateFilterLabel}>🗓️ تصفية حسب الفترة:</label>
         <select
@@ -498,11 +530,16 @@ export default function Finance() {
               <label style={styles.label}>النطاق المالي</label>
               <select
                 value={form.scope}
-                onChange={(e) => setForm({ ...form, scope: e.target.value, caseId: "" })}
+                onChange={(e) => {
+                  setForm({ ...form, scope: e.target.value, caseId: "", clientId: "" });
+                  setClientSearch("");
+                  setClientDropdownOpen(false);
+                }}
                 style={styles.selectInput}
               >
                 <option value="office">🏢 خاص بالمكتب (إداري عام)</option>
                 <option value="case">⚖️ خاص بملف قضية محددة</option>
+                <option value="client">👤 خاص بموكل معين</option>
               </select>
             </div>
 
@@ -521,6 +558,68 @@ export default function Finance() {
                     </option>
                   ))}
                 </select>
+              </div>
+            )}
+
+            {/* 🔍 محرك البحث في الموكلين */}
+            {form.scope === "client" && (
+              <div style={{ ...styles.field, flex: 2 }} ref={clientDropdownRef}>
+                <label style={styles.label}>ربط بالموكل</label>
+                <div style={styles.searchableDropdown}>
+                  <input
+                    type="text"
+                    placeholder={form.clientId ? clientsMap[form.clientId] : "ابحث باسم الموكل..."}
+                    value={clientSearch}
+                    onChange={(e) => {
+                      setClientSearch(e.target.value);
+                      setClientDropdownOpen(true);
+                      if (form.clientId) {
+                        setForm({ ...form, clientId: "" });
+                      }
+                    }}
+                    onFocus={() => setClientDropdownOpen(true)}
+                    style={styles.searchableInput}
+                  />
+                  {clientDropdownOpen && (
+                    <div style={styles.dropdownList}>
+                      {filteredClients.length === 0 ? (
+                        <div style={styles.dropdownEmpty}>لا توجد نتائج مطابقة</div>
+                      ) : (
+                        filteredClients.map(([cid, name]) => (
+                          <div
+                            key={cid}
+                            style={{
+                              ...styles.dropdownItem,
+                              background: form.clientId === cid ? "#eff6ff" : "#fff",
+                            }}
+                            onClick={() => {
+                              setForm({ ...form, clientId: cid });
+                              setClientSearch(name);
+                              setClientDropdownOpen(false);
+                            }}
+                          >
+                            <span style={styles.dropdownName}>👤 {name}</span>
+                            {form.clientId === cid && <span style={styles.dropdownCheck}>✓</span>}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+                {form.clientId && (
+                  <div style={styles.selectedClientBadge}>
+                    ✅ تم الاختيار: <strong>{clientsMap[form.clientId]}</strong>
+                    <button
+                      style={styles.clearSelection}
+                      onClick={() => {
+                        setForm({ ...form, clientId: "" });
+                        setClientSearch("");
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -569,6 +668,7 @@ export default function Finance() {
         ) : (
           filteredTransactions.map((t) => {
             const tDate = getTransactionDate(t);
+            const scopeVal = normalizeScope(t.scope);
             return (
               <div key={t.id} style={styles.item(t.type)}>
                 <div style={styles.itemRight}>
@@ -583,15 +683,16 @@ export default function Finance() {
                 </div>
 
                 <div style={styles.itemMiddle}>
-                  {/* ======== NEW: DATE DISPLAY ======== */}
                   <span style={styles.dateBadge}>
                     📅 {formatDate(tDate)}
                   </span>
                 </div>
 
                 <span style={styles.scopeBadge(t.scope)}>
-                  {normalizeScope(t.scope) === "case"
+                  {scopeVal === "case"
                     ? `⚖️ قضية: ${casesMap[t.caseId]?.caseNumber || "ملف محذوف"}`
+                    : scopeVal === "client"
+                    ? `👤 موكل: ${t.clientName || clientsMap[t.clientId] || "غير معروف"}`
                     : "🏢 مصاريف عمومية"}
                 </span>
               </div>
@@ -629,12 +730,10 @@ const styles = {
   cardLabel: { fontSize: "13px", color: "#1e293b", fontWeight: "700" },
   cardValue: { fontSize: "18px", fontFamily: "sans-serif", fontWeight: "bold", color: "#0f172a" },
 
-  // Filter Bar
   filterBar: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 },
   input: { padding: "10px", borderRadius: "8px", border: "1px solid #94a3b8", outline: "none", fontSize: "13px", boxSizing: "border-box", color: "#1e293b", fontWeight: 500 },
   select: { padding: "10px", borderRadius: "8px", border: "1px solid #94a3b8", outline: "none", fontSize: "13px", background: "#fff", flex: 1, minWidth: "150px", color: "#1e293b", fontWeight: 500 },
 
-  // ======== NEW: Date Filter Bar Styles ========
   dateFilterBar: {
     display: "flex",
     alignItems: "center",
@@ -721,7 +820,6 @@ const styles = {
     fontWeight: 600,
   },
 
-  // Form
   formBox: { background: "#fff", padding: 16, borderRadius: 12, marginBottom: 15, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" },
   sectionTitle: { margin: "0 0 15px 0", fontSize: "16px", color: "#1e293b", fontWeight: "700" },
   row: { display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" },
@@ -731,7 +829,66 @@ const styles = {
   textInput: { padding: "9px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none", fontSize: "13px" },
   addBtn: { width: "100%", fontWeight: "600", padding: "10px" },
 
-  // Ledger
+  // 🔍 Searchable Dropdown Styles
+  searchableDropdown: { position: "relative", width: "100%" },
+  searchableInput: {
+    padding: "9px 12px",
+    borderRadius: "8px",
+    border: "1px solid #cbd5e1",
+    outline: "none",
+    fontSize: "13px",
+    width: "100%",
+    boxSizing: "border-box",
+    background: "#fff",
+  },
+  dropdownList: {
+    position: "absolute",
+    top: "100%",
+    right: 0,
+    left: 0,
+    maxHeight: "220px",
+    overflowY: "auto",
+    background: "#fff",
+    border: "1px solid #cbd5e1",
+    borderRadius: "8px",
+    marginTop: "4px",
+    zIndex: 100,
+    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+  },
+  dropdownItem: {
+    padding: "10px 12px",
+    cursor: "pointer",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderBottom: "1px solid #f1f5f9",
+    transition: "background 0.15s",
+  },
+  dropdownName: { fontSize: "13px", color: "#1e293b" },
+  dropdownCheck: { fontSize: "14px", color: "#16a34a", fontWeight: "bold" },
+  dropdownEmpty: { padding: "14px", textAlign: "center", color: "#94a3b8", fontSize: "13px" },
+  selectedClientBadge: {
+    marginTop: "6px",
+    fontSize: "12px",
+    color: "#166534",
+    background: "#f0fdf4",
+    padding: "4px 10px",
+    borderRadius: "6px",
+    border: "1px solid #bbf7d0",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+  },
+  clearSelection: {
+    border: "none",
+    background: "transparent",
+    color: "#991b1b",
+    cursor: "pointer",
+    fontSize: "12px",
+    fontWeight: "bold",
+    padding: "0 4px",
+  },
+
   ledgerContainer: { background: "#fff", padding: "12px", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" },
   ledgerCount: { fontSize: "13px", color: "#475569", fontWeight: "600", marginRight: "8px" },
   noData: { textAlign: "center", color: "#64748b", margin: 0, padding: "20px", fontWeight: 500 },
@@ -765,7 +922,6 @@ const styles = {
   divider: { color: "#cbd5e1" },
   descText: { fontSize: "14px", color: "#1e293b", fontWeight: 500 },
 
-  // ======== NEW: Date Badge Style ========
   dateBadge: {
     fontSize: "12px",
     color: "#374151",

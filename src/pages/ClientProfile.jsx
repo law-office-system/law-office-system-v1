@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { doc, getDoc, updateDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import Button from "../components/ui/Button";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebaseDb";
@@ -12,8 +12,19 @@ export default function ClientProfile() {
 
   const [client, setClient] = useState(null);
   const [clientCases, setClientCases] = useState([]); 
+  const [clientTransactions, setClientTransactions] = useState([]);
   const [loadingCases, setLoadingCases] = useState(true);
+  const [loadingFinance, setLoadingFinance] = useState(true);
   const [editMode, setEditMode] = useState(false);
+
+  // 💰 نموذج تخصيص مالي لقضية
+  const [allocForm, setAllocForm] = useState({
+    caseId: "",
+    type: "income",
+    amount: "",
+    description: "",
+  });
+  const [allocLoading, setAllocLoading] = useState(false);
 
   const [form, setForm] = useState({
     fullName: "",
@@ -67,24 +78,23 @@ export default function ClientProfile() {
           });
 
           // ✅ FIXED: جلب كل قضايا المكتب ثم فلترة client-side
-          // لأن clients هي مصفوفة كائنات ولا يمكن البحث فيها بـ array-contains
           const casesRef = collection(db, "cases");
           const q = query(casesRef, where("officeId", "==", userData.officeId));
           const casesSnap = await getDocs(q);
 
           const loadedCases = [];
+          const caseIds = [];
+
           casesSnap.forEach((docSnap) => {
             const caseData = docSnap.data();
             const caseClients = caseData.clients || [];
 
-            // البحث إذا كان الموكل موجود في مصفوفة clients
             const isLinked = caseClients.some((clientItem) => {
               const clientId = typeof clientItem === "object" ? clientItem.id : clientItem;
               return clientId === id;
             });
 
             if (isLinked) {
-              // استخراج صفة الموكل في هذه القضية
               const clientEntry = caseClients.find((clientItem) => {
                 const clientId = typeof clientItem === "object" ? clientItem.id : clientItem;
                 return clientId === id;
@@ -96,12 +106,43 @@ export default function ClientProfile() {
               loadedCases.push({ 
                 id: docSnap.id, 
                 ...caseData,
-                _clientRole: clientRole  // إضافة الصفة للعرض
+                _clientRole: clientRole
               });
+              caseIds.push(docSnap.id);
             }
           });
 
           setClientCases(loadedCases);
+
+          // 💰 جلب المعاملات المالية لكل قضايا الموكل
+          if (caseIds.length > 0) {
+            const transRef = collection(db, "transactions");
+            const transQ = query(transRef, where("officeId", "==", userData.officeId));
+            const transSnap = await getDocs(transQ);
+
+            const loadedTrans = [];
+            transSnap.forEach((docSnap) => {
+              const t = docSnap.data();
+              if (caseIds.includes(t.caseId) || t.clientId === id) {
+                loadedTrans.push({ id: docSnap.id, ...t });
+              }
+            });
+            setClientTransactions(loadedTrans);
+          } else {
+            // جلب المعاملات المرتبطة بالموكل مباشرة (scope=client)
+            const transRef = collection(db, "transactions");
+            const transQ = query(transRef, where("officeId", "==", userData.officeId));
+            const transSnap = await getDocs(transQ);
+            const loadedTrans = [];
+            transSnap.forEach((docSnap) => {
+              const t = docSnap.data();
+              if (t.clientId === id) {
+                loadedTrans.push({ id: docSnap.id, ...t });
+              }
+            });
+            setClientTransactions(loadedTrans);
+          }
+
         } else {
           alert("ملف الموكل غير موجود بالمنظومة.");
           navigate("/clients");
@@ -110,11 +151,98 @@ export default function ClientProfile() {
         console.error("Error fetching client dashboard:", error);
       } finally {
         setLoadingCases(false);
+        setLoadingFinance(false);
       }
     };
 
     fetchClientAndCases();
   }, [id, userData, navigate]);
+
+  // ================= 💰 حسابات مالية =================
+  const caseIdsMap = useMemo(() => {
+    const map = {};
+    clientCases.forEach((c) => { map[c.id] = c; });
+    return map;
+  }, [clientCases]);
+
+  const { totalIncome, totalExpenses, netBalance } = useMemo(() => {
+    let inc = 0;
+    let exp = 0;
+    clientTransactions.forEach((t) => {
+      const amt = Number(t.amount || 0);
+      if (t.type === "income") inc += amt;
+      if (t.type === "expense") exp += amt;
+    });
+    return { totalIncome: inc, totalExpenses: exp, netBalance: inc - exp };
+  }, [clientTransactions]);
+
+  const sortedTransactions = useMemo(() => {
+    return [...clientTransactions].sort((a, b) => {
+      const aTime = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (a.createdAt instanceof Date ? a.createdAt.getTime() : 0);
+      const bTime = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (b.createdAt instanceof Date ? b.createdAt.getTime() : 0);
+      return bTime - aTime;
+    });
+  }, [clientTransactions]);
+
+  const getTransactionDate = (t) => {
+    if (!t.createdAt) return null;
+    if (t.createdAt.seconds) return new Date(t.createdAt.seconds * 1000);
+    if (t.createdAt instanceof Date) return t.createdAt;
+    return new Date(t.createdAt);
+  };
+
+  const formatDate = (dateObj) => {
+    if (!dateObj || isNaN(dateObj.getTime())) return "—";
+    const d = dateObj;
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  // ================= 💰 تخصيص مالي لقضية =================
+  const handleAllocation = async () => {
+    if (!allocForm.caseId) return alert("يرجى اختيار القضية.");
+    if (!allocForm.amount || isNaN(allocForm.amount) || Number(allocForm.amount) <= 0) {
+      return alert("يرجى إدخال مبلغ صحيح.");
+    }
+    if (!allocForm.description.trim()) return alert("يرجى كتابة وصف للتخصيص.");
+
+    setAllocLoading(true);
+    try {
+      const caseInfo = caseIdsMap[allocForm.caseId];
+      const payload = {
+        type: allocForm.type,
+        amount: Number(allocForm.amount),
+        description: allocForm.description.trim(),
+        scope: "case",
+        caseId: allocForm.caseId,
+        caseNumber: caseInfo?.caseSerial || caseInfo?.caseNumber || "",
+        clientId: id,
+        clientName: client?.fullName || "",
+        officeId: userData.officeId,
+        createdAt: serverTimestamp(),
+        createdBy: userData?.uid || "unknown",
+      };
+
+      const docRef = await addDoc(collection(db, "transactions"), payload);
+
+      // إضافة للـ state محلياً فوراً
+      setClientTransactions((prev) => [{
+        id: docRef.id,
+        ...payload,
+        createdAt: new Date(),
+      }, ...prev]);
+
+      setAllocForm({ caseId: "", type: "income", amount: "", description: "" });
+      alert("تم تخصيص المبلغ للقضية بنجاح ✅");
+    } catch (err) {
+      console.error("Allocation error:", err);
+      alert("حدث خطأ أثناء التخصيص: " + err.message);
+    } finally {
+      setAllocLoading(false);
+    }
+  };
 
   const handleChange = (e) => {
     setForm((prev) => ({
@@ -184,70 +312,223 @@ export default function ClientProfile() {
           </div>
         )}
       </div>
+
       {/* VIEW & EDIT DASHBOARD */}
       {!editMode ? (
-        <div style={styles.gridContainer}>
-
-          {/* ================= 👤 يمين الشاشة: جدول بيانات الموكل المضمونة ================= */}
-          <div style={styles.infoCard}>
-            <div style={styles.cardHeader}>
-              <h2 style={styles.clientTitle}>👤 ملف الموكل: {client.fullName}</h2>
-            </div>
-
-            <h3 style={styles.subSectionTitle}>📋 البيانات الشخصية وبيانات الاتصال</h3>
-            <div style={styles.profileTable}>
-              <div style={styles.tableRow}><div style={styles.tableLabel}>الاسم الكامل:</div><div style={styles.tableValue}><strong>{client.fullName || "—"}</strong></div></div>
-              <div style={styles.tableRow}><div style={styles.tableLabel}>الرقم القومي:</div><div style={{...styles.tableValue, fontFamily: 'monospace'}}>{client.nationalId || "—"}</div></div>
-              <div style={styles.tableRow}><div style={styles.tableLabel}>العنوان:</div><div style={styles.tableValue}>{client.address || "—"}</div></div>
-              <div style={styles.tableRow}><div style={styles.tableLabel}>رقم الهاتف 1:</div><div style={styles.tableValue}>{client.phone1 || "—"}</div></div>
-              <div style={styles.tableRow}><div style={styles.tableLabel}>رقم الهاتف 2:</div><div style={styles.tableValue}>{client.phone2 || "—"}</div></div>
-            </div>
-
-            <div style={{ margin: "25px 0 15px 0" }}></div>
-
-            <h3 style={styles.subSectionTitle}>📄 بيانات التوكيل القضائي</h3>
-            <div style={styles.profileTable}>
-              <div style={styles.tableRow}><div style={styles.tableLabel}>طبيعة التوكيل:</div><div style={styles.tableValue}><span style={styles.badge}>{client.powerOfAttorney?.type || "غير محدد"}</span></div></div>
-              <div style={styles.tableRow}><div style={styles.tableLabel}>رقم التوكيل:</div><div style={styles.tableValue}>{client.powerOfAttorney?.number || "—"}</div></div>
-              <div style={styles.tableRow}><div style={styles.tableLabel}>حرف التوكيل:</div><div style={styles.tableValue}>{client.powerOfAttorney?.letter || "—"}</div></div>
-              <div style={styles.tableRow}><div style={styles.tableLabel}>سنة التوثيق:</div><div style={styles.tableValue}>{client.powerOfAttorney?.year || "—"}</div></div>
-              <div style={styles.tableRow}><div style={styles.tableLabel}>مكتب التوثيق:</div><div style={styles.tableValue}>{client.powerOfAttorney?.office || "—"}</div></div>
-            </div>
-          </div>
-
-          {/* ================= 📁 يسار الشاشة: قائمة القضايا المربوطة ================= */}
-          <div style={styles.casesCard}>
-            <h3 style={styles.sectionTitle}>📁 ملف القضايا والنزاعات المرتبطة ({clientCases.length})</h3>
-            {loadingCases ? (
-              <p style={{ color: "#64748b", fontSize: "13px" }}>جاري جلب القضايا...</p>
-            ) : clientCases.length === 0 ? (
-              <div style={styles.noDataBox}>لا توجد قضايا مقيدة باسم هذا الموكل حالياً بالسيستم.</div>
-            ) : (
-              <div style={styles.casesList}>
-                {clientCases.map((c) => (
-                  <div key={c.id} style={styles.caseItem} onClick={() => navigate(`/case/${c.id}`)}>
-                    <div style={{ flex: 1 }}>
-                      <strong style={styles.caseTitle}>⚖️ قضية رقم: {c.caseNumber || c.caseSerial || "بدون رقم"} / {c.caseYear || "—"}</strong>
-                      <div style={{ fontSize: "12.5px", color: "#475569", marginTop: "4px" }}>🏢 {c.court || c.courtName || "المحكمة غير محددة"}</div>
-                      <p style={styles.caseSubtitle}>
-                        نوع الدعوى: {c.caseType || "غير محدد"} 
-                        <span style={{ margin: "0 8px", color: "#cbd5e1" }}>|</span>
-                        صفته: <span style={{ color: "#2563eb", fontWeight: 600 }}>{c._clientRole}</span>
-                        <span style={{ margin: "0 8px", color: "#cbd5e1" }}>|</span>
-                        الحالة: <span style={{ 
-                          color: c.status === 'ACTIVE' ? '#16a34a' : c.status === 'CLOSED' ? '#64748b' : '#d97706',
-                          fontWeight: 600 
-                        }}>{c.status === 'ACTIVE' ? 'نشطة' : c.status === 'CLOSED' ? 'مغلقة' : (c.status || 'غير محدد')}</span>
-                      </p>
-                    </div>
-                    <span style={styles.arrowIcon}>👁️ عرض</span>
-                  </div>
-                ))}
+        <>
+          <div style={styles.gridContainer}>
+            {/* ================= 👤 يمين الشاشة: جدول بيانات الموكل المضمونة ================= */}
+            <div style={styles.infoCard}>
+              <div style={styles.cardHeader}>
+                <h2 style={styles.clientTitle}>👤 ملف الموكل: {client.fullName}</h2>
               </div>
-            )}
+
+              <h3 style={styles.subSectionTitle}>📋 البيانات الشخصية وبيانات الاتصال</h3>
+              <div style={styles.profileTable}>
+                <div style={styles.tableRow}><div style={styles.tableLabel}>الاسم الكامل:</div><div style={styles.tableValue}><strong>{client.fullName || "—"}</strong></div></div>
+                <div style={styles.tableRow}><div style={styles.tableLabel}>الرقم القومي:</div><div style={{...styles.tableValue, fontFamily: 'monospace'}}>{client.nationalId || "—"}</div></div>
+                <div style={styles.tableRow}><div style={styles.tableLabel}>العنوان:</div><div style={styles.tableValue}>{client.address || "—"}</div></div>
+                <div style={styles.tableRow}><div style={styles.tableLabel}>رقم الهاتف 1:</div><div style={styles.tableValue}>{client.phone1 || "—"}</div></div>
+                <div style={styles.tableRow}><div style={styles.tableLabel}>رقم الهاتف 2:</div><div style={styles.tableValue}>{client.phone2 || "—"}</div></div>
+              </div>
+
+              <div style={{ margin: "25px 0 15px 0" }}></div>
+
+              <h3 style={styles.subSectionTitle}>📄 بيانات التوكيل القضائي</h3>
+              <div style={styles.profileTable}>
+                <div style={styles.tableRow}><div style={styles.tableLabel}>طبيعة التوكيل:</div><div style={styles.tableValue}><span style={styles.badge}>{client.powerOfAttorney?.type || "غير محدد"}</span></div></div>
+                <div style={styles.tableRow}><div style={styles.tableLabel}>رقم التوكيل:</div><div style={styles.tableValue}>{client.powerOfAttorney?.number || "—"}</div></div>
+                <div style={styles.tableRow}><div style={styles.tableLabel}>حرف التوكيل:</div><div style={styles.tableValue}>{client.powerOfAttorney?.letter || "—"}</div></div>
+                <div style={styles.tableRow}><div style={styles.tableLabel}>سنة التوثيق:</div><div style={styles.tableValue}>{client.powerOfAttorney?.year || "—"}</div></div>
+                <div style={styles.tableRow}><div style={styles.tableLabel}>مكتب التوثيق:</div><div style={styles.tableValue}>{client.powerOfAttorney?.office || "—"}</div></div>
+              </div>
+            </div>
+
+            {/* ================= 📁 يسار الشاشة: قائمة القضايا المربوطة ================= */}
+            <div style={styles.casesCard}>
+              <h3 style={styles.sectionTitle}>📁 ملف القضايا والنزاعات المرتبطة ({clientCases.length})</h3>
+              {loadingCases ? (
+                <p style={{ color: "#64748b", fontSize: "13px" }}>جاري جلب القضايا...</p>
+              ) : clientCases.length === 0 ? (
+                <div style={styles.noDataBox}>لا توجد قضايا مقيدة باسم هذا الموكل حالياً بالسيستم.</div>
+              ) : (
+                <div style={styles.casesList}>
+                  {clientCases.map((c) => (
+                    <div key={c.id} style={styles.caseItem} onClick={() => navigate(`/case/${c.id}`)}>
+                      <div style={{ flex: 1 }}>
+                        <strong style={styles.caseTitle}>⚖️ قضية رقم: {c.caseNumber || c.caseSerial || "بدون رقم"} / {c.caseYear || "—"}</strong>
+                        <div style={{ fontSize: "12.5px", color: "#475569", marginTop: "4px" }}>🏢 {c.court || c.courtName || "المحكمة غير محددة"}</div>
+                        <p style={styles.caseSubtitle}>
+                          نوع الدعوى: {c.caseType || "غير محدد"} 
+                          <span style={{ margin: "0 8px", color: "#cbd5e1" }}>|</span>
+                          صفته: <span style={{ color: "#2563eb", fontWeight: 600 }}>{c._clientRole}</span>
+                          <span style={{ margin: "0 8px", color: "#cbd5e1" }}>|</span>
+                          الحالة: <span style={{ 
+                            color: c.status === 'ACTIVE' ? '#16a34a' : c.status === 'CLOSED' ? '#64748b' : '#d97706',
+                            fontWeight: 600 
+                          }}>{c.status === 'ACTIVE' ? 'نشطة' : c.status === 'CLOSED' ? 'مغلقة' : (c.status || 'غير محدد')}</span>
+                        </p>
+                      </div>
+                      <span style={styles.arrowIcon}>👁️ عرض</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
-        </div>
+          {/* ================= 💰 قسم الحسابات المالية ================= */}
+          <div style={styles.financeSection}>
+            <h3 style={styles.financeTitle}>💰 الحسابات المالية والخزينة الخاصة بالموكل</h3>
+
+            {/* Summary Cards */}
+            <div style={styles.financeSummaryGrid}>
+              <div style={{ ...styles.financeSummaryCard, background: "#ecfdf5", borderRight: "5px solid #10b981" }}>
+                <span style={{ ...styles.financeSummaryLabel, color: "#065f46" }}>💰 إجمالي المقبوضات (دخل)</span>
+                <span style={{ ...styles.financeSummaryValue, color: "#047857" }}>{totalIncome.toLocaleString()} ج.م</span>
+              </div>
+              <div style={{ ...styles.financeSummaryCard, background: "#fef2f2", borderRight: "5px solid #ef4444" }}>
+                <span style={{ ...styles.financeSummaryLabel, color: "#991b1b" }}>💸 إجمالي المصروفات (منفق)</span>
+                <span style={{ ...styles.financeSummaryValue, color: "#b91c1c" }}>{totalExpenses.toLocaleString()} ج.م</span>
+              </div>
+              <div style={{ 
+                ...styles.financeSummaryCard, 
+                background: netBalance >= 0 ? "#f0fdf4" : "#fff5f5", 
+                borderRight: netBalance >= 0 ? "5px solid #22c55e" : "5px solid #f43f5e" 
+              }}>
+                <span style={{ ...styles.financeSummaryLabel, color: netBalance >= 0 ? "#166534" : "#991b1b" }}>📊 الرصيد الصافي الحالي</span>
+                <span style={{ ...styles.financeSummaryValue, color: netBalance >= 0 ? "#15803d" : "#be123c" }}>
+                  {netBalance.toLocaleString()} ج.م
+                </span>
+              </div>
+            </div>
+
+            {/* ➕ نموذج تخصيص مالي لقضية */}
+            <div style={styles.allocCard}>
+              <h4 style={styles.allocTitle}>➕ تخصيص مبلغ مالي من رصيد الموكل لقضية محددة</h4>
+              <div style={styles.allocRow}>
+                <div style={{ ...styles.allocField, flex: 2 }}>
+                  <label style={styles.allocLabel}>القضية المستفيدة</label>
+                  <select
+                    value={allocForm.caseId}
+                    onChange={(e) => setAllocForm({ ...allocForm, caseId: e.target.value })}
+                    style={styles.allocSelect}
+                  >
+                    <option value="">اختر من قضايا هذا الموكل...</option>
+                    {clientCases.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        ⚖️ ق رقم {c.caseSerial || c.caseNumber || "—"} / {c.caseYear || "—"} — {c.court || "غير محدد"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={styles.allocField}>
+                  <label style={styles.allocLabel}>نوع الحركة</label>
+                  <select
+                    value={allocForm.type}
+                    onChange={(e) => setAllocForm({ ...allocForm, type: e.target.value })}
+                    style={styles.allocSelect}
+                  >
+                    <option value="income">🟢 تحصيل / دفعة من الموكل</option>
+                    <option value="expense">🔴 صرف / رد لمبلغ للموكل</option>
+                  </select>
+                </div>
+
+                <div style={styles.allocField}>
+                  <label style={styles.allocLabel}>المبلغ (ج.م)</label>
+                  <input
+                    placeholder="0.00"
+                    value={allocForm.amount}
+                    onChange={(e) => setAllocForm({ ...allocForm, amount: e.target.value })}
+                    style={styles.allocInput}
+                  />
+                </div>
+              </div>
+
+              <div style={{ ...styles.allocRow, marginTop: "10px" }}>
+                <div style={{ ...styles.allocField, flex: 3 }}>
+                  <label style={styles.allocLabel}>بيان التخصيص والسبب</label>
+                  <input
+                    placeholder="مثال: دفعة أولى أتعاب قضية النقض، رسوم استئناف..."
+                    value={allocForm.description}
+                    onChange={(e) => setAllocForm({ ...allocForm, description: e.target.value })}
+                    style={styles.allocInput}
+                  />
+                </div>
+                <div style={{ ...styles.allocField, flex: 1, justifyContent: "flex-end" }}>
+                  <Button 
+                    variant="primary" 
+                    onClick={handleAllocation} 
+                    disabled={allocLoading}
+                    style={{ width: "100%", fontWeight: "600", padding: "10px" }}
+                  >
+                    {allocLoading ? "⏳ جاري القيد..." : "📋 قيد التخصيص الآن"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Transactions List */}
+            <div style={styles.financeCard}>
+              <h4 style={styles.financeSubTitle}>📒 دفتر المعاملات المالية المرتبطة بالموكل ({clientTransactions.length})</h4>
+
+              {loadingFinance ? (
+                <p style={{ color: "#64748b", fontSize: "13px", textAlign: "center", padding: "20px" }}>جاري جلب البيانات المالية...</p>
+              ) : sortedTransactions.length === 0 ? (
+                <div style={styles.noDataBox}>لا توجد معاملات مالية مقيدة لهذا الموكل حالياً.</div>
+              ) : (
+                <div style={styles.transList}>
+                  {sortedTransactions.map((t) => {
+                    const caseInfo = caseIdsMap[t.caseId];
+                    const tDate = getTransactionDate(t);
+                    return (
+                      <div 
+                        key={t.id} 
+                        style={{
+                          ...styles.transItem,
+                          background: t.type === "income" ? "#f0fdf4" : "#fff5f5",
+                          borderRight: t.type === "income" ? "4px solid #16a34a" : "4px solid #dc2626",
+                        }}
+                      >
+                        <div style={styles.transMain}>
+                          <span style={{
+                            ...styles.transBadge,
+                            background: t.type === "income" ? "#bbf7d0" : "#fecaca",
+                            color: t.type === "income" ? "#15803d" : "#991b1b",
+                          }}>
+                            {t.type === "income" ? "💰 دخل" : "💸 مصروف"}
+                          </span>
+                          <strong style={{
+                            fontSize: "15px",
+                            color: t.type === "income" ? "#15803d" : "#b91c1c",
+                            fontFamily: "sans-serif",
+                          }}>
+                            {Number(t.amount).toLocaleString()} ج.م
+                          </strong>
+                          <span style={styles.transDivider}>|</span>
+                          <span style={styles.transDesc}>{t.description || "—"}</span>
+                          {t.notes && <span style={styles.transNotes}>({t.notes})</span>}
+                        </div>
+                        <div style={styles.transMeta}>
+                          {caseInfo && (
+                            <span style={styles.transCaseLink} onClick={() => navigate(`/case/${t.caseId}`)}>
+                              ⚖️ قضية {caseInfo.caseSerial || caseInfo.caseNumber || "—"}
+                            </span>
+                          )}
+                          {t.scope === "client" && !t.caseId && (
+                            <span style={styles.transScopeBadge}>👤 حساب عام</span>
+                          )}
+                          <span style={styles.transDate}>📅 {formatDate(tDate)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       ) : (
         /* MODE EDIT FORM */
         (<form style={styles.formBox} onSubmit={handleSave}>
@@ -331,7 +612,7 @@ const styles = {
   saveBtn: { background: "#16a34a" },
   cancelBtn: { background: "#64748b", color: "#fff" },
 
-  gridContainer: { display: "flex", gap: "20px", flexWrap: "wrap", width: "100%" },
+  gridContainer: { display: "flex", gap: "20px", flexWrap: "wrap", width: "100%", marginBottom: "20px" },
   infoCard: { background: "#fff", padding: "20px", borderRadius: "12px", border: "1px solid #e2e8f0", flex: "1.2", minWidth: "300px", boxShadow: "0 1px 3px rgba(0,0,0,0.03)", height: "fit-content" },
   casesCard: { background: "#fff", padding: "20px", borderRadius: "12px", border: "1px solid #e2e8f0", flex: "1.2", minWidth: "300px", boxShadow: "0 1px 3px rgba(0,0,0,0.03)", height: "fit-content" },
 
@@ -355,6 +636,38 @@ const styles = {
   caseTitle: { fontSize: "14px", color: "#1e293b", fontWeight: "600" },
   caseSubtitle: { margin: "6px 0 0 0", fontSize: "11.5px", color: "#64748b" },
   arrowIcon: { fontSize: "12px", background: "#f1f5f9", padding: "4px 8px", borderRadius: "6px", color: "#475569", fontWeight: "600" },
+
+  // 💰 Finance Section Styles
+  financeSection: { background: "#fff", padding: "20px", borderRadius: "12px", border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,0.03)", marginTop: "10px" },
+  financeTitle: { margin: "0 0 18px 0", fontSize: "16px", color: "#1e293b", fontWeight: "700", borderBottom: "2px solid #f1f5f9", paddingBottom: "10px" },
+  financeSummaryGrid: { display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "20px" },
+  financeSummaryCard: { flex: 1, minWidth: "200px", padding: "16px", borderRadius: "10px", display: "flex", flexDirection: "column", gap: "4px", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" },
+  financeSummaryLabel: { fontSize: "13px", fontWeight: "600" },
+  financeSummaryValue: { fontSize: "20px", fontWeight: "bold", fontFamily: "sans-serif" },
+
+  // ➕ Allocation Form Styles
+  allocCard: { background: "#f8fafc", padding: "16px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "16px" },
+  allocTitle: { margin: "0 0 12px 0", fontSize: "14px", color: "#475569", fontWeight: "600" },
+  allocRow: { display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end" },
+  allocField: { flex: 1, minWidth: "160px", display: "flex", flexDirection: "column", gap: "5px" },
+  allocLabel: { fontSize: "12px", fontWeight: "600", color: "#64748b" },
+  allocSelect: { padding: "9px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none", fontSize: "13px", background: "#fff", width: "100%", boxSizing: "border-box" },
+  allocInput: { padding: "9px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none", fontSize: "13px", width: "100%", boxSizing: "border-box" },
+
+  financeCard: { background: "#f8fafc", padding: "16px", borderRadius: "10px", border: "1px solid #e2e8f0" },
+  financeSubTitle: { margin: "0 0 12px 0", fontSize: "14px", color: "#475569", fontWeight: "600" },
+
+  transList: { display: "flex", flexDirection: "column", gap: "8px" },
+  transItem: { padding: "12px", borderRadius: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" },
+  transMain: { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", flex: 1 },
+  transBadge: { fontSize: "11px", fontWeight: "bold", padding: "2px 6px", borderRadius: "4px" },
+  transDivider: { color: "#cbd5e1" },
+  transDesc: { fontSize: "14px", color: "#1e293b", fontWeight: 500 },
+  transNotes: { fontSize: "12px", color: "#64748b", fontStyle: "italic" },
+  transMeta: { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" },
+  transCaseLink: { fontSize: "12px", background: "#eff6ff", color: "#2563eb", padding: "3px 8px", borderRadius: "6px", fontWeight: "600", cursor: "pointer", border: "1px solid #bfdbfe" },
+  transScopeBadge: { fontSize: "12px", background: "#fef3c7", color: "#92400e", padding: "3px 8px", borderRadius: "6px", fontWeight: "600" },
+  transDate: { fontSize: "12px", color: "#64748b", fontFamily: "monospace", background: "#e2e8f0", padding: "3px 8px", borderRadius: "6px" },
 
   formBox: { background: "#fff", padding: 20, borderRadius: 12, border: "1px solid #e2e8f0", width: "100%" },
   row: { display: "flex", gap: 12, flexWrap: "wrap", marginBottom: "15px", alignItems: "flex-end" },
