@@ -5,7 +5,7 @@ import {
   Gavel, ClipboardList, MessageSquare, Bell, 
   LogOut, DollarSign, Archive, Building2,
   X, Scale, ChevronRight,
-  Crown, User
+  Crown, User, Settings
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import useNotifications from "../hooks/useNotifications";
@@ -127,7 +127,7 @@ export default function Sidebar({ open, setOpen, isMobile }) {
     return null;
   }
 
-  // 🆕 Dynamic nav items with real badge counts
+  // 🆕 Dynamic nav items with real badge counts + Settings
   const navItems = [
     { path: "/dashboard", label: "الرئيسية", icon: LayoutDashboard },
     { 
@@ -477,6 +477,138 @@ export default function Sidebar({ open, setOpen, isMobile }) {
               </div>
             );
           })}
+
+          {/* ===== DIVIDER قبل الإعدادات ===== */}
+          <div style={{
+            height: "1px",
+            background: COLORS.border,
+            margin: "12px 10px",
+          }} />
+
+          {/* ===== إعدادات المكتب ===== */}
+          <div 
+            style={{ position: "relative" }}
+            onMouseEnter={() => {
+              setHoveredItem("settings");
+              setTooltip("إعدادات المكتب");
+            }}
+            onMouseLeave={() => {
+              setHoveredItem(null);
+              setTooltip(null);
+            }}
+          >
+            <NavLink
+              to="/office/settings"
+              onClick={() => isMobile && setOpen(false)}
+              style={{
+                textDecoration: "none",
+                display: "block",
+                marginBottom: "4px",
+              }}
+            >
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: open || isMobile ? "flex-start" : "center",
+                gap: open || isMobile ? "12px" : "0",
+                padding: open || isMobile ? "11px 14px" : "12px",
+                borderRadius: "14px",
+                transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                background: isActive("/office/settings")
+                  ? COLORS.activeBg
+                  : hoveredItem === "settings"
+                    ? COLORS.bgHover
+                    : "transparent",
+                borderRight: isActive("/office/settings")
+                  ? `3px solid ${COLORS.activeBorder}`
+                  : "3px solid transparent",
+                position: "relative",
+                overflow: "hidden",
+              }}>
+                {isActive("/office/settings") && (
+                  <div style={{
+                    position: "absolute",
+                    inset: 0,
+                    background: "linear-gradient(90deg, rgba(212, 175, 55, 0.05), transparent)",
+                    pointerEvents: "none",
+                  }} />
+                )}
+
+                <div style={{
+                  width: open || isMobile ? 36 : 32,
+                  height: open || isMobile ? 36 : 32,
+                  borderRadius: "10px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                  background: isActive("/office/settings")
+                    ? COLORS.iconBgActive
+                    : hoveredItem === "settings"
+                      ? COLORS.iconBg
+                      : "rgba(255,255,255,0.03)",
+                  transition: "all 0.25s ease",
+                  border: isActive("/office/settings")
+                    ? `1px solid rgba(212, 175, 55, 0.3)`
+                    : "1px solid transparent",
+                }}>
+                  <Settings
+                    size={open || isMobile ? 18 : 16}
+                    color={isActive("/office/settings") ? COLORS.gold : hoveredItem === "settings" ? COLORS.goldLight : COLORS.textMuted}
+                    strokeWidth={isActive("/office/settings") ? 2.5 : 2}
+                  />
+                </div>
+
+                {(open || isMobile) && (
+                  <span style={{
+                    fontSize: "14px",
+                    fontWeight: isActive("/office/settings") ? 700 : 600,
+                    color: isActive("/office/settings") ? COLORS.gold : hoveredItem === "settings" ? COLORS.text : COLORS.textMuted,
+                    transition: "all 0.25s ease",
+                    whiteSpace: "nowrap",
+                    letterSpacing: "0.2px",
+                  }}>
+                    إعدادات المكتب
+                  </span>
+                )}
+              </div>
+            </NavLink>
+
+            {/* Tooltip for settings */}
+            {!open && !isMobile && hoveredItem === "settings" && (
+              <div style={{
+                position: "absolute",
+                left: "100%",
+                top: "50%",
+                transform: "translateY(-50%)",
+                marginLeft: "12px",
+                padding: "8px 14px",
+                background: "#1e293b",
+                color: "#fff",
+                borderRadius: "8px",
+                fontSize: "13px",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+                zIndex: 100,
+                border: "1px solid rgba(212, 175, 55, 0.2)",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                pointerEvents: "none",
+              }}>
+                إعدادات المكتب
+                <div style={{
+                  position: "absolute",
+                  right: "100%",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  width: 0,
+                  height: 0,
+                  borderTop: "6px solid transparent",
+                  borderBottom: "6px solid transparent",
+                  borderLeft: "6px solid #1e293b",
+                }} />
+              </div>
+            )}
+          </div>
 
           {/* ===== DIVIDER قبل تسجيل الخروج ===== */}
           <div style={{

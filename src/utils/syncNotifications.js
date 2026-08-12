@@ -7,6 +7,7 @@ import {
   writeBatch,
   serverTimestamp,
   documentId,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../firebaseDb";
 import { generateNotifications } from "./generateNotifications";
@@ -54,6 +55,23 @@ const getCachedClientNames = async (clientIds) => {
 };
 
 // ============================================================
+// 🆕 NEW: Load notification settings from office document
+// ============================================================
+async function loadNotificationSettings(officeId) {
+  if (!officeId) return {};
+  try {
+    const snap = await getDoc(doc(db, "offices", officeId));
+    if (snap.exists()) {
+      const data = snap.data();
+      return data.notifications || {};
+    }
+  } catch (e) {
+    console.warn("Failed to load notification settings:", e.message);
+  }
+  return {};
+}
+
+// ============================================================
 // ✅ دالة مساعدة: حذف الإشعارات المرتبطة بجلسة معينة
 // ============================================================
 export const deleteNotificationsForSession = async (caseId, sessionDate) => {
@@ -80,12 +98,16 @@ export const deleteNotificationsForSession = async (caseId, sessionDate) => {
 };
 
 // ============================================================
-// دالة المزامنة الرئيسية — محسّنة
+// دالة المزامنة الرئيسية — محسّنة + مع إعدادات الإشعارات
 // ============================================================
 export const syncNotifications = async (cases, adminTasks = [], judgments = [], officeId) => {
   if (!officeId) return;
 
   try {
+    // 🆕 NEW: Load notification settings first
+    const settings = await loadNotificationSettings(officeId);
+    console.log("📋 Notification settings:", settings);
+
     // 1. جمع معرفات الموكلين
     const clientIds = new Set();
     cases.forEach((c) => {
@@ -119,8 +141,8 @@ export const syncNotifications = async (cases, adminTasks = [], judgments = [], 
       };
     });
 
-    // 4. توليد الإشعارات الجديدة
-    const generatedNotifications = generateNotifications(casesWithNames, adminTasks, judgments);
+    // 4. توليد الإشعارات الجديدة — مع الإعدادات
+    const generatedNotifications = generateNotifications(casesWithNames, adminTasks, judgments, settings);
     const generatedIds = new Set(generatedNotifications.map((n) => n.id));
 
     // 5. جلب الإشعارات الحالية

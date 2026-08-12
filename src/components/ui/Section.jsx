@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { card, sectionTitle, transitions, colors, radius, spacing } from '../../styles/design-system';
+import { useTheme } from '../../context/ThemeContext.jsx';
 
 export default function Section({ 
   title, 
   icon: Icon, 
-  iconColor = colors.accent.blue.light,
   defaultOpen = false, 
   children,
   style = {},
   actions = null,
 }) {
+  const { theme } = useTheme();
+  const { card, sectionTitle, transitions, colors, spacing, radius } = theme;
   const [open, setOpen] = useState(defaultOpen);
 
   return (
@@ -41,7 +42,7 @@ export default function Section({
           color: '#fff',
           textShadow: 'none',
         }}>
-          {Icon && <Icon size={22} color={iconColor} strokeWidth={2.5} />}
+          {Icon && <Icon size={22} color={colors.accent.blue.light} strokeWidth={2.5} />}
           {title}
         </h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

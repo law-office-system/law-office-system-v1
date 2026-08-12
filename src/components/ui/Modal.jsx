@@ -1,37 +1,22 @@
 import React, { useEffect, useCallback } from 'react';
 import { X } from 'lucide-react';
-import { modal as modalStyles, colors, spacing, radius } from '../../styles/design-system';
+import { useTheme } from '../../context/ThemeContext.jsx';
 
-/**
- * Modal — مكون موحد للنوافذ المنبثقة
- * 
- * Usage:
- * <Modal
- *   isOpen={showForm}
- *   onClose={handleClose}
- *   title="عنوان النافذة"
- *   subtitle="وصف فرعي (اختياري)"
- *   icon={SomeIcon}
- *   iconColor="#60a5fa"
- *   maxWidth="640px"
- *   headerActions={null}
- * >
- *   {children}
- * </Modal>
- */
 export default function Modal({
   isOpen,
   onClose,
   title,
   subtitle = '',
   icon: Icon = null,
-  iconColor = colors.accent.blue.main,
   maxWidth = '640px',
   headerActions = null,
   children,
   showCloseButton = true,
 }) {
-  // Prevent body scroll when modal is open
+  const { theme } = useTheme();
+  const { modal, colors, spacing } = theme;
+  const iconColor = colors.accent.blue.main;
+
   useEffect(() => {
     if (!isOpen) return;
     const originalOverflow = document.body.style.overflow;
@@ -39,7 +24,6 @@ export default function Modal({
     return () => { document.body.style.overflow = originalOverflow; };
   }, [isOpen]);
 
-  // Handle escape key
   useEffect(() => {
     if (!isOpen) return;
     const handleEscape = (e) => {
@@ -57,26 +41,25 @@ export default function Modal({
 
   return (
     <div
-      style={modalStyles.overlay}
+      style={modal.overlay}
       onClick={handleOverlayClick}
       onMouseDown={(e) => e.stopPropagation()}
     >
       <div
-        style={modalStyles.container(maxWidth)}
+        style={modal.container(maxWidth)}
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div style={modalStyles.header}>
-          <div style={modalStyles.headerLeft}>
+        <div style={modal.header}>
+          <div style={modal.headerLeft}>
             {Icon && (
-              <div style={modalStyles.headerIcon(iconColor)}>
+              <div style={modal.headerIcon(iconColor)}>
                 <Icon color={iconColor} size={22} strokeWidth={2.5} />
               </div>
             )}
             <div>
-              <h2 style={modalStyles.headerTitle}>{title}</h2>
-              {subtitle && <p style={modalStyles.headerSubtitle}>{subtitle}</p>}
+              <h2 style={modal.headerTitle}>{title}</h2>
+              {subtitle && <p style={modal.headerSubtitle}>{subtitle}</p>}
             </div>
           </div>
 
@@ -85,7 +68,7 @@ export default function Modal({
             {showCloseButton && (
               <button
                 onClick={(e) => { e.stopPropagation(); onClose(); }}
-                style={modalStyles.closeBtn}
+                style={modal.closeBtn}
                 type="button"
                 title="إغلاق"
                 onMouseEnter={(e) => {
@@ -103,8 +86,7 @@ export default function Modal({
           </div>
         </div>
 
-        {/* Body */}
-        <div style={modalStyles.body}>
+        <div style={modal.body}>
           {children}
         </div>
       </div>

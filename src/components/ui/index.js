@@ -1,14 +1,9 @@
-// ═══════════════════════════════════════════════════════════════
-//  UI COMPONENTS — Barrel Export
-//  كل المكونات المشتركة في مكان واحد
-// ═══════════════════════════════════════════════════════════════
-
-export { default as Button } from './Button';
-export { default as Card } from './Card';
-export { default as Badge } from './Badge';
-export { default as Section } from './Section';
-export { default as Input } from './Input';
-export { default as IconBox } from './IconBox';
-export { default as Page } from './Page';
-export { default as Table, td, tr, hoverRow } from './Table';
-export { default as Modal } from './Modal';
+export { default as Button } from './Button.jsx';
+export { default as Card } from './Card.jsx';
+export { default as Badge } from './Badge.jsx';
+export { default as Section } from './Section.jsx';
+export { default as Input } from './Input.jsx';
+export { default as IconBox } from './IconBox.jsx';
+export { default as Page } from './Page.jsx';
+export { default as Table, td, tr, hoverRow } from './Table.jsx';
+export { default as Modal } from './Modal.jsx';

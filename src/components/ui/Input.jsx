@@ -1,5 +1,5 @@
 import React from 'react';
-import { input, colors, transitions } from '../../styles/design-system';
+import { useTheme } from '../../context/ThemeContext.jsx';
 
 export default function Input({
   type = 'text',
@@ -12,6 +12,9 @@ export default function Input({
   style = {},
   ...props
 }) {
+  const { theme } = useTheme();
+  const { input, colors } = theme;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
       {label && (

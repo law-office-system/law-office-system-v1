@@ -1,5 +1,5 @@
 import React from 'react';
-import { card as cardStyle, colors, radius, shadows, transitions } from '../../styles/design-system';
+import { useTheme } from '../../context/ThemeContext.jsx';
 
 export default function Card({ 
   children, 
@@ -9,18 +9,21 @@ export default function Card({
   onClick, 
   ...props 
 }) {
+  const { theme } = useTheme();
+  const { card, colors } = theme;
+
   const variants = {
-    default: cardStyle,
-    compact: { ...cardStyle, padding: '12px' },
+    default: card,
+    compact: { ...card, padding: '12px' },
     ghost: { 
       background: 'transparent', 
       border: `1px solid ${colors.border.default}`,
-      borderRadius: radius.lg,
-      padding: cardStyle.padding,
+      borderRadius: theme.radius.lg,
+      padding: card.padding,
     },
     elevated: {
-      ...cardStyle,
-      boxShadow: shadows.md,
+      ...card,
+      boxShadow: theme.shadows.md,
     },
   };
 
@@ -30,7 +33,7 @@ export default function Card({
     <div
       style={{
         ...baseStyle,
-        transition: transitions.default,
+        transition: theme.transitions.default,
         cursor: onClick ? 'pointer' : 'default',
         ...(hoverable && {
           ':hover': { transform: 'translateY(-2px)' },

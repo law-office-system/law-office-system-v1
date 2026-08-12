@@ -239,3 +239,31 @@ img {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   DYNAMIC THEME VARIABLES — Set by ThemeContext
+   هذه الـ variables بتتغير أوتوماتيك لما المستخدم يغير الثيم
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  --theme-bg-page:        var(--bg-page);
+  --theme-bg-card:        var(--bg-card);
+  --theme-bg-input:       var(--bg-input);
+  --theme-bg-hover:       var(--bg-hover);
+  --theme-border-default: var(--border-default);
+  --theme-border-focus:   var(--border-focus);
+  --theme-text-primary:   var(--text-primary);
+  --theme-text-secondary: var(--text-secondary);
+  --theme-text-muted:     var(--text-muted);
+  --theme-text-disabled:  var(--text-disabled);
+  --theme-accent-main:    var(--accent-blue);
+  --theme-accent-light:   #60a5fa;
+  --theme-accent-dark:    #1e40af;
+  --theme-accent-bg:      rgba(30, 64, 175, 0.15);
+}
+
+/* Body uses theme variables (fallback to original if theme not loaded) */
+body {
+  background: var(--theme-bg-page, var(--bg-page));
+  color: var(--theme-text-primary, var(--text-primary));
+}

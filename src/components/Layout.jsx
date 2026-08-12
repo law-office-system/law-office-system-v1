@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext.jsx";          // ← 🆕 NEW
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 
@@ -37,6 +38,10 @@ export default function Layout() {
   const [isMobile, setIsMobile] = useState(false);
   const { user, userData, loading: authLoading } = useAuth();
   const location = useLocation();
+
+  // 🆕 NEW: Get theme colors
+  const { theme } = useTheme();
+  const { colors } = theme;
 
   // ✅ Ref للتحكم في الـ resize (مش بيعتمد على open)
   const isMobileRef = useRef(false);
@@ -107,14 +112,14 @@ export default function Layout() {
     }
   }, []);
 
-  // ✅ Memoized styles
+  // ✅ Memoized styles — 🆕 using theme colors
   const containerStyle = useMemo(() => ({
     display: "flex",
     height: "100vh",
-    background: "#0f172a",
+    background: colors.bg.page,    // ← 🆕 was "#0f172a"
     overflow: "hidden",
     direction: "rtl",
-  }), []);
+  }), [colors.bg.page]);
 
   const contentAreaStyle = useMemo(() => ({
     display: "flex",
@@ -140,9 +145,9 @@ export default function Layout() {
       paddingRight: basePadding,
       paddingBottom: basePadding,
       paddingLeft: basePadding,
-      background: "#0f172a",
+      background: colors.bg.page,    // ← 🆕 was "#0f172a"
     };
-  }, [isMobile, showTopbar]);
+  }, [isMobile, showTopbar, colors.bg.page]);
 
   return (
     <div style={containerStyle}>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { badge, createBadge, colors } from '../../styles/design-system';
+import { useTheme } from '../../context/ThemeContext.jsx';
 
 const STATUS_MAP = {
   scheduled:  'مجدولة',
@@ -17,9 +17,12 @@ export default function Badge({
   style = {},
   variant = 'default',
 }) {
-  // If status prop is provided, use status badge
+  const { theme } = useTheme();
+  const { badge, colors } = theme;
+
   if (status) {
-    const statusStyle = createBadge(status);
+    const s = colors.status[status] || colors.status.pending;
+    const statusStyle = { ...badge, background: s.bg, color: s.text, border: `1px solid ${s.border}` };
     return (
       <span 
         className={`inline-flex items-center gap-1 ${className}`}
@@ -30,7 +33,6 @@ export default function Badge({
     );
   }
 
-  // Custom badge
   const variants = {
     default: { background: colors.accent.blue.bg, color: colors.accent.blue.light, border: `1px solid ${colors.accent.blue.light}30` },
     success: { background: colors.accent.green.bg, color: colors.accent.green.light, border: `1px solid ${colors.accent.green.light}30` },

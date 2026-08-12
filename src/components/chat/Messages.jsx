@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useTheme } from "../../context/ThemeContext.jsx";
 
 /**
  * 💬 UI Component لعرض الرسائل
@@ -18,6 +19,9 @@ export default function Messages({
   typingUsers = [],
   canSend = true,
 }) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+
   const [selectedMessage, setSelectedMessage] = useState(null);
   const bottomRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -37,8 +41,6 @@ export default function Messages({
   // حالة "يكتب الآن"
   const handleTyping = useCallback(() => {
     if (!currentUser?.uid) return;
-    // الـ typing logic بيكون في الـ parent (Chat.jsx)
-    // هنا بس بنستدعي callback لو موجود
   }, [currentUser]);
 
   // حذف رسالة
@@ -74,19 +76,19 @@ export default function Messages({
     });
   };
 
-  if (!messages) return <div style={styles.center}>⏳ جاري التحميل...</div>;
+  if (!messages) return <div style={{ ...styles.center, color: colors.text.muted }}>⏳ جاري التحميل...</div>;
 
   return (
-    <div style={styles.container}>
+    <div style={{ ...styles.container, background: colors.bg.page }}>
       {/* منطقة الرسائل */}
       <div 
         ref={messagesContainerRef}
-        style={styles.chatBox}
+        style={{ ...styles.chatBox, background: colors.bg.page }}
       >
         {Object.entries(groupedMessages || {}).map(([date, dateMessages]) => (
           <div key={date}>
             <div style={styles.dateDivider}>
-              <span style={styles.dateText}>
+              <span style={{ ...styles.dateText, background: colors.bg.card, color: colors.text.secondary }}>
                 {date !== 'unknown' ? formatDate(dateMessages[0]?.createdAt) : 'تاريخ غير معروف'}
               </span>
             </div>
@@ -103,24 +105,24 @@ export default function Messages({
                   }}
                 >
                   {m.replyTo && (
-                    <div style={styles.replyPreview}>
-                      <span style={styles.replyName}>{m.replyTo.senderName}</span>
-                      <span style={styles.replyText}>{m.replyTo.text}</span>
+                    <div style={{ ...styles.replyPreview, borderRight: `3px solid ${colors.accent.main}` }}>
+                      <span style={{ ...styles.replyName, color: colors.accent.main }}>{m.replyTo.senderName}</span>
+                      <span style={{ ...styles.replyText, color: colors.text.muted }}>{m.replyTo.text}</span>
                     </div>
                   )}
 
                   <div 
                     style={{
                       ...styles.bubble,
-                      background: isMe ? '#dcf8c6' : '#fff',
-                      border: isMe ? '1px solid #c5e1a5' : '1px solid #e0e0e0',
+                      background: isMe ? `${colors.accent.main}20` : colors.bg.card,
+                      border: isMe ? `1px solid ${colors.accent.main}40` : `1px solid ${colors.border.default}`,
                     }}
                     onClick={() => setSelectedMessage(isSelected ? null : m.id)}
                   >
-                    <div style={styles.senderName}>
+                    <div style={{ ...styles.senderName, color: colors.accent.main }}>
                       {isMe ? "أنت" : m.senderName}
                     </div>
-                    <div style={styles.text}>{m.text}</div>
+                    <div style={{ ...styles.text, color: colors.text.primary }}>{m.text}</div>
 
                     {m.fileUrl && m.type === 'image' && (
                       <img 
@@ -138,17 +140,17 @@ export default function Messages({
                         href={m.fileUrl} 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        style={styles.fileAttachment}
+                        style={{ ...styles.fileAttachment, color: colors.accent.main }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         📎 {m.fileName || m.text}
                       </a>
                     )}
 
-                    <div style={styles.time}>
+                    <div style={{ ...styles.time, color: colors.text.muted }}>
                       {formatTime(m.createdAt)}
                       {isMe && (
-                        <span style={{ marginRight: 5, color: m.seenBy?.length > 1 ? '#34b7f1' : '#aaa' }}>
+                        <span style={{ marginRight: 5, color: m.seenBy?.length > 1 ? colors.accent.green.main : colors.text.muted }}>
                           {m.seenBy?.length > 1 ? '✓✓' : '✓'}
                         </span>
                       )}
@@ -157,9 +159,9 @@ export default function Messages({
 
                   {isSelected && (
                     <div style={styles.actions}>
-                      <button onClick={() => handleReply(m)} style={styles.actionBtn}>↩️ رد</button>
+                      <button onClick={() => handleReply(m)} style={{ ...styles.actionBtn, color: colors.text.secondary }}>↩️ رد</button>
                       {isMe && (
-                        <button onClick={() => handleDelete(m.id)} style={styles.actionBtn}>🗑️ حذف</button>
+                        <button onClick={() => handleDelete(m.id)} style={{ ...styles.actionBtn, color: colors.accent.red.main }}>🗑️ حذف</button>
                       )}
                     </div>
                   )}
@@ -172,11 +174,11 @@ export default function Messages({
         {typingUsers.length > 0 && (
           <div style={styles.typingIndicator}>
             <div style={styles.typingDots}>
-              <span></span>
-              <span></span>
-              <span></span>
+              <span style={{ background: colors.text.muted }}></span>
+              <span style={{ background: colors.text.muted }}></span>
+              <span style={{ background: colors.text.muted }}></span>
             </div>
-            <span style={styles.typingText}>
+            <span style={{ ...styles.typingText, color: colors.text.muted }}>
               {typingUsers.join(", ")} يكتب...
             </span>
           </div>
@@ -187,18 +189,18 @@ export default function Messages({
 
       {/* Reply Bar */}
       {replyTo && (
-        <div style={styles.replyBar}>
+        <div style={{ ...styles.replyBar, background: colors.bg.card, borderTop: `1px solid ${colors.border.default}` }}>
           <div style={styles.replyInfo}>
-            <span style={styles.replyLabel}>↩️ رد على:</span>
-            <span style={styles.replyContent}>{replyTo.text}</span>
+            <span style={{ ...styles.replyLabel, color: colors.accent.main }}>↩️ رد على:</span>
+            <span style={{ ...styles.replyContent, color: colors.text.muted }}>{replyTo.text}</span>
           </div>
-          <button onClick={() => setReplyTo(null)} style={styles.closeReply}>✖</button>
+          <button onClick={() => setReplyTo(null)} style={{ ...styles.closeReply, color: colors.text.muted }}>✖</button>
         </div>
       )}
 
       {/* Input */}
       {canSend ? (
-        <div style={styles.inputBox}>
+        <div style={{ ...styles.inputBox, background: colors.bg.card, borderTop: `1px solid ${colors.border.default}` }}>
           <input
             value={text}
             onChange={(e) => {
@@ -206,7 +208,12 @@ export default function Messages({
               handleTyping();
             }}
             onKeyDown={handleKeyDown}
-            style={styles.input}
+            style={{ 
+              ...styles.input, 
+              background: colors.bg.input,
+              border: `1px solid ${colors.border.default}`,
+              color: colors.text.primary,
+            }}
             placeholder={sending ? "جاري الإرسال..." : "اكتب رسالة..."}
             disabled={sending}
           />
@@ -214,6 +221,7 @@ export default function Messages({
             onClick={handleSend} 
             style={{
               ...styles.sendBtn,
+              background: colors.accent.main,
               opacity: sending || !text.trim() ? 0.6 : 1,
               cursor: sending || !text.trim() ? 'not-allowed' : 'pointer',
             }}
@@ -223,7 +231,7 @@ export default function Messages({
           </button>
         </div>
       ) : (
-        <div style={styles.readOnly}>🔒 لا تملك صلاحية الإرسال</div>
+        <div style={{ ...styles.readOnly, color: colors.text.muted, background: colors.bg.hover }}>🔒 لا تملك صلاحية الإرسال</div>
       )}
     </div>
   );
@@ -233,8 +241,7 @@ const styles = {
   container: { 
     display: "flex", 
     flexDirection: "column", 
-    height: "100%", 
-    background: "#f0f2f5",
+    height: "100%",
     overflow: "hidden",
   },
   chatBox: { 
@@ -253,8 +260,6 @@ const styles = {
     position: 'relative',
   },
   dateText: {
-    background: '#e1f3fb',
-    color: '#1a1a1a',
     padding: '5px 15px',
     borderRadius: '15px',
     fontSize: '12px',
@@ -276,17 +281,14 @@ const styles = {
   senderName: { 
     fontSize: 11, 
     fontWeight: '600', 
-    color: '#007bff', 
     marginBottom: 4 
   },
   text: { 
     fontSize: 15, 
-    color: "#333",
     lineHeight: 1.4,
   },
   time: { 
     fontSize: 10, 
-    color: '#888', 
     marginTop: 5, 
     textAlign: 'right', 
     display: "flex", 
@@ -302,7 +304,6 @@ const styles = {
   actionBtn: {
     background: 'none',
     border: 'none',
-    color: '#666',
     cursor: 'pointer',
     fontSize: 12,
     padding: '2px 8px',
@@ -310,21 +311,17 @@ const styles = {
     transition: 'all 0.2s',
   },
   replyPreview: {
-    background: '#f0f0f0',
     padding: '8px 12px',
     borderRadius: '12px 12px 0 0',
-    borderRight: '3px solid #007bff',
     marginBottom: 2,
   },
   replyName: {
     fontSize: 11,
     fontWeight: 'bold',
-    color: '#007bff',
     display: 'block',
   },
   replyText: {
     fontSize: 12,
-    color: '#666',
     display: 'block',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
@@ -334,8 +331,6 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     padding: '10px 15px',
-    background: '#fff',
-    borderTop: '1px solid #e0e0e0',
     gap: 10,
   },
   replyInfo: {
@@ -346,12 +341,10 @@ const styles = {
   },
   replyLabel: {
     fontSize: 12,
-    color: '#007bff',
     fontWeight: 'bold',
   },
   replyContent: {
     fontSize: 12,
-    color: '#666',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -359,7 +352,6 @@ const styles = {
   closeReply: {
     background: 'none',
     border: 'none',
-    color: '#999',
     cursor: 'pointer',
     fontSize: 16,
   },
@@ -376,14 +368,11 @@ const styles = {
   },
   typingText: {
     fontSize: 12,
-    color: '#888',
     fontStyle: 'italic',
   },
   inputBox: { 
     display: "flex", 
     padding: 15, 
-    background: "#fff", 
-    borderTop: "1px solid #e0e0e0", 
     gap: 10,
     flexShrink: 0,
   },
@@ -391,7 +380,6 @@ const styles = {
     flex: 1, 
     padding: 12, 
     borderRadius: 25, 
-    border: "1px solid #ddd", 
     outline: 'none',
     fontSize: 14,
   },
@@ -399,7 +387,6 @@ const styles = {
     padding: "10px 20px", 
     borderRadius: 25, 
     border: "none", 
-    background: "#e94560", 
     color: "#fff", 
     cursor: "pointer",
     fontWeight: 'bold',
@@ -409,8 +396,6 @@ const styles = {
   readOnly: { 
     padding: 15, 
     textAlign: "center", 
-    color: "#777", 
-    background: "#f4f4f4", 
     fontSize: 13, 
     borderTop: "1px solid #ddd",
     flexShrink: 0,
@@ -418,7 +403,6 @@ const styles = {
   center: { 
     textAlign: 'center', 
     padding: 40, 
-    color: '#999' 
   },
   imageAttachment: {
     maxWidth: '100%',
@@ -433,10 +417,8 @@ const styles = {
     alignItems: 'center',
     gap: '6px',
     padding: '8px 12px',
-    background: '#f0f0f0',
     borderRadius: '8px',
     marginTop: '8px',
-    color: '#007bff',
     textDecoration: 'none',
     fontSize: '13px',
     fontWeight: '500',

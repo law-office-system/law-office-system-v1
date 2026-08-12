@@ -6,6 +6,11 @@ import Layout from "./components/Layout";
 import SuperAdminLayout from "./layouts/SuperAdminLayout";
 import ErrorBoundary from "./components/ErrorBoundary";
 
+/* ═══════════════════════════════════════════════════════════════
+   THEME SYSTEM — Multi-Theme Support
+   ═══════════════════════════════════════════════════════════════ */
+import { ThemeProvider } from "./context/ThemeContext.jsx";
+
 /* ================= PAGES (Lazy Loaded) ================= */
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const AddCase = lazy(() => import("./pages/AddCase"));
@@ -41,6 +46,9 @@ const SharedRoomChat = lazy(() => import("./pages/SharedRoomChat"));
 const OfficeConnections = lazy(() => import("./pages/OfficeConnections"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
+
+/* 🆕 NEW: Office Settings Page */
+const OfficeSettings = lazy(() => import("./pages/OfficeSettings"));
 
 import './styles/chat-animations.css';
 import { AuthProvider } from "./context/AuthContext";
@@ -182,55 +190,61 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <BrowserRouter>
-          <Suspense fallback={<LoadingScreen />}>
-            <NotificationSync />
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/verify-email" element={<VerifyEmail />} />
-              <Route path="/super-login" element={<SuperAdminLogin />} />
-              <Route path="/home" element={<Home />} />
-              <Route path="/" element={<Layout />}>
-                <Route index element={<HomeRedirect />} />
-                <Route path="dashboard" element={<ProtectedRoute page="dashboard"><Dashboard /></ProtectedRoute>} />
-                <Route path="users" element={<ProtectedRoute page="users"><Users /></ProtectedRoute>} />
-                <Route path="clients" element={<ProtectedRoute page="users"><Clients /></ProtectedRoute>} />
-                <Route path="clients/add" element={<ProtectedRoute page="cases"><AddClient /></ProtectedRoute>} />
-                <Route path="clients/:id" element={<ClientProfile />} />
-                <Route path="room-members" element={<ProtectedRoute page="dashboard"><RoomMembersAdmin /></ProtectedRoute>} />
-                <Route path="cases" element={<ProtectedRoute page="cases"><Cases /></ProtectedRoute>} />
-                <Route path="add-case" element={<ProtectedRoute page="cases"><AddCase /></ProtectedRoute>} />
-                <Route path="edit/:id" element={<ProtectedRoute page="cases"><EditCase /></ProtectedRoute>} />
-                <Route path="case/:id" element={<ProtectedRoute page="cases"><CaseDetails /></ProtectedRoute>} />
-                <Route path="active-cases" element={<ProtectedRoute page="cases"><ActiveCases /></ProtectedRoute>} />
-                <Route path="archive" element={<ProtectedRoute page="cases"><Archive /></ProtectedRoute>} />
-                <Route path="judgments" element={<ProtectedRoute page="cases"><Judgments /></ProtectedRoute>} />
-                <Route path="admin-tasks" element={<ProtectedRoute page="cases"><AdminTasks /></ProtectedRoute>} />
-                <Route path="add-session/:id" element={<ProtectedRoute page="cases"><AddSession /></ProtectedRoute>} />
-                <Route path="add-stage/:id" element={<ProtectedRoute page="cases"><AddStage /></ProtectedRoute>} />
-                <Route path="finance" element={<ProtectedRoute page="finance"><Finance /></ProtectedRoute>} />
-                <Route path="case-finance/:id" element={<ProtectedRoute page="finance"><CaseFinance /></ProtectedRoute>} />
-                <Route path="office" element={<ProtectedRoute page="dashboard"><OfficeInfo /></ProtectedRoute>} />
-                <Route path="office/rooms" element={<ProtectedRoute page="officeRooms"><OfficeRoomsManagement /></ProtectedRoute>} />
-                <Route path="profile" element={<ProtectedRoute page="profile"><Profile /></ProtectedRoute>} />
-                <Route path="chat" element={<ProtectedRoute page="chat"><Chat /></ProtectedRoute>} />
-                <Route path="rooms/:roomId" element={<ProtectedRoute page="chat"><Chat /></ProtectedRoute>} />
-                <Route path="rooms/:roomId/admin" element={<ProtectedRoute page="chat"><RoomMembersAdmin /></ProtectedRoute>} />
-                <Route path="shared-rooms" element={<ProtectedRoute page="chat"><SharedRooms /></ProtectedRoute>} />
-                <Route path="shared-rooms/:id" element={<ProtectedRoute page="chat"><SharedRoomChat /></ProtectedRoute>} />
-                <Route path="office/connections" element={<ProtectedRoute page="dashboard"><OfficeConnections /></ProtectedRoute>} />
-                <Route path="notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
-              </Route>
-              <Route path="/super-admin" element={<ProtectedRoute superOnly={true}><SuperAdminLayout /></ProtectedRoute>}>
-                <Route index element={<SuperAdminDashboard />} />
-                <Route path="offices" element={<OfficesManagement />} />
-              </Route>
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
+        <ThemeProvider>          {/* ← 🆕 NEW: ThemeProvider wraps everything */}
+          <BrowserRouter>
+            <Suspense fallback={<LoadingScreen />}>
+              <NotificationSync />
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/verify-email" element={<VerifyEmail />} />
+                <Route path="/super-login" element={<SuperAdminLogin />} />
+                <Route path="/home" element={<Home />} />
+                <Route path="/" element={<Layout />}>
+                  <Route index element={<HomeRedirect />} />
+                  <Route path="dashboard" element={<ProtectedRoute page="dashboard"><Dashboard /></ProtectedRoute>} />
+                  <Route path="users" element={<ProtectedRoute page="users"><Users /></ProtectedRoute>} />
+                  <Route path="clients" element={<ProtectedRoute page="users"><Clients /></ProtectedRoute>} />
+                  <Route path="clients/add" element={<ProtectedRoute page="cases"><AddClient /></ProtectedRoute>} />
+                  <Route path="clients/:id" element={<ClientProfile />} />
+                  <Route path="room-members" element={<ProtectedRoute page="dashboard"><RoomMembersAdmin /></ProtectedRoute>} />
+                  <Route path="cases" element={<ProtectedRoute page="cases"><Cases /></ProtectedRoute>} />
+                  <Route path="add-case" element={<ProtectedRoute page="cases"><AddCase /></ProtectedRoute>} />
+                  <Route path="edit/:id" element={<ProtectedRoute page="cases"><EditCase /></ProtectedRoute>} />
+                  <Route path="case/:id" element={<ProtectedRoute page="cases"><CaseDetails /></ProtectedRoute>} />
+                  <Route path="active-cases" element={<ProtectedRoute page="cases"><ActiveCases /></ProtectedRoute>} />
+                  <Route path="archive" element={<ProtectedRoute page="cases"><Archive /></ProtectedRoute>} />
+                  <Route path="judgments" element={<ProtectedRoute page="cases"><Judgments /></ProtectedRoute>} />
+                  <Route path="admin-tasks" element={<ProtectedRoute page="cases"><AdminTasks /></ProtectedRoute>} />
+                  <Route path="add-session/:id" element={<ProtectedRoute page="cases"><AddSession /></ProtectedRoute>} />
+                  <Route path="add-stage/:id" element={<ProtectedRoute page="cases"><AddStage /></ProtectedRoute>} />
+                  <Route path="finance" element={<ProtectedRoute page="finance"><Finance /></ProtectedRoute>} />
+                  <Route path="case-finance/:id" element={<ProtectedRoute page="finance"><CaseFinance /></ProtectedRoute>} />
+                  <Route path="office" element={<ProtectedRoute page="dashboard"><OfficeInfo /></ProtectedRoute>} />
+                  <Route path="office/rooms" element={<ProtectedRoute page="officeRooms"><OfficeRoomsManagement /></ProtectedRoute>} />
+
+                  {/* 🆕 NEW: Office Settings Route */}
+                  <Route path="office/settings" element={<ProtectedRoute page="dashboard"><OfficeSettings /></ProtectedRoute>} />
+
+                  <Route path="profile" element={<ProtectedRoute page="profile"><Profile /></ProtectedRoute>} />
+                  <Route path="chat" element={<ProtectedRoute page="chat"><Chat /></ProtectedRoute>} />
+                  <Route path="rooms/:roomId" element={<ProtectedRoute page="chat"><Chat /></ProtectedRoute>} />
+                  <Route path="rooms/:roomId/admin" element={<ProtectedRoute page="chat"><RoomMembersAdmin /></ProtectedRoute>} />
+                  <Route path="shared-rooms" element={<ProtectedRoute page="chat"><SharedRooms /></ProtectedRoute>} />
+                  <Route path="shared-rooms/:id" element={<ProtectedRoute page="chat"><SharedRoomChat /></ProtectedRoute>} />
+                  <Route path="office/connections" element={<ProtectedRoute page="dashboard"><OfficeConnections /></ProtectedRoute>} />
+                  <Route path="notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+                </Route>
+                <Route path="/super-admin" element={<ProtectedRoute superOnly={true}><SuperAdminLayout /></ProtectedRoute>}>
+                  <Route index element={<SuperAdminDashboard />} />
+                  <Route path="offices" element={<OfficesManagement />} />
+                </Route>
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </ThemeProvider>       {/* ← 🆕 NEW: ThemeProvider closes here */}
       </AuthProvider>
     </ErrorBoundary>
   );

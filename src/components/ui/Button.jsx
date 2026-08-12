@@ -1,5 +1,5 @@
 import React from 'react';
-import { button, createButton, transitions } from '../../styles/design-system';
+import { useTheme } from '../../context/ThemeContext.jsx';
 
 export default function Button({
   children,
@@ -13,6 +13,9 @@ export default function Button({
   icon: Icon = null,
   ...props
 }) {
+  const { theme } = useTheme();
+  const { button } = theme;
+
   const sizes = {
     sm: { padding: '8px 12px', fontSize: '12px' },
     md: { padding: '10px 16px', fontSize: '14px' },
@@ -27,8 +30,9 @@ export default function Button({
     ghost: button.ghost,
   };
 
-  const baseColor = color || variants[variant];
-  const baseStyle = color ? createButton(color) : { ...button.base, ...variants[variant] };
+  const baseStyle = color
+    ? { ...button.base, background: color, color: '#fff', boxShadow: theme.shadows.glow(color) }
+    : variants[variant];
 
   return (
     <button

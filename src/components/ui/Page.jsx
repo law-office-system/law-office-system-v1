@@ -1,18 +1,13 @@
+import React from 'react';
+import { useTheme } from '../../context/ThemeContext.jsx';
+
 export default function Page({ children }) {
+  const { theme } = useTheme();
+  const { page } = theme;
+
   return (
-    <div style={styles.page}>
+    <div style={page}>
       {children}
     </div>
   );
 }
-
-const styles = {
-  page: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "15px",
-
-    // مهم جدًا للتوحيد مع Layout
-    padding: "0",
-  },
-};

@@ -9,6 +9,7 @@ import {
   updateDoc,
   writeBatch,
   getDocs,
+  getDoc,
 } from "firebase/firestore";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebaseDb";
@@ -22,6 +23,38 @@ export default function useNotifications() {
 
   const currentUserId = user?.uid;
   const officeId = userData?.officeId;
+
+  // 🆕 NEW: Notification settings from office doc
+  const [notifSettings, setNotifSettings] = useState({
+    sessionReminder: true,
+    taskAssigned: true,
+    caseStatusChange: true,
+    newMessage: true,
+    reminderHours: 24,
+  });
+
+  // 🆕 NEW: Load notification settings from Firestore
+  useEffect(() => {
+    if (!officeId) return;
+    let cancelled = false;
+
+    const loadSettings = async () => {
+      try {
+        const snap = await getDoc(doc(db, "offices", officeId));
+        if (!cancelled && snap.exists()) {
+          const data = snap.data();
+          if (data.notifications) {
+            setNotifSettings(prev => ({ ...prev, ...data.notifications }));
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to load notification settings:", e.message);
+      }
+    };
+
+    loadSettings();
+    return () => { cancelled = true; };
+  }, [officeId]);
 
   // ✅ جلب الإشعارات من Firestore
   useEffect(() => {
@@ -49,7 +82,7 @@ export default function useNotifications() {
     return () => unsub();
   }, [officeId]);
 
-  // ✅ توليد الإشعارات في الوقت الفعلي من القضايا/الأعمال/الأحكام
+  // ✅ توليد الإشعارات في الوقت الفعلي — مع مراعاة الإعدادات
   const refreshNotifications = useCallback(async () => {
     if (!officeId) return;
 
@@ -88,8 +121,13 @@ export default function useNotifications() {
         ...d.data(),
       }));
 
-      // 4. توليد الإشعارات
-      const generatedNotifications = generateNotifications(cases, adminTasks, judgments);
+      // 🆕 NEW: Pass notification settings to generator
+      const generatedNotifications = generateNotifications(
+        cases,
+        adminTasks,
+        judgments,
+        notifSettings  // ← جديد
+      );
 
       // 5. مزامنة مع Firestore
       const { syncNotifications } = await import("../utils/syncNotifications");
@@ -102,7 +140,7 @@ export default function useNotifications() {
     } finally {
       setRefreshing(false);
     }
-  }, [officeId]);
+  }, [officeId, notifSettings]);
 
   // ✅ isReadBy: كل مستخدم لحاله
   const unreadCount = notifications.filter((n) => {
@@ -162,5 +200,6 @@ export default function useNotifications() {
     markAsRead,
     markAllAsRead,
     refreshNotifications,
+    notifSettings,  // 🆕 NEW: expose settings
   };
 }
