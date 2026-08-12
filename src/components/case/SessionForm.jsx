@@ -3,10 +3,39 @@ import {
   Calendar, Clock, MapPin, FileText, Landmark, AlertCircle, CheckCircle2,
   Gavel, Scale, ArrowRight, Sparkles, ChevronDown, RotateCcw, Send,
   UserCheck, FileCheck, Briefcase, Plus, Trash2, Upload, Building2,
-  Hash, StickyNote, ChevronRight
+  Hash, StickyNote, ChevronRight, Layers
 } from 'lucide-react';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { Modal } from '../ui';
 import { formSection, colors, spacing, radius, shadows, transitions } from '../../styles/design-system';
+import { db } from '../../firebaseDb';
+
+// ✅ خريطة ترجمة درجات التقاضي
+const LEVEL_TYPE_MAP = {
+  first_instance: "أول درجة",
+  partial: "جزئية",
+  appeal: "استئناف",
+  cassation: "نقض",
+  execution: "تنفيذ",
+  new: "جديدة",
+  first: "أولى",
+  second: "ثانية",
+  third: "ثالثة",
+  supreme: "عليا",
+  administrative_court: "مجلس الدولة",
+  disciplinary: "تأديبي",
+  constitutional_court: "الدستورية العليا",
+  military_appeal: "استئناف عسكري",
+  military_cassation: "نقض عسكري",
+  urgent: "عاجلة",
+  summary: "موجزة",
+  plenary: "الأحكام الكلية",
+};
+
+const translateLevelType = (type) => {
+  if (!type) return "غير محدد";
+  return LEVEL_TYPE_MAP[String(type).toLowerCase().trim()] || type;
+};
 
 // ─── Decision Types & Auto-Stage Mapping ─────────────────────────
 const DECISION_TYPES = [
@@ -91,7 +120,32 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
     appealDeadline: '',
     hasAdminTasks: false,
     adminTasks: [],
+    litigationLevelId: '',  // ✅ درجة التقاضي
   });
+
+  // ✅ جلب درجات التقاضي للقضية
+  const [levels, setLevels] = useState([]);
+  const [levelsLoading, setLevelsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchLevels = async () => {
+      if (!caseId) return;
+      try {
+        const q = query(
+          collection(db, "litigation_levels"),
+          where("caseId", "==", caseId)
+        );
+        const snap = await getDocs(q);
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setLevels(data);
+      } catch (err) {
+        console.error("Error fetching levels:", err);
+      } finally {
+        setLevelsLoading(false);
+      }
+    };
+    fetchLevels();
+  }, [caseId]);
 
   // ─── Init ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -101,9 +155,9 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
         title: session.title || '',
         date: session.date || session.nextSessionDate || '',
         time: session.time || '',
-        location: session.location || caseData.court || '',
-        court: session.court || caseData.court || '',
-        department: session.department || caseData.department || '',
+        location: session.location || '',
+        court: session.court || '',
+        department: session.department || '',
         roll: session.roll || '',
         description: session.description || '',
         notes: session.notes || '',
@@ -114,6 +168,7 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
         judgmentSummary: session.judgmentSummary || '',
         judgmentAppealable: session.judgmentAppealable !== false,
         appealDeadline: session.appealDeadline || '',
+        litigationLevelId: session.litigationLevelId || '',  // ✅
       }));
       if (session.decisionType === 'judgment') {
         setExpandedSections(prev => ({ ...prev, judgment: true }));
@@ -123,13 +178,27 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
       setFormData(prev => ({
         ...prev,
         title: `الجلسة ${sessionCount}`,
-        location: caseData.court || '',
-        court: caseData.court || '',
-        department: caseData.department || '',
-        nextSessionLocation: caseData.court || '',
+        location: '',
+        court: '',
+        department: '',
+        nextSessionLocation: '',
       }));
     }
   }, [session, caseData]);
+
+  // ─── Auto-fill court/department/location from selected level ───
+  useEffect(() => {
+    if (!formData.litigationLevelId || levels.length === 0) return;
+    const selectedLevel = levels.find(l => l.id === formData.litigationLevelId);
+    if (selectedLevel) {
+      setFormData(prev => ({
+        ...prev,
+        court: selectedLevel.court || prev.court || '',
+        department: selectedLevel.department || selectedLevel.circuit || prev.department || '',
+        location: selectedLevel.court || prev.location || '',
+      }));
+    }
+  }, [formData.litigationLevelId, levels]);
 
   // ─── Auto-compute when decision changes ──────────────────────────
   useEffect(() => {
@@ -201,6 +270,7 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
   const validate = useCallback(() => {
     const newErrors = {};
     if (!formData.date) newErrors.date = 'تاريخ الجلسة مطلوب';
+    if (!formData.litigationLevelId) newErrors.litigationLevelId = 'درجة التقاضي مطلوبة';
     if (formData.decisionType === 'judgment') {
       if (!formData.judgmentType) newErrors.judgmentType = 'نوع الحكم مطلوب';
       if (!formData.judgmentSummary.trim()) newErrors.judgmentSummary = 'منطوق الحكم مطلوب';
@@ -250,6 +320,7 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
         suggestedStage: formData.suggestedStage || '',
         suggestedTask: formData.suggestedTask || '',
         stageLabel: STAGE_LABELS[formData.suggestedStage] || '',
+        litigationLevelId: formData.litigationLevelId,
         caseId,
         tenantId: caseData.tenantId || '',
         updatedAt: new Date().toISOString(),
@@ -303,6 +374,49 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
               style={{ ...formSection.input, background: 'rgba(15, 23, 42, 0.4)', color: colors.text.muted }}
               placeholder="يُولد تلقائياً"
             />
+          </div>
+
+          {/* ✅ درجة التقاضي */}
+          <div style={formSection.fieldGroup}>
+            <label style={formSection.label}>
+              <Layers size={14} color={colors.text.muted} />
+              <span style={{ color: colors.accent.red.main }}>*</span> درجة التقاضي
+            </label>
+            <select
+              name="litigationLevelId"
+              value={formData.litigationLevelId}
+              onChange={handleChange}
+              style={{
+                ...formSection.input,
+                borderColor: errors.litigationLevelId ? colors.accent.red.main : colors.border.default,
+                cursor: levelsLoading ? 'not-allowed' : 'pointer',
+                appearance: 'none',
+                WebkitAppearance: 'none',
+              }}
+              disabled={levelsLoading}
+            >
+              <option value="">
+                {levelsLoading ? 'جاري تحميل الدرجات...' : 'اختر درجة التقاضي'}
+              </option>
+              {levels.map((level) => (
+                <option key={level.id} value={level.id}>
+                  {translateLevelType(level.levelType)}
+                  {level.court ? ` — ${level.court}` : ''}
+                  {level.caseNumber ? ` (رقم ${level.caseNumber})` : ''}
+                </option>
+              ))}
+            </select>
+            {errors.litigationLevelId && (
+              <div style={formSection.error}>
+                <AlertCircle size={14} color={colors.accent.red.main} />
+                {errors.litigationLevelId}
+              </div>
+            )}
+            {levels.length === 0 && !levelsLoading && (
+              <p style={{ color: colors.accent.amber.light, fontSize: '13px', marginTop: 4 }}>
+                ⚠️ لا توجد درجات تقاضي مسجلة. يمكنك إضافة درجات من صفحة تفاصيل القضية.
+              </p>
+            )}
           </div>
 
           <div style={formSection.twoCols}>

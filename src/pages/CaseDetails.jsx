@@ -31,6 +31,94 @@ import { db } from "../firebaseDb";
 import { Modal, Section } from "../components/ui";
 import { colors, spacing, radius, shadows, transitions, card, page, infoBox, iconBox } from "../styles/design-system";
 
+// ============================================================
+// ✅ خرائط الترجمة — من إنجليزي لعربي
+// ============================================================
+
+// أنواع القضايا
+const CASE_TYPE_MAP = {
+  criminal: "جنائي",
+  civil: "مدني",
+  commercial: "تجاري",
+  administrative: "إداري",
+  labor: "عمالي",
+  personal: "أحوال شخصية",
+  military: "عسكري",
+  constitutional: "دستوري",
+  tax: "ضريبي",
+  insurance: "تأمينات",
+  family: "أسري",
+  real_estate: "عقاري",
+  intellectual: "ملكية فكرية",
+  maritime: "بحري",
+  banking: "مصرفي",
+  investment: "استثماري",
+  competition: "منافسة",
+  environment: "بيئي",
+  consumer: "حماية المستهلك",
+  cyber: "إلكتروني",
+  medical: "طبيب",
+  engineering: "هندسي",
+  other: "أخرى",
+};
+
+// درجات التقاضي
+const LEVEL_TYPE_MAP = {
+  first_instance: "أول درجة",
+  partial: "جزئية",
+  appeal: "استئناف",
+  cassation: "نقض",
+  execution: "تنفيذ",
+  new: "جديدة",
+  first: "أولى",
+  second: "ثانية",
+  third: "ثالثة",
+  supreme: "عليا",
+  administrative_court: "مجلس الدولة",
+  disciplinary: "تأديبي",
+  constitutional_court: "الدستورية العليا",
+  military_appeal: "استئناف عسكري",
+  military_cassation: "نقض عسكري",
+  urgent: "عاجلة",
+  summary: "موجزة",
+  plenary: "الأحكام الكلية",
+};
+
+// حالات سير العمل (workflow)
+const WORKFLOW_STATUS_MAP = {
+  new: "جديدة",
+  active: "نشطة",
+  pending: "معلقة",
+  adjourned: "مؤجلة",
+  judgment: "حُكمت",
+  appealed: "مستأنفة",
+  cassation: "منقوضة",
+  execution: "تنفيذ",
+  closed: "مغلقة",
+  archived: "مؤرشفة",
+  settled: "مسواة",
+  withdrawn: "مسحوبة",
+  rejected: "مرفوضة",
+  reopened: "معاد فتحها",
+};
+
+// دوال الترجمة المساعدة
+const translateCaseType = (type) => {
+  if (!type) return "غير محدد";
+  const normalized = String(type).toLowerCase().trim();
+  return CASE_TYPE_MAP[normalized] || type;
+};
+const translateLevelType = (type) => {
+  if (!type) return "غير محدد";
+  const normalized = String(type).toLowerCase().trim();
+  return LEVEL_TYPE_MAP[normalized] || type;
+};
+const translateWorkflowStatus = (status) => {
+  if (!status) return "غير محدد";
+  const normalized = String(status).toLowerCase().trim();
+  return WORKFLOW_STATUS_MAP[normalized] || status;
+};
+
 const DECISION_STAGE_MAP = {
   adjourned:       { stageLabel: 'مؤجلة',        color: colors.accent.amber.main },
   adjourned_notice:{ stageLabel: 'مؤجلة لإعلان', color: colors.accent.amber.dark },
@@ -235,6 +323,17 @@ export default function CaseDetails() {
   const [activeTab, setActiveTab] = useState("sessions");
 
   const isAdmin = useMemo(() => isAdminRole(userData?.role), [userData?.role]);
+  // ✅ DEBUG: طباعة القيم للتأكد
+  useEffect(() => {
+    console.log("🔍 CaseDetails Debug:", {
+      isAdmin,
+      activeLevel: activeLevel ? { id: activeLevel.id, levelType: activeLevel.levelType } : null,
+      levelsLoading,
+      userRole: userData?.role,
+      levelsCount: levels.length,
+    });
+  }, [isAdmin, activeLevel, levelsLoading, userData?.role, levels.length]);
+
   const canViewFinance = useMemo(() => 
     ["admin", "staff", "superadmin"].includes(userData?.role), 
     [userData?.role]
@@ -862,9 +961,9 @@ export default function CaseDetails() {
     );
   }
 
-  const selectedLevelLabel = selectedLevel ? getLitigationLevelLabel(selectedLevel.levelType) : "غير محدد";
+  const selectedLevelLabel = selectedLevel ? translateLevelType(selectedLevel.levelType) : "غير محدد";
   const selectedLevelColor = selectedLevel ? getLitigationLevelColor(selectedLevel.levelType) : colors.accent.blue.main;
-  const selectedStatusLabel = selectedLevel ? getWorkflowStatusLabel(selectedLevel.status) : "غير محدد";
+  const selectedStatusLabel = selectedLevel ? translateWorkflowStatus(selectedLevel.status) : "غير محدد";
   const selectedStatusColor = selectedLevel ? getWorkflowStatusColor(selectedLevel.status) : colors.text.disabled;
 
   const tabs = [
@@ -952,7 +1051,7 @@ export default function CaseDetails() {
                 padding: "4px 12px", borderRadius: radius.full,
                 fontSize: "clamp(11px, 3vw, 13px)", fontWeight: 600,
               }}>
-                {caseData.caseType || "دعوى"}
+                {translateCaseType(caseData.caseType)}
               </span>
             </div>
             <div style={{
@@ -988,75 +1087,136 @@ export default function CaseDetails() {
         </div>
       </div>
 
-      {/* ========== CLIENTS ========== */}
-      <Section title="الموكلون" icon={Users} iconColor={colors.accent.green.light} defaultOpen={false}>
-        {safeClients.length === 0 ? (
-          <p style={{ color: colors.text.secondary, textAlign: "center", padding: "20px 0" }}>لا يوجد موكلون مرتبطون.</p>
-        ) : (
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, clamp(250px, 70vw, 280px)), 1fr))",
-            gap: 10,
-          }}>
-            {clients.map(c => (
-              <div key={c.id} style={{
-                padding: "clamp(10px, 3vw, 16px)", background: colors.bg.hover,
-                borderRadius: radius.md, border: `1px solid ${colors.border.default}`,
-                display: "flex", flexDirection: "column", gap: 8,
-              }}>
-                <div style={{ fontWeight: 700, color: colors.text.primary, fontSize: "clamp(13px, 4vw, 15px)" }}>{c.fullName}</div>
-                <div style={{ color: colors.text.secondary, fontSize: "clamp(11px, 3vw, 13px)" }}>الرقم القومي: {c.nationalId || "غير مسجل"}</div>
-                <span style={{
-                  background: colors.accent.cyan.bg, color: colors.accent.cyan.light,
-                  padding: "4px 12px", borderRadius: radius.md,
-                  fontSize: "clamp(10px, 3vw, 12px)", fontWeight: 600, alignSelf: "flex-start",
-                }}>الصفة: {c.currentCaseRole || "غير محددة"}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
-
-      {/* ========== OPPONENTS ========== */}
-      <Section title="أطراف الخصوم" icon={Shield} iconColor={colors.accent.red.light} defaultOpen={false}>
-        {safeOpponents.length === 0 ? (
-          <p style={{ color: colors.text.secondary, textAlign: "center", padding: "20px 0" }}>لا يوجد خصوم مسجلين.</p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {safeOpponents.map((o, i) => (
-              <div key={o.id || i} style={{
-                padding: "clamp(10px, 3vw, 16px)", background: colors.bg.hover,
-                borderRadius: radius.md, border: `1px solid ${colors.accent.red.main}20`,
-              }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <div style={{ fontWeight: 700, color: colors.text.primary, fontSize: "clamp(13px, 4vw, 15px)" }}>
-                    {i + 1}. {o.name}
+      {/* ========== PARTIES (موكلين + خصوم) ========== */}
+      <Section title="أطراف الدعوى" icon={Users} iconColor={colors.accent.blue.light} defaultOpen={true}>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, clamp(280px, 45vw, 400px)), 1fr))",
+          gap: 16,
+        }}>
+          {/* الموكلون */}
+          <div>
+            <h4 style={{
+              margin: "0 0 10px 0",
+              color: colors.accent.green.main,
+              fontSize: "clamp(12px, 3.5vw, 14px)",
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}>
+              <Users size={16} />
+              الموكلون ({safeClients.length})
+            </h4>
+            {safeClients.length === 0 ? (
+              <p style={{ color: colors.text.muted, fontSize: "clamp(11px, 3vw, 13px)", margin: 0 }}>لا يوجد موكلون مسجلون</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {clients.map(c => (
+                  <div key={c.id} style={{
+                    padding: "clamp(10px, 3vw, 12px)",
+                    background: colors.bg.hover,
+                    borderRadius: radius.md,
+                    border: `1px solid ${colors.border.default}`,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: "50%",
+                      background: colors.accent.green.main + "20",
+                      color: colors.accent.green.main,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 16, flexShrink: 0,
+                    }}>
+                      {c.fullName?.charAt(0) || "👤"}
+                    </div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: "clamp(12px, 3.5vw, 14px)", color: colors.text.primary, wordBreak: "break-word" }}>
+                        {c.fullName || "موكل"}
+                      </div>
+                      {c.phone && (
+                        <div style={{ fontSize: "clamp(10px, 3vw, 12px)", color: colors.text.muted, marginTop: 2 }}>
+                          📞 {c.phone}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <span style={{
-                    background: colors.accent.red.bg, color: colors.accent.red.light,
-                    padding: "3px 10px", borderRadius: radius.sm,
-                    fontSize: "clamp(10px, 3vw, 12px)", fontWeight: 600, alignSelf: "flex-start",
-                  }}>الصفة: {o.caseRole || "مدعى عليه"}</span>
-                  {o.address && (
-                    <p style={{ margin: "4px 0 0 0", fontSize: "clamp(11px, 3vw, 13px)", color: colors.text.secondary }}>
-                      <MapPin size={13} style={{ display: "inline", marginLeft: 4 }} />{o.address}
-                    </p>
-                  )}
-                </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
+
+          {/* الخصوم */}
+          <div>
+            <h4 style={{
+              margin: "0 0 10px 0",
+              color: colors.accent.red.main,
+              fontSize: "clamp(12px, 3.5vw, 14px)",
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}>
+              <Shield size={16} />
+              أطراف الخصوم ({safeOpponents.length})
+            </h4>
+            {safeOpponents.length === 0 ? (
+              <p style={{ color: colors.text.muted, fontSize: "clamp(11px, 3vw, 13px)", margin: 0 }}>لا يوجد خصوم مسجلون</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {safeOpponents.map((opp, idx) => (
+                  <div key={idx} style={{
+                    padding: "clamp(10px, 3vw, 12px)",
+                    background: colors.bg.hover,
+                    borderRadius: radius.md,
+                    border: `1px solid ${colors.border.default}`,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: "50%",
+                      background: colors.accent.red.main + "20",
+                      color: colors.accent.red.main,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 16, flexShrink: 0,
+                    }}>
+                      {typeof opp === "object" ? (opp.name?.charAt(0) || "🛡️") : "🛡️"}
+                    </div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: "clamp(12px, 3.5vw, 14px)", color: colors.text.primary, wordBreak: "break-word" }}>
+                        {typeof opp === "object" ? opp.name || opp.fullName || "خصم" : opp}
+                      </div>
+                      {typeof opp === "object" && opp.phone && (
+                        <div style={{ fontSize: "clamp(10px, 3vw, 12px)", color: colors.text.muted, marginTop: 2 }}>
+                          📞 {opp.phone}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </Section>
 
       {/* ========== CASE SUBJECT ========== */}
-      <Section title="موضوع الدعوى" icon={FileText} iconColor={colors.accent.purple.light} defaultOpen={false}>
-        <p style={{
-          whiteSpace: "pre-wrap", lineHeight: 1.7,
-          color: colors.text.secondary, fontSize: "clamp(13px, 3.5vw, 14px)", margin: 0
+      <Section title="موضوع الدعوى" icon={FileText} iconColor={colors.accent.purple.light} defaultOpen={true}>
+        <div style={{
+          padding: "clamp(12px, 3vw, 16px)",
+          background: colors.bg.hover,
+          borderRadius: radius.md,
+          border: `1px solid ${colors.border.default}`,
+          color: colors.text.primary,
+          fontSize: "clamp(13px, 3.5vw, 14px)",
+          lineHeight: 1.7,
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
         }}>
-          {caseData.caseSubject || caseData.notes || "لم يتم تدوين موضوع أو ملخص لهذه الدعوى بعد."}
-        </p>
+          {caseData?.caseSubject || caseData?.notes || "لم يتم تحديد موضوع الدعوى"}
+        </div>
       </Section>
 
       <div style={{ height: 2, background: colors.border.default, margin: "24px 0", borderRadius: 1 }} />
@@ -1086,8 +1246,8 @@ export default function CaseDetails() {
           {levels.map(level => {
             const isSelected = selectedLevel?.id === level.id;
             const lvlColor = getLitigationLevelColor(level.levelType);
-            const lvlLabel = getLitigationLevelLabel(level.levelType);
-            const wfLabel = getWorkflowStatusLabel(level.status);
+            const lvlLabel = translateLevelType(level.levelType);
+            const wfLabel = translateWorkflowStatus(level.status);
             return (
               <button
                 key={level.id}
@@ -1139,7 +1299,7 @@ export default function CaseDetails() {
                   margin: 0, color: colors.text.primary,
                   fontSize: "clamp(15px, 4.5vw, 20px)", fontWeight: 700,
                 }}>
-                  {selectedLevelLabel} — القضية رقم {selectedLevel.caseNumber}
+                  {translateLevelType(selectedLevel?.levelType) || "غير محدد"} — القضية رقم {selectedLevel.caseNumber}
                 </h3>
                 <p style={{ margin: "6px 0 0 0", color: colors.text.secondary, fontSize: "clamp(12px, 3.5vw, 14px)" }}>
                   سنة {selectedLevel.caseYear} — {selectedLevel.court}
@@ -1153,7 +1313,7 @@ export default function CaseDetails() {
                   padding: "4px 14px", borderRadius: radius.full, fontWeight: 700,
                   fontSize: "clamp(11px, 3vw, 13px)", whiteSpace: "nowrap",
                 }}>
-                  {selectedStatusLabel}
+                  {translateWorkflowStatus(selectedLevel?.status) || "غير محدد"}
                 </span>
                 {selectedLevel.isActive && (
                   <span style={{
@@ -1293,7 +1453,7 @@ export default function CaseDetails() {
           margin: "0 0 16px 0", display: "flex", alignItems: "center", gap: 10,
         }}>
           <Briefcase size={20} color={colors.accent.amber.main} />
-          إجراءات {selectedLevelLabel}
+          إجراءات {translateLevelType(selectedLevel?.levelType) || "غير محدد"}
         </h2>
         <div style={{
           display: "grid",

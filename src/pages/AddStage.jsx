@@ -24,24 +24,24 @@ import { useAuth } from "../context/AuthContext";
 import { db } from "../firebaseDb";
 import { doc, getDoc } from "firebase/firestore";
 
-// Next possible levels mapping
-const NEXT_LEVELS_MAP = {
-  first_instance: [
-    { value: "appeal", label: "استئناف", desc: "الطعن على الحكم أمام محكمة الاستئناف", color: "#f59e0b" },
-    { value: "execution", label: "تنفيذ", desc: "بدء إجراءات التنفيذ", color: "#10b981" },
-  ],
-  appeal: [
-    { value: "cassation", label: "نقض", desc: "الطعن على الحكم أمام محكمة النقض", color: "#ef4444" },
-    { value: "execution", label: "تنفيذ", desc: "بدء إجراءات التنفيذ", color: "#10b981" },
-  ],
-  cassation: [
-    { value: "retrial", label: "التماس إعادة النظر", desc: "طلب إعادة النظر في الحكم", color: "#8b5cf6" },
-    { value: "execution", label: "تنفيذ", desc: "بدء إجراءات التنفيذ", color: "#10b981" },
-  ],
-  retrial: [
-    { value: "execution", label: "تنفيذ", desc: "بدء إجراءات التنفيذ", color: "#10b981" },
-  ],
-};
+// ✅ كل درجات التقاضي المتاحة — المستخدم يختار أي درجة غير موجودة
+const ALL_LITIGATION_LEVELS = [
+  { value: "first_instance", label: "أول درجة", desc: "الدرجة الأولى من التقاضي", color: "#3b82f6", order: 1 },
+  { value: "partial", label: "جزئية", desc: "محكمة جزئية", color: "#06b6d4", order: 2 },
+  { value: "appeal", label: "استئناف", desc: "الطعن على الحكم أمام محكمة الاستئناف", color: "#f59e0b", order: 3 },
+  { value: "cassation", label: "نقض", desc: "الطعن على الحكم أمام محكمة النقض", color: "#ef4444", order: 4 },
+  { value: "supreme", label: "عليا", desc: "المحكمة العليا", color: "#8b5cf6", order: 5 },
+  { value: "retrial", label: "التماس إعادة النظر", desc: "طلب إعادة النظر في الحكم", color: "#ec4899", order: 6 },
+  { value: "administrative_court", label: "مجلس الدولة", desc: "القضاء الإداري", color: "#14b8a6", order: 7 },
+  { value: "constitutional_court", label: "الدستورية العليا", desc: "المحكمة الدستورية العليا", color: "#f97316", order: 8 },
+  { value: "disciplinary", label: "تأديبي", desc: "القضاء التأديبي", color: "#6366f1", order: 9 },
+  { value: "military_appeal", label: "استئناف عسكري", desc: "الاستئناف أمام المحكمة العسكرية", color: "#84cc16", order: 10 },
+  { value: "military_cassation", label: "نقض عسكري", desc: "النقض أمام المحكمة العسكرية", color: "#a855f7", order: 11 },
+  { value: "execution", label: "تنفيذ", desc: "بدء إجراءات التنفيذ", color: "#10b981", order: 12 },
+  { value: "urgent", label: "عاجلة", desc: "دعوى عاجلة", color: "#dc2626", order: 13 },
+  { value: "summary", label: "موجزة", desc: "دعوى موجزة", color: "#0891b2", order: 14 },
+  { value: "plenary", label: "الأحكام الكلية", desc: "الدائرة الكلية", color: "#7c3aed", order: 15 },
+];
 
 export default function AddStage() {
   const { id } = useParams();
@@ -108,10 +108,10 @@ export default function AddStage() {
   const activeLevel = levels.find((l) => l.isActive);
   const completedLevels = levels.filter((l) => l.isCompleted);
 
-  // Get available next levels
+  // ✅ Get all available levels that don't already exist
   const getAvailableNextLevels = () => {
-    if (!activeLevel) return [];
-    return NEXT_LEVELS_MAP[activeLevel.levelType] || [];
+    const existingTypes = new Set(levels.map(l => l.levelType));
+    return ALL_LITIGATION_LEVELS.filter(level => !existingTypes.has(level.value));
   };
 
   // Handle create next level
@@ -584,7 +584,7 @@ export default function AddStage() {
             marginBottom: 16,
           }}>
             الدرجة الحالية: <strong style={{ color: "#f3f4f6" }}>{getLitigationLevelLabel(activeLevel.levelType)}</strong>
-            {" "}— يمكنك إنشاء إحدى الدرجات التالية:
+            {" "}— يمكنك إنشاء أي من الدرجات التالية غير المسجلة:
           </p>
 
           <div style={{
@@ -629,7 +629,7 @@ export default function AddStage() {
       )}
 
       {/* No more levels */}
-      {activeLevel && getAvailableNextLevels().length === 0 && (
+      {getAvailableNextLevels().length === 0 && (
         <div style={{
           background: "rgba(16, 185, 129, 0.08)",
           border: "1px solid rgba(16, 185, 129, 0.2)",
@@ -639,10 +639,10 @@ export default function AddStage() {
         }}>
           <CheckCircle2 size={32} color="#10b981" style={{ marginBottom: 8 }} />
           <p style={{ color: "#10b981", fontWeight: 700, margin: 0 }}>
-            تم استنفاد جميع درجات التقاضي الممكنة
+            تم تسجيل جميع درجات التقاضي الممكنة
           </p>
           <p style={{ color: "#9ca3af", fontSize: 13, margin: "8px 0 0 0" }}>
-            الدرجة الحالية: {getLitigationLevelLabel(activeLevel.levelType)}
+            لا يوجد درجات تقاضي إضافية متاحة
           </p>
         </div>
       )}

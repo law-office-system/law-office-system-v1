@@ -1,12 +1,24 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, onSnapshot, query, where, documentId, getDocs, doc, getDoc, limit, orderBy } from "firebase/firestore";
+import { collection, onSnapshot, query, where, orderBy, doc, getDoc, getDocs, limit, documentId } from "firebase/firestore";
 import { useLitigationLevels } from "../hooks/useLitigationLevels";
 import { CASE_STATUS } from "../constants/caseStatus";
 import { getLitigationLevelLabel } from "../constants/caseStatusLabels";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebaseDb";
 import { parseDate } from "../utils/date";
+
+// ============================================================
+// ✅ دوال مساعدة لتذكر إغلاق التنبيه
+// ============================================================
+const getDismissKey = () => {
+  const today = new Date();
+  return `dashboard_urgent_dismissed_${today.getFullYear()}_${today.getMonth()}_${today.getDate()}`;
+};
+
+const isDismissedToday = () => localStorage.getItem(getDismissKey()) === "true";
+
+const dismissToday = () => localStorage.setItem(getDismissKey(), "true");
 
 // ============================================================
 // 🏛️ ألوان عريقة — منصة القضاء الخشبية
@@ -64,17 +76,17 @@ function DashboardSkeleton() {
     <div style={{ ...styles.page, direction: "rtl" }}>
       <div style={{ ...styles.header, padding: "20px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "16px" }}>
-          <div style={{ 
-            width: "60px", height: "60px", borderRadius: "12px", 
-            background: "#3d2817", animation: "pulse 1.5s ease-in-out infinite" 
+          <div style={{
+            width: "60px", height: "60px", borderRadius: "12px",
+            background: "#3d2817", animation: "pulse 1.5s ease-in-out infinite"
           }} />
           <div>
-            <div style={{ 
+            <div style={{
               width: "200px", height: "24px", borderRadius: "4px",
               background: "#5a3a22", marginBottom: "8px",
               animation: "pulse 1.5s ease-in-out infinite"
             }} />
-            <div style={{ 
+            <div style={{
               width: "150px", height: "16px", borderRadius: "4px",
               background: "#4a3520", animation: "pulse 1.5s ease-in-out infinite",
               animationDelay: "0.1s"
@@ -83,7 +95,7 @@ function DashboardSkeleton() {
         </div>
         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
           {[...Array(5)].map((_, i) => (
-            <div key={i} style={{ 
+            <div key={i} style={{
               width: "100px", height: "50px", borderRadius: "10px",
               background: "rgba(255,255,255,0.05)",
               animation: "pulse 1.5s ease-in-out infinite",
@@ -94,14 +106,14 @@ function DashboardSkeleton() {
       </div>
 
       <div style={{ ...styles.controlsSection, marginBottom: "20px" }}>
-        <div style={{ 
+        <div style={{
           width: "100%", height: "50px", borderRadius: "12px",
           background: "#e8dfd3", marginBottom: "12px",
           animation: "pulse 1.5s ease-in-out infinite"
         }} />
         <div style={{ display: "flex", gap: "8px" }}>
           {[...Array(4)].map((_, i) => (
-            <div key={i} style={{ 
+            <div key={i} style={{
               width: "80px", height: "40px", borderRadius: "10px",
               background: "#e8dfd3", animation: "pulse 1.5s ease-in-out infinite",
               animationDelay: `${i * 0.1}s`
@@ -112,7 +124,7 @@ function DashboardSkeleton() {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "16px" }}>
         {[...Array(6)].map((_, i) => (
-          <div key={i} style={{ 
+          <div key={i} style={{
             background: THEME.cardBg, borderRadius: "14px", padding: "20px",
             height: "200px", animation: "pulse 1.5s ease-in-out infinite",
             animationDelay: `${i * 0.1}s`
@@ -168,6 +180,63 @@ export default function Dashboard() {
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
+  // ============================================================
+  // ✅ الدوال المساعدة — معرفة قبل الـ useEffects
+  // ============================================================
+
+  const isUrgent = useCallback((upcomingDate) => {
+    if (!upcomingDate) return false;
+    return upcomingDate >= today && upcomingDate <= tomorrow;
+  }, [today, tomorrow]);
+
+  const getUpcomingSessionDate = useCallback((sessions) => {
+    if (!Array.isArray(sessions) || sessions.length === 0) return null;
+    const dates = sessions.map(s => parseDate(s.nextSessionDate || s.date)).filter(d => d && d >= today);
+    return dates.length > 0 ? dates.sort((a, b) => a - b)[0] : null;
+  }, [today]);
+
+  const getPreviousSessionDate = useCallback((sessions) => {
+    if (!Array.isArray(sessions) || sessions.length === 0) return null;
+    const dates = sessions.map(s => parseDate(s.nextSessionDate || s.date)).filter(d => d && d < today);
+    return dates.length > 0 ? dates.sort((a, b) => b - a)[0] : null;
+  }, [today]);
+
+  const normalizeStatus = useCallback((status) => {
+    const s = (status || "").toString().trim().toLowerCase();
+    if (["جارية", "نشطة", "active"].includes(s)) return CASE_STATUS.ACTIVE;
+    if (["تنفيذ", "execution"].includes(s)) return CASE_STATUS.EXECUTION;
+    if (["منتهية", "closed"].includes(s)) return CASE_STATUS.CLOSED;
+    return CASE_STATUS.ACTIVE;
+  }, []);
+
+  const getStatusBadge = useCallback((status) => {
+    const s = normalizeStatus(status);
+    const map = {
+      ACTIVE: { label: "نشطة", bg: "#e8f5e6", color: THEME.active, border: "#2d5a2730" },
+      EXECUTION: { label: "تنفيذ", bg: "#fdf6e3", color: THEME.execution, border: "#8b691430" },
+      CLOSED: { label: "منتهية", bg: "#f0e6e6", color: THEME.closed, border: "#6b534430" },
+    };
+    const style = map[s] || map.ACTIVE;
+    return (
+      <span style={{
+        padding: "4px 12px",
+        borderRadius: "999px",
+        fontSize: "12px",
+        fontWeight: "700",
+        background: style.bg,
+        color: style.color,
+        border: `1px solid ${style.border}`,
+        fontFamily: "'Segoe UI', Tahoma, sans-serif",
+      }}>
+        {style.label}
+      </span>
+    );
+  }, [normalizeStatus]);
+
+  // ============================================================
+  // ✅ useEffects
+  // ============================================================
+
   // Responsive check
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -191,11 +260,6 @@ export default function Dashboard() {
     fetchOfficeName();
   }, [userData?.officeId]);
 
-  const isUrgent = useCallback((upcomingDate) => {
-    if (!upcomingDate) return false;
-    return upcomingDate >= today && upcomingDate <= tomorrow;
-  }, [today, tomorrow]);
-
   // ✅ Debounced search
   useEffect(() => {
     if (searchTimeoutRef.current) {
@@ -212,10 +276,8 @@ export default function Dashboard() {
 
   // ✅ Optimized cases loading with limit
   useEffect(() => {
-    // ✅ لو الـ auth لسه بيتحمل، استنى
     if (authLoading || userDataLoading) return;
 
-    // ✅ لو مفيش userData أو officeId، حط loading = false وارجع
     if (!userData?.officeId) {
       setLoading(false);
       setCases([]);
@@ -226,7 +288,7 @@ export default function Dashboard() {
     setError(null);
 
     const q = query(
-      collection(db, "cases"), 
+      collection(db, "cases"),
       where("officeId", "==", userData.officeId),
       orderBy("createdAt", "desc"),
       limit(CASES_LIMIT)
@@ -258,13 +320,10 @@ export default function Dashboard() {
       let hasChanges = false;
 
       for (const c of cases) {
-        // Skip if case already has all denormalized fields
         if (c.caseNumber && c.court) continue;
-        // Skip if already in cache
         if (newCache[c.id]) continue;
 
         try {
-          // Try activeLevelId first
           if (c.activeLevelId) {
             const levelDoc = await getDoc(doc(db, "litigation_levels", c.activeLevelId));
             if (levelDoc.exists()) {
@@ -274,7 +333,6 @@ export default function Dashboard() {
             }
           }
 
-          // Try to find any level for this case
           const levelsQuery = query(
             collection(db, "litigation_levels"),
             where("caseId", "==", c.id),
@@ -323,8 +381,8 @@ export default function Dashboard() {
         try {
           const q = query(collection(db, "clientProfiles"), where(documentId(), "in", chunk));
           const snap = await getDocs(q);
-          snap.forEach((doc) => { 
-            newCache[doc.id] = doc.data().fullName || "موكل"; 
+          snap.forEach((doc) => {
+            newCache[doc.id] = doc.data().fullName || "موكل";
           });
         } catch (err) {
           console.error("Error fetching clients:", err);
@@ -337,15 +395,15 @@ export default function Dashboard() {
     fetchClientNames();
   }, [cases]);
 
-  // ✅ Toast for urgent cases
+  // ✅ Toast for urgent cases — مع تذكر الإغلاق
   useEffect(() => {
+    if (isDismissedToday()) return;
+
     const hasUrgentCases = cases.some(c => isUrgent(getUpcomingSessionDate(c.sessions)));
     if (hasUrgentCases) {
       setShowToast(true);
-      const timer = setTimeout(() => setShowToast(false), 8000);
-      return () => clearTimeout(timer);
     }
-  }, [cases, isUrgent]);
+  }, [cases, isUrgent, getUpcomingSessionDate]);
 
   // ✅ Component cleanup
   useEffect(() => {
@@ -356,52 +414,11 @@ export default function Dashboard() {
     };
   }, []);
 
-  const normalizeStatus = useCallback((status) => {
-    const s = (status || "").toString().trim().toLowerCase();
-    if (["جارية", "نشطة", "active"].includes(s)) return CASE_STATUS.ACTIVE;
-    if (["تنفيذ", "execution"].includes(s)) return CASE_STATUS.EXECUTION;
-    if (["منتهية", "closed"].includes(s)) return CASE_STATUS.CLOSED;
-    return CASE_STATUS.ACTIVE;
-  }, []);
+  // ============================================================
+  // ✅ Memoized values
+  // ============================================================
 
-  const getStatusBadge = useCallback((status) => {
-    const s = normalizeStatus(status);
-    const map = {
-      ACTIVE: { label: "نشطة", bg: "#e8f5e6", color: THEME.active, border: "#2d5a2730" },
-      EXECUTION: { label: "تنفيذ", bg: "#fdf6e3", color: THEME.execution, border: "#8b691430" },
-      CLOSED: { label: "منتهية", bg: "#f0e6e6", color: THEME.closed, border: "#6b534430" },
-    };
-    const style = map[s] || map.ACTIVE;
-    return (
-      <span style={{
-        padding: "4px 12px",
-        borderRadius: "999px",
-        fontSize: "12px",
-        fontWeight: "700",
-        background: style.bg,
-        color: style.color,
-        border: `1px solid ${style.border}`,
-        fontFamily: "'Segoe UI', Tahoma, sans-serif",
-      }}>
-        {style.label}
-      </span>
-    );
-  }, [normalizeStatus]);
-
-  const getUpcomingSessionDate = useCallback((sessions) => {
-    if (!Array.isArray(sessions) || sessions.length === 0) return null;
-    const dates = sessions.map(s => parseDate(s.nextSessionDate || s.date)).filter(d => d && d >= today);
-    return dates.length > 0 ? dates.sort((a, b) => a - b)[0] : null;
-  }, [today]);
-
-  const getPreviousSessionDate = useCallback((sessions) => {
-    if (!Array.isArray(sessions) || sessions.length === 0) return null;
-    const dates = sessions.map(s => parseDate(s.nextSessionDate || s.date)).filter(d => d && d < today);
-    return dates.length > 0 ? dates.sort((a, b) => b - a)[0] : null;
-  }, [today]);
-
-  // ✅ Memoized filtered cases
-  const statusFilteredCases = useMemo(() => 
+  const statusFilteredCases = useMemo(() =>
     cases.filter(c => statusFilter === "ALL" || normalizeStatus(c.status) === statusFilter),
   [cases, statusFilter, normalizeStatus]);
 
@@ -409,16 +426,16 @@ export default function Dashboard() {
     return statusFilteredCases.filter(c => {
       const text = debouncedSearch;
       if (!text) return true;
-      const clientMatch = Array.isArray(c.clients) && c.clients.some(ci => 
+      const clientMatch = Array.isArray(c.clients) && c.clients.some(ci =>
         (clientNamesCache[typeof ci === "object" ? ci.id : ci] || "").toLowerCase().includes(text)
       );
       const sessionMatch = (c.sessions || []).some(s => (s.nextSessionDate || s.date || "").includes(text));
-      return (c.caseNumber || "").toLowerCase().includes(text) || 
-             clientMatch || 
-             (c.court || "").toLowerCase().includes(text) || 
+      return (c.caseNumber || "").toLowerCase().includes(text) ||
+             clientMatch ||
+             (c.court || "").toLowerCase().includes(text) ||
              sessionMatch;
-    }).sort((a, b) => 
-      (getUpcomingSessionDate(a.sessions) || new Date(9999,0,1)) - 
+    }).sort((a, b) =>
+      (getUpcomingSessionDate(a.sessions) || new Date(9999,0,1)) -
       (getUpcomingSessionDate(b.sessions) || new Date(9999,0,1))
     );
   }, [statusFilteredCases, debouncedSearch, clientNamesCache, getUpcomingSessionDate]);
@@ -431,7 +448,7 @@ export default function Dashboard() {
     urgent: cases.filter(c => isUrgent(getUpcomingSessionDate(c.sessions))).length,
   }), [cases, normalizeStatus, isUrgent, getUpcomingSessionDate]);
 
-  // ✅ Loading state - يعتمد على authLoading و userDataLoading
+  // ✅ Loading state
   if (authLoading || userDataLoading || loading) {
     return <DashboardSkeleton />;
   }
@@ -441,7 +458,7 @@ export default function Dashboard() {
     return (
       <div style={{ ...styles.page, direction: "rtl", textAlign: "center", padding: "40px" }}>
         <h2 style={{ color: "#dc2626" }}>⚠️ {error}</h2>
-        <button 
+        <button
           onClick={() => window.location.reload()}
           style={{
             padding: "10px 20px",
@@ -461,17 +478,37 @@ export default function Dashboard() {
 
   return (
     <div style={{ ...styles.page, direction: "rtl" }}>
-      {/* التنبيه المنبثق */}
+      {/* ✅ التنبيه المنبثق — مع تذكر الإغلاق */}
       {showToast && (
         <div style={styles.toast}>
           <span style={{ fontSize: "20px" }}>{Icons.warning}</span>
-          <div>
+          <div style={{ flex: 1 }}>
             <strong style={{ fontSize: "15px" }}>تنبيه عاجل</strong>
             <p style={{ margin: "4px 0 0 0", fontSize: "13px", opacity: 0.9 }}>
               لديك {stats.urgent} جلس{stats.urgent > 1 ? "ات" : "ة"} عاجلة اليوم أو غداً
             </p>
           </div>
-          <button onClick={() => setShowToast(false)} style={styles.closeToast}>✕</button>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <button
+              onClick={() => {
+                setShowToast(false);
+                dismissToday();
+              }}
+              style={{
+                background: "transparent",
+                border: "1px solid rgba(212,197,176,0.3)",
+                color: "#9c8b7a",
+                padding: "4px 10px",
+                borderRadius: "6px",
+                fontSize: "12px",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              لا تذكرني اليوم
+            </button>
+            <button onClick={() => setShowToast(false)} style={styles.closeToast}>✕</button>
+          </div>
         </div>
       )}
 
@@ -501,8 +538,8 @@ export default function Dashboard() {
           {/* ✅ أزرار الإضافة — تظهر في الهيدر على الديسكتوب فقط */}
           {!isMobile && (
             <div style={styles.headerActions}>
-              <button 
-                style={styles.addCaseBtn} 
+              <button
+                style={styles.addCaseBtn}
                 onClick={() => navigate("/add-case")}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = THEME.goldLight;
@@ -516,8 +553,8 @@ export default function Dashboard() {
                 <span style={{ fontSize: "16px" }}>{Icons.add}</span>
                 <span>إضافة قضية</span>
               </button>
-              <button 
-                style={styles.addClientBtn} 
+              <button
+                style={styles.addClientBtn}
                 onClick={() => navigate("/clients/add")}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = THEME.btnSecondaryHover;
@@ -552,15 +589,15 @@ export default function Dashboard() {
       ============================================================ */}
       {isMobile && (
         <div style={styles.mobileActions}>
-          <button 
-            style={styles.mobileAddCaseBtn} 
+          <button
+            style={styles.mobileAddCaseBtn}
             onClick={() => navigate("/add-case")}
           >
             <span style={{ fontSize: "18px" }}>{Icons.add}</span>
             <span>إضافة قضية</span>
           </button>
-          <button 
-            style={styles.mobileAddClientBtn} 
+          <button
+            style={styles.mobileAddClientBtn}
             onClick={() => navigate("/clients/add")}
           >
             <span style={{ fontSize: "18px" }}>{Icons.person}</span>
@@ -575,10 +612,10 @@ export default function Dashboard() {
       <div style={styles.controlsSection}>
         <div style={styles.searchWrapper}>
           <span style={styles.searchIcon}>{Icons.search}</span>
-          <input 
-            placeholder="ابحث برقم السجل، المحكمة، الموكل، أو التاريخ (YYYY-MM-DD)..." 
-            value={search} 
-            onChange={(e) => setSearch(e.target.value)} 
+          <input
+            placeholder="ابحث برقم السجل، المحكمة، الموكل، أو التاريخ (YYYY-MM-DD)..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
             style={styles.search}
           />
         </div>
@@ -590,9 +627,9 @@ export default function Dashboard() {
             { key: CASE_STATUS.EXECUTION, label: "تنفيذ" },
             { key: CASE_STATUS.CLOSED, label: "منتهية" },
           ].map((filter) => (
-            <button 
+            <button
               key={filter.key}
-              onClick={() => setStatusFilter(filter.key)} 
+              onClick={() => setStatusFilter(filter.key)}
               style={statusFilter === filter.key ? styles.activeFilter : styles.filterBtn}
             >
               {filter.label}
@@ -609,11 +646,10 @@ export default function Dashboard() {
           const upcoming = getUpcomingSessionDate(c.sessions);
           const previous = getPreviousSessionDate(c.sessions);
           const urgent = isUrgent(upcoming);
-          const clientName = Array.isArray(c.clients) 
+          const clientName = Array.isArray(c.clients)
             ? (clientNamesCache[typeof c.clients[0] === "object" ? c.clients[0].id : c.clients[0]] || "...")
             : "-";
 
-          // ✅ Fallback: use level data cache if denormalized fields are missing
           const levelData = levelDataCache[c.id];
           const displayCaseNumber = c.caseSerial || c.caseNumber || levelData?.caseNumber || "-";
           const displayCaseYear = c.caseYear || levelData?.caseYear || "-";
@@ -621,8 +657,8 @@ export default function Dashboard() {
           const displayCircuit = c.circuit || levelData?.circuit || "";
 
           return (
-            <div 
-              key={c.id} 
+            <div
+              key={c.id}
               style={{
                 ...styles.card,
                 ...(urgent ? styles.cardUrgent : {}),
@@ -673,24 +709,24 @@ export default function Dashboard() {
                 </div>
 
                 <div style={styles.datesBox}>
-                  <DateRow 
-                    icon={Icons.calendar} 
-                    label="القادمة" 
-                    date={upcoming} 
+                  <DateRow
+                    icon={Icons.calendar}
+                    label="القادمة"
+                    date={upcoming}
                     isUrgent={urgent}
                   />
                   {previous && (
-                    <DateRow 
-                      icon={Icons.clock} 
-                      label="السابقة" 
-                      date={previous} 
+                    <DateRow
+                      icon={Icons.clock}
+                      label="السابقة"
+                      date={previous}
                       isPast
                     />
                   )}
                 </div>
 
                 <div style={styles.cardActions}>
-                  <button 
+                  <button
                     style={styles.viewBtn}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -699,7 +735,7 @@ export default function Dashboard() {
                   >
                     {Icons.view} فتح الملف
                   </button>
-                  <button 
+                  <button
                     style={styles.editBtn}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -722,8 +758,8 @@ export default function Dashboard() {
             {debouncedSearch ? "لا توجد نتائج مطابقة" : "لا توجد قضايا"}
           </h3>
           <p style={{ color: THEME.textMuted, margin: 0 }}>
-            {debouncedSearch 
-              ? "جرب البحث بكلمات مختلفة" 
+            {debouncedSearch
+              ? "جرب البحث بكلمات مختلفة"
               : "اضغط على 'إضافة قضية' لإضافة أول قضية"
             }
           </p>
@@ -748,17 +784,17 @@ function StatItem({ icon, label, value, color, isUrgent }) {
       borderRadius: "10px",
       border: isUrgent ? "1px solid #8b250030" : "1px solid transparent",
     }}>
-      <span style={{ 
-        fontSize: "14px", 
+      <span style={{
+        fontSize: "14px",
         color: color || THEME.goldLight,
         fontWeight: isUrgent ? "bold" : "normal",
       }}>
         {icon}
       </span>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <span style={{ 
-          fontSize: "18px", 
-          fontWeight: "700", 
+        <span style={{
+          fontSize: "18px",
+          fontWeight: "700",
           color: isUrgent ? THEME.urgent : "#fff",
           fontFamily: "'Segoe UI', Tahoma, sans-serif",
         }}>

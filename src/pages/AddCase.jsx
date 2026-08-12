@@ -82,10 +82,7 @@ export default function AddCase() {
   const isAdvancedLevel = ["appeal", "cassation", "retrial", "execution"].includes(form.litigationDegree);
   const currentOrder = LITIGATION_DEGREES.find(d => d.value === form.litigationDegree)?.order || 1;
 
-  // Auto-generate previous levels
-  useEffect(() => {
-    setForm(p => ({ ...p, previousLevels: generatePreviousLevels(p.litigationDegree) }));
-  }, [form.litigationDegree]);
+  // ✅ المراحل السابقة تُضاف يدوياً فقط — لا توليد تلقائي
 
   // Load clients
   useEffect(() => {
@@ -104,6 +101,10 @@ export default function AddCase() {
   const addPreviousLevel = () => {
     const usedOrders = form.previousLevels.map(l => LITIGATION_DEGREES.find(d => d.value === l.levelType)?.order || 1);
     const available = LITIGATION_DEGREES.filter(d => d.order < currentOrder && !usedOrders.includes(d.order)).sort((a, b) => a.order - b.order);
+    if (available.length === 0) {
+      alert("لا يمكن إضافة المزيد من الدرجات السابقة لهذه القضية.");
+      return;
+    }
     const defaultType = available[0]?.value || "first_instance";
     setForm(p => ({ ...p, previousLevels: [...p.previousLevels, { id: crypto.randomUUID(), levelType: defaultType, court: "", caseNumber: "", caseYear: "", circuit: "", judgmentDate: "", judgmentResult: "" }] }));
   };
@@ -179,7 +180,8 @@ export default function AddCase() {
 
       let order = 1;
       const prevLevelRefs = [];
-      if (isAdvancedLevel && form.previousLevels.length > 0) {
+      // ✅ إنشاء المراحل السابقة اللي المستخدم ضافها يدوياً فقط
+      if (form.previousLevels.length > 0) {
         const sorted = [...form.previousLevels].sort((a, b) => {
           const oa = LITIGATION_DEGREES.find(d => d.value === a.levelType)?.order || 1;
           const ob = LITIGATION_DEGREES.find(d => d.value === b.levelType)?.order || 1;
@@ -371,7 +373,7 @@ export default function AddCase() {
 
               {form.previousLevels.length === 0 && (
                 <p style={{ color: colors.text.muted, fontSize: typography.sizes.sm }}>
-                  جاري توليد الدرجات السابقة تلقائياً...
+                  لا توجد درجات سابقة. اضغط "إضافة درجة" لإضافة مراحل تقاضي سابقة.
                 </p>
               )}
 
