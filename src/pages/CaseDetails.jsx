@@ -29,7 +29,7 @@ import { useLitigationLevels } from "../hooks/useLitigationLevels";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebaseDb";
 import { Modal, Section } from "../components/ui";
-import { colors, spacing, radius, shadows, transitions, card, page, infoBox, iconBox } from "../styles/design-system";
+import { useTheme } from "../context/ThemeContext.jsx";
 
 // ============================================================
 // ✅ خرائط الترجمة — من إنجليزي لعربي
@@ -119,15 +119,6 @@ const translateWorkflowStatus = (status) => {
   return WORKFLOW_STATUS_MAP[normalized] || status;
 };
 
-const DECISION_STAGE_MAP = {
-  adjourned:       { stageLabel: 'مؤجلة',        color: colors.accent.amber.main },
-  adjourned_notice:{ stageLabel: 'مؤجلة لإعلان', color: colors.accent.amber.dark },
-  judgment:        { stageLabel: 'حُكمت',        color: colors.accent.green.main },
-  referred:        { stageLabel: 'محالة',        color: colors.accent.blue.main },
-  absence:         { stageLabel: 'غياب',         color: colors.accent.red.main },
-  expert:          { stageLabel: 'معينة خبير',   color: colors.accent.purple.main },
-  settlement:      { stageLabel: 'مسوّاة',       color: colors.accent.cyan.main },
-};
 
 const getStatusLabel = (status) => {
   const found = CASE_STATUS_LIST.find(s => s.value === status);
@@ -172,16 +163,19 @@ const validateTenant = (caseTenantId, userTenantId) => {
 };
 
 
-function InfoBox({ icon: Icon, title, value, color = colors.accent.blue.light, badge = null }) {
+function InfoBox({ icon: Icon, title, value, color, badge = null }) {
+  const { theme } = useTheme();
+  const { colors, infoBox, iconBox, radius } = theme;
   const displayValue = value != null && value !== '' ? value : "-";
+  const boxColor = color || colors.accent.blue.light;
   return (
     <div style={{
       ...infoBox,
       background: colors.bg.card,
       padding: "clamp(10px, 3vw, 14px)",
     }}>
-      <div style={iconBox(color)}>
-        <Icon size={18} color={color} strokeWidth={2} />
+      <div style={iconBox(boxColor)}>
+        <Icon size={18} color={boxColor} strokeWidth={2} />
       </div>
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ color: colors.text.muted, fontSize: 11, marginBottom: 3 }}>{title}</div>
@@ -203,6 +197,19 @@ function InfoBox({ icon: Icon, title, value, color = colors.accent.blue.light, b
 }
 
 function WorkflowBanner({ lastSession }) {
+  const { theme } = useTheme();
+  const { colors, spacing, radius } = theme;
+
+  const DECISION_STAGE_MAP = {
+    adjourned:       { stageLabel: 'مؤجلة',        color: colors.accent.amber.main },
+    adjourned_notice:{ stageLabel: 'مؤجلة لإعلان', color: colors.accent.amber.dark },
+    judgment:        { stageLabel: 'حُكمت',        color: colors.accent.green.main },
+    referred:        { stageLabel: 'محالة',        color: colors.accent.blue.main },
+    absence:         { stageLabel: 'غياب',         color: colors.accent.red.main },
+    expert:          { stageLabel: 'معينة خبير',   color: colors.accent.purple.main },
+    settlement:      { stageLabel: 'مسوّاة',       color: colors.accent.cyan.main },
+  };
+
   if (!lastSession?.suggestedStage) return null;
   const meta = DECISION_STAGE_MAP[lastSession.suggestedStage];
   if (!meta) return null;
@@ -241,6 +248,8 @@ function WorkflowBanner({ lastSession }) {
 }
 
 function LoadingState() {
+  const { theme } = useTheme();
+  const { colors } = theme;
   return (
     <div style={{
       padding: 40, textAlign: "center", color: colors.text.muted,
@@ -268,6 +277,8 @@ function LoadingState() {
 }
 
 function ErrorState({ message, onRetry }) {
+  const { theme } = useTheme();
+  const { colors, radius } = theme;
   return (
     <div style={{
       padding: 40, textAlign: "center", color: colors.accent.red.main,
@@ -292,6 +303,8 @@ function ErrorState({ message, onRetry }) {
 }
 
 export default function CaseDetails() {
+  const { theme } = useTheme();
+  const { colors, spacing, radius, shadows, transitions, card, page, infoBox, iconBox } = theme;
   const { id } = useParams();
   const { userData } = useAuth();
   const [searchParams] = useSearchParams();
@@ -1565,6 +1578,8 @@ export default function CaseDetails() {
 // ACTION BUTTON HELPER
 // ═══════════════════════════════════════════════════════════════════
 function ActionButton({ icon: Icon, color, children, onClick }) {
+  const { theme } = useTheme();
+  const { radius, transitions } = theme;
   const btnProps = onClick ? { onClick } : {};
   return (
     <button

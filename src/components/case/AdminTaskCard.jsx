@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTheme } from '../../context/ThemeContext.jsx';
 import { 
   CheckCircle2, Circle, Clock, AlertCircle, 
   Edit2, Trash2, User, Calendar, Tag, ArrowRight, FolderOpen
@@ -8,55 +9,58 @@ const statusConfig = {
   pending: {
     label: 'معلقة',
     icon: Circle,
-    color: '#fbbf24',
-    bgColor: 'rgba(251, 191, 36, 0.15)',
-    borderColor: 'rgba(251, 191, 36, 0.3)',
+    color: 'var(--theme-accent-amber-main)',
+    bgColor: 'var(--theme-accent-amber-bg)',
+    borderColor: 'var(--theme-accent-amber-border)',
   },
   'in-progress': {
     label: 'قيد التنفيذ',
     icon: Clock,
-    color: '#60a5fa',
-    bgColor: 'rgba(96, 165, 250, 0.15)',
-    borderColor: 'rgba(96, 165, 250, 0.3)',
+    color: 'var(--theme-accent-blue-light)',
+    bgColor: 'var(--theme-accent-blue-bg)',
+    borderColor: 'var(--theme-accent-blue-border)',
   },
   completed: {
     label: 'منجزة',
     icon: CheckCircle2,
-    color: '#4ade80',
-    bgColor: 'rgba(74, 222, 128, 0.15)',
-    borderColor: 'rgba(74, 222, 128, 0.3)',
+    color: 'var(--theme-accent-green-main)',
+    bgColor: 'var(--theme-accent-green-bg)',
+    borderColor: 'var(--theme-accent-green-border)',
   },
   overdue: {
     label: 'متأخرة',
     icon: AlertCircle,
-    color: '#f87171',
-    bgColor: 'rgba(248, 113, 113, 0.15)',
-    borderColor: 'rgba(248, 113, 113, 0.3)',
+    color: 'var(--theme-accent-red-main)',
+    bgColor: 'var(--theme-accent-red-bg)',
+    borderColor: 'var(--theme-accent-red-border)',
   },
 };
 
 const priorityConfig = {
   high: { 
     label: 'عالية', 
-    color: '#f87171', 
-    bg: 'rgba(248, 113, 113, 0.15)',
-    border: 'rgba(248, 113, 113, 0.3)'
+    color: 'var(--theme-accent-red-main)', 
+    bg: 'var(--theme-accent-red-bg)',
+    border: 'var(--theme-accent-red-border)'
   },
   medium: { 
     label: 'متوسطة', 
-    color: '#fbbf24', 
-    bg: 'rgba(251, 191, 36, 0.15)',
-    border: 'rgba(251, 191, 36, 0.3)'
+    color: 'var(--theme-accent-amber-main)', 
+    bg: 'var(--theme-accent-amber-bg)',
+    border: 'var(--theme-accent-amber-border)'
   },
   low: { 
     label: 'منخفضة', 
-    color: '#4ade80', 
-    bg: 'rgba(74, 222, 128, 0.15)',
-    border: 'rgba(74, 222, 128, 0.3)'
+    color: 'var(--theme-accent-green-main)', 
+    bg: 'var(--theme-accent-green-bg)',
+    border: 'var(--theme-accent-green-border)'
   },
 };
 
 export default function AdminTaskCard({ task, caseInfo, onEdit, onDelete, onToggleStatus }) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+
   const status = statusConfig[task.status] || statusConfig.pending;
   const StatusIcon = status.icon;
   const priority = priorityConfig[task.priority] || priorityConfig.medium;
@@ -79,7 +83,6 @@ export default function AdminTaskCard({ task, caseInfo, onEdit, onDelete, onTogg
     }
   };
 
-  // Format date
   const formatDate = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
@@ -93,25 +96,27 @@ export default function AdminTaskCard({ task, caseInfo, onEdit, onDelete, onTogg
   return (
     <div 
       style={{
-        ...styles.card,
-        borderRight: isOverdue ? '4px solid #f87171' : '4px solid transparent',
+        ...styles.card(colors),
+        borderRight: isOverdue ? `4px solid ${colors.accent.red.main}` : '4px solid transparent',
         opacity: isCompleted ? 0.7 : 1,
       }}
     >
-      {/* Case Header - NEW */}
+      {/* Case Header */}
       {caseInfo && (
-        <div style={styles.caseHeader}>
-          <FolderOpen size={14} color="#60a5fa" />
-          <span style={styles.caseTitle}>{caseInfo.title}</span>
+        <div style={styles.caseHeader(colors)}>
+          <FolderOpen size={14} color={colors.accent.blue.light} />
+          <span style={styles.caseTitle(colors)}>{caseInfo.title}</span>
           {caseInfo.number && (
-            <span style={styles.caseNumber}>(رقم: {caseInfo.number})</span>
+            <span style={styles.caseNumber(colors)}>(رقم: {caseInfo.number})</span>
           )}
         </div>
       )}
       {task.caseId === 'general' && (
-        <div style={styles.caseHeader}>
-          <FolderOpen size={14} color="#6b7280" />
-          <span style={{ ...styles.caseTitle, color: '#6b7280' }}>عمل عام (غير مرتبط بقضية)</span>
+        <div style={styles.caseHeader(colors)}>
+          <FolderOpen size={14} color={colors.text.muted} />
+          <span style={{ ...styles.caseTitle(colors), color: colors.text.muted }}>
+            عمل عام (غير مرتبط بقضية)
+          </span>
         </div>
       )}
 
@@ -123,14 +128,14 @@ export default function AdminTaskCard({ task, caseInfo, onEdit, onDelete, onTogg
             onClick={handleToggle}
             style={{
               ...styles.toggleBtn,
-              background: isCompleted ? 'rgba(74, 222, 128, 0.15)' : 'rgba(55, 65, 81, 0.3)',
+              background: isCompleted ? colors.accent.green.bg : colors.bg.hover,
             }}
             title={isCompleted ? 'تحديد كمعلق' : 'تحديد كمنجز'}
           >
             {isCompleted ? (
-              <CheckCircle2 size={22} color="#4ade80" strokeWidth={2.5} />
+              <CheckCircle2 size={22} color={colors.accent.green.main} strokeWidth={2.5} />
             ) : (
-              <Circle size={22} color="#6b7280" strokeWidth={2} />
+              <Circle size={22} color={colors.text.muted} strokeWidth={2} />
             )}
           </button>
 
@@ -140,7 +145,7 @@ export default function AdminTaskCard({ task, caseInfo, onEdit, onDelete, onTogg
               <h4 style={{
                 ...styles.title,
                 textDecoration: isCompleted ? 'line-through' : 'none',
-                color: isCompleted ? '#6b7280' : '#f3f4f6',
+                color: isCompleted ? colors.text.disabled : colors.text.primary,
               }}>
                 {task.title}
               </h4>
@@ -154,30 +159,29 @@ export default function AdminTaskCard({ task, caseInfo, onEdit, onDelete, onTogg
               </span>
             </div>
 
-            {/* Description - Mobile friendly */}
             {task.description && (
               <p style={{
                 ...styles.description,
-                color: isCompleted ? '#4b5563' : '#9ca3af',
+                color: isCompleted ? colors.text.disabled : colors.text.muted,
               }}>
                 {task.description}
               </p>
             )}
           </div>
 
-          {/* Actions - Hidden on very small screens, shown as icons */}
+          {/* Actions */}
           <div style={styles.actions}>
             {onEdit && (
               <button
                 onClick={handleEdit}
-                style={styles.actionBtn}
+                style={styles.actionBtn(colors)}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)';
-                  e.currentTarget.style.color = '#60a5fa';
+                  e.currentTarget.style.background = colors.accent.blue.bg;
+                  e.currentTarget.style.color = colors.accent.blue.light;
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = '#6b7280';
+                  e.currentTarget.style.color = colors.text.muted;
                 }}
                 title="تعديل"
               >
@@ -187,14 +191,14 @@ export default function AdminTaskCard({ task, caseInfo, onEdit, onDelete, onTogg
             {onDelete && (
               <button
                 onClick={handleDelete}
-                style={styles.actionBtn}
+                style={styles.actionBtn(colors)}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(248, 113, 113, 0.15)';
-                  e.currentTarget.style.color = '#f87171';
+                  e.currentTarget.style.background = colors.accent.red.bg;
+                  e.currentTarget.style.color = colors.accent.red.light;
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = '#6b7280';
+                  e.currentTarget.style.color = colors.text.muted;
                 }}
                 title="حذف"
               >
@@ -219,27 +223,27 @@ export default function AdminTaskCard({ task, caseInfo, onEdit, onDelete, onTogg
           {/* Due Date */}
           {task.dueDate && (
             <div style={{
-              ...styles.metaItem,
-              color: isOverdue ? '#f87171' : '#6b7280',
+              ...styles.metaItem(colors),
+              color: isOverdue ? colors.accent.red.main : colors.text.muted,
             }}>
-              <Calendar size={13} color={isOverdue ? '#f87171' : '#6b7280'} />
+              <Calendar size={13} color={isOverdue ? colors.accent.red.main : colors.text.muted} />
               <span>{formatDate(task.dueDate)}</span>
-              {isOverdue && <span style={styles.overdueLabel}>متأخر</span>}
+              {isOverdue && <span style={styles.overdueLabel(colors)}>متأخر</span>}
             </div>
           )}
 
           {/* Assigned To */}
           {task.assignedTo && (
-            <div style={styles.metaItem}>
-              <User size={13} color="#6b7280" />
+            <div style={styles.metaItem(colors)}>
+              <User size={13} color={colors.text.muted} />
               <span>{task.assignedTo}</span>
             </div>
           )}
 
           {/* Category */}
           {task.category && (
-            <div style={styles.metaItem}>
-              <Tag size={13} color="#6b7280" />
+            <div style={styles.metaItem(colors)}>
+              <Tag size={13} color={colors.text.muted} />
               <span>{task.category}</span>
             </div>
           )}
@@ -249,33 +253,34 @@ export default function AdminTaskCard({ task, caseInfo, onEdit, onDelete, onTogg
   );
 }
 
+// ✅ Styles factory — بتستقبل colors من الثيم
 const styles = {
-  card: {
-    background: '#1e293b',
-    border: '1px solid rgba(55, 65, 81, 0.5)',
+  card: (colors) => ({
+    background: colors.bg.card,
+    border: `1px solid ${colors.border.default}`,
     borderRadius: '16px',
     overflow: 'hidden',
     transition: 'all 0.2s ease',
     marginBottom: '12px',
-  },
-  caseHeader: {
+  }),
+  caseHeader: (colors) => ({
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     padding: '10px 20px',
-    background: 'rgba(15, 23, 42, 0.6)',
-    borderBottom: '1px solid rgba(55, 65, 81, 0.3)',
-  },
-  caseTitle: {
+    background: colors.bg.page,
+    borderBottom: `1px solid ${colors.border.default}`,
+  }),
+  caseTitle: (colors) => ({
     fontSize: '13px',
     fontWeight: '600',
-    color: '#60a5fa',
-  },
-  caseNumber: {
+    color: colors.accent.blue.light,
+  }),
+  caseNumber: (colors) => ({
     fontSize: '12px',
-    color: '#6b7280',
+    color: colors.text.muted,
     fontWeight: '500',
-  },
+  }),
   cardInner: {
     padding: '16px 20px',
   },
@@ -334,18 +339,18 @@ const styles = {
     gap: '4px',
     flexShrink: 0,
   },
-  actionBtn: {
+  actionBtn: (colors) => ({
     padding: '8px',
     borderRadius: '10px',
     border: 'none',
     background: 'transparent',
-    color: '#6b7280',
+    color: colors.text.muted,
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-  },
+  }),
   metaRow: {
     display: 'flex',
     alignItems: 'center',
@@ -363,44 +368,23 @@ const styles = {
     fontSize: '12px',
     fontWeight: '600',
   },
-  metaItem: {
+  metaItem: (colors) => ({
     display: 'flex',
     alignItems: 'center',
     gap: '5px',
     fontSize: '12px',
-    color: '#6b7280',
+    color: colors.text.muted,
     padding: '4px 10px',
-    background: 'rgba(31, 41, 55, 0.5)',
+    background: colors.bg.hover,
     borderRadius: '8px',
-  },
-  overdueLabel: {
-    background: 'rgba(248, 113, 113, 0.2)',
-    color: '#f87171',
+  }),
+  overdueLabel: (colors) => ({
+    background: colors.accent.red.bg,
+    color: colors.accent.red.main,
     padding: '2px 8px',
     borderRadius: '6px',
     fontSize: '11px',
     fontWeight: '700',
     marginRight: '4px',
-  },
+  }),
 };
-
-// Mobile responsive adjustments via CSS
-const mobileStyles = `
-  @media (max-width: 640px) {
-    .admin-task-card-inner {
-      padding: 12px 14px !important;
-    }
-    .admin-task-meta-row {
-      margin-right: 0 !important;
-      margin-top: 10px !important;
-    }
-    .admin-task-title {
-      font-size: 14px !important;
-    }
-    .admin-task-actions {
-      position: absolute;
-      top: 12px;
-      left: 14px;
-    }
-  }
-`;

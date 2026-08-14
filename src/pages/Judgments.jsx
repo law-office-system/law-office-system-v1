@@ -20,6 +20,7 @@ import JudgmentCard from '../components/case/JudgmentCard';
 import JudgmentForm from '../components/case/JudgmentForm';
 
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext.jsx';
 import { db } from "../firebaseDb";
 
 const JUDGMENT_CATEGORIES = {
@@ -32,30 +33,33 @@ const categoryConfig = {
   order: {
     label: 'الأوامر',
     description: 'إجراءات إدارية وتنظيمية (أوامر على عرائض، ندب خبراء، استجواب)',
-    color: '#6b7280',
-    bgColor: 'rgba(107, 114, 128, 0.15)',
-    borderColor: 'rgba(107, 114, 128, 0.3)',
+    getColor: (c) => c.text.muted,
+    getBgColor: (c) => c.text.disabled + '25',
+    getBorderColor: (c) => c.text.disabled + '40',
     icon: FileText,
   },
   preliminary: {
     label: 'الأحكام التمهيدية',
     description: 'إعداد للفصل في الدعوى (ندب خبراء، استجواب، معاينة)',
-    color: '#d97706',
-    bgColor: 'rgba(217, 119, 6, 0.15)',
-    borderColor: 'rgba(217, 119, 6, 0.3)',
+    getColor: (c) => c.accent.amber.main,
+    getBgColor: (c) => c.accent.amber.bg,
+    getBorderColor: (c) => c.accent.amber.main + '30',
     icon: Clock,
   },
   final: {
     label: 'الأحكام القطعية',
     description: 'تُنهي القضية (أحكام ابتدائية، استئناف، نقض، نهائية)',
-    color: '#1e40af',
-    bgColor: 'rgba(30, 64, 175, 0.15)',
-    borderColor: 'rgba(30, 64, 175, 0.3)',
+    getColor: (c) => c.accent.blue.dark,
+    getBgColor: (c) => c.accent.blue.bg,
+    getBorderColor: (c) => c.accent.blue.main + '30',
     icon: CheckCircle2,
   },
 };
 
 export default function Judgments() {
+  const { theme } = useTheme();
+  const { colors } = theme;
+  const styles = getStyles(colors);
   const { user, userData } = useAuth();
   const officeId = userData?.officeId;
 
@@ -252,7 +256,7 @@ export default function Judgments() {
       {expandedSections[type] && (
         <div style={styles.sectionContent}>
           {data.length === 0 ? (
-            <div style={styles.emptySection}><Scale size={40} color="#374151" strokeWidth={1.5} /><p style={styles.emptyText}>لا توجد أحكام في هذا القسم</p></div>
+            <div style={styles.emptySection}><Scale size={40} color={colors.text.disabled} strokeWidth={1.5} /><p style={styles.emptyText}>لا توجد أحكام في هذا القسم</p></div>
           ) : data.map(judgment => (
             <JudgmentCard key={judgment.id} judgment={judgment} caseInfo={getCaseInfo(judgment.caseId)}
               onEdit={isAdmin ? (j) => { setEditingJudgment(j); setShowForm(true); } : null}
@@ -268,20 +272,20 @@ export default function Judgments() {
     <div style={styles.page} className="judgments-page">
       <div style={styles.header} className="judgments-header">
         <div style={styles.headerLeft}>
-          <div style={styles.headerIcon}><Landmark color="#fbbf24" size={24} strokeWidth={2.5} /></div>
+          <div style={styles.headerIcon}><Landmark color={colors.accent.amber.light} size={24} strokeWidth={2.5} /></div>
           <div>
             <h1 style={styles.headerTitle}>الأحكام القضائية</h1>
             <p style={styles.headerSubtitle}>إدارة ومتابعة جميع الأحكام والقرارات</p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={fetchJudgments} style={{ ...styles.addBtn, background: '#374151' }}>
+          <button onClick={fetchJudgments} style={{ ...styles.addBtn, background: colors.bg.hover }}>
             🔄 تحديث
           </button>
           {isAdmin && (
             <button onClick={() => { setEditingJudgment(null); setShowForm(true); }} style={styles.addBtn}
-              onMouseEnter={(e) => { e.currentTarget.style.background = '#b45309'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = '#d97706'; e.currentTarget.style.transform = 'translateY(0)'; }}>
+              onMouseEnter={(e) => { e.currentTarget.style.background = colors.accent.amber.dark; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = colors.accent.amber.main; e.currentTarget.style.transform = 'translateY(0)'; }}>
               <Plus size={18} /> إضافة حكم
             </button>
           )}
@@ -290,45 +294,45 @@ export default function Judgments() {
 
       <div style={styles.statsGrid} className="judgments-stats-grid">
         <div style={styles.statCard}>
-          <div style={{ ...styles.statIcon, background: 'rgba(30, 64, 175, 0.15)' }}><Scale size={20} color="#1e40af" strokeWidth={2.5} /></div>
-          <div style={{ ...styles.statValue, color: '#1e40af' }}>{stats.total}</div>
+          <div style={{ ...styles.statIcon, background: colors.accent.blue.bg }}><Scale size={20} color={colors.accent.blue.dark} strokeWidth={2.5} /></div>
+          <div style={{ ...styles.statValue, color: colors.accent.blue.dark }}>{stats.total}</div>
           <div style={styles.statLabel}>إجمالي الأحكام</div>
         </div>
         <div style={styles.statCard}>
-          <div style={{ ...styles.statIcon, background: 'rgba(107, 114, 128, 0.15)' }}><FileText size={20} color="#6b7280" strokeWidth={2.5} /></div>
-          <div style={{ ...styles.statValue, color: '#6b7280' }}>{stats.order}</div>
+          <div style={{ ...styles.statIcon, background: colors.text.disabled + '20' }}><FileText size={20} color={colors.text.muted} strokeWidth={2.5} /></div>
+          <div style={{ ...styles.statValue, color: colors.text.muted }}>{stats.order}</div>
           <div style={styles.statLabel}>أوامر</div>
         </div>
         <div style={styles.statCard}>
-          <div style={{ ...styles.statIcon, background: 'rgba(217, 119, 6, 0.15)' }}><Clock size={20} color="#d97706" strokeWidth={2.5} /></div>
-          <div style={{ ...styles.statValue, color: '#d97706' }}>{stats.preliminary}</div>
+          <div style={{ ...styles.statIcon, background: colors.accent.amber.bg }}><Clock size={20} color={colors.accent.amber.main} strokeWidth={2.5} /></div>
+          <div style={{ ...styles.statValue, color: colors.accent.amber.main }}>{stats.preliminary}</div>
           <div style={styles.statLabel}>تمهيدية</div>
         </div>
         <div style={styles.statCard}>
-          <div style={{ ...styles.statIcon, background: 'rgba(30, 64, 175, 0.15)' }}><CheckCircle2 size={20} color="#1e40af" strokeWidth={2.5} /></div>
-          <div style={{ ...styles.statValue, color: '#1e40af' }}>{stats.final}</div>
+          <div style={{ ...styles.statIcon, background: colors.accent.blue.bg }}><CheckCircle2 size={20} color={colors.accent.blue.dark} strokeWidth={2.5} /></div>
+          <div style={{ ...styles.statValue, color: colors.accent.blue.dark }}>{stats.final}</div>
           <div style={styles.statLabel}>قطعية</div>
         </div>
         <div style={styles.statCard}>
-          <div style={{ ...styles.statIcon, background: 'rgba(16, 185, 129, 0.15)' }}><CheckCircle2 size={20} color="#10b981" strokeWidth={2.5} /></div>
-          <div style={{ ...styles.statValue, color: '#10b981' }}>{stats.win}</div>
+          <div style={{ ...styles.statIcon, background: colors.accent.green.bg }}><CheckCircle2 size={20} color={colors.accent.green.main} strokeWidth={2.5} /></div>
+          <div style={{ ...styles.statValue, color: colors.accent.green.main }}>{stats.win}</div>
           <div style={styles.statLabel}>لصالحنا</div>
         </div>
         <div style={styles.statCard}>
-          <div style={{ ...styles.statIcon, background: 'rgba(239, 68, 68, 0.15)' }}><AlertTriangle size={20} color="#ef4444" strokeWidth={2.5} /></div>
-          <div style={{ ...styles.statValue, color: '#ef4444' }}>{stats.lose}</div>
+          <div style={{ ...styles.statIcon, background: colors.accent.red.bg }}><AlertTriangle size={20} color={colors.accent.red.main} strokeWidth={2.5} /></div>
+          <div style={{ ...styles.statValue, color: colors.accent.red.main }}>{stats.lose}</div>
           <div style={styles.statLabel}>ضدنا</div>
         </div>
         <div style={styles.statCard}>
-          <div style={{ ...styles.statIcon, background: 'rgba(217, 119, 6, 0.15)' }}><Bell size={20} color="#d97706" strokeWidth={2.5} /></div>
-          <div style={{ ...styles.statValue, color: '#d97706' }}>{stats.needsFollowUp}</div>
+          <div style={{ ...styles.statIcon, background: colors.accent.amber.bg }}><Bell size={20} color={colors.accent.amber.main} strokeWidth={2.5} /></div>
+          <div style={{ ...styles.statValue, color: colors.accent.amber.main }}>{stats.needsFollowUp}</div>
           <div style={styles.statLabel}>تحتاج متابعة</div>
         </div>
       </div>
 
       <div style={styles.controls} className="judgments-controls">
         <div style={styles.searchBox} className="judgments-search-box">
-          <Search size={16} color="#6b7280" style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+          <Search size={16} color={colors.text.muted} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)' }} />
           <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="البحث في الأحكام أو القضايا..." style={styles.searchInput} />
         </div>
       </div>
@@ -337,9 +341,9 @@ export default function Judgments() {
         <div style={styles.loadingContainer}><div style={styles.spinner} /></div>
       ) : (
         <>
-          {renderJudgmentSection(categoryConfig.order.label, categoryConfig.order.description, filteredOrder, 'order', categoryConfig.order.color, categoryConfig.order.bgColor, categoryConfig.order.borderColor, categoryConfig.order.icon)}
-          {renderJudgmentSection(categoryConfig.preliminary.label, categoryConfig.preliminary.description, filteredPreliminary, 'preliminary', categoryConfig.preliminary.color, categoryConfig.preliminary.bgColor, categoryConfig.preliminary.borderColor, categoryConfig.preliminary.icon)}
-          {renderJudgmentSection(categoryConfig.final.label, categoryConfig.final.description, filteredFinal, 'final', categoryConfig.final.color, categoryConfig.final.bgColor, categoryConfig.final.borderColor, categoryConfig.final.icon)}
+          {renderJudgmentSection(categoryConfig.order.label, categoryConfig.order.description, filteredOrder, 'order', categoryConfig.order.getColor(colors), categoryConfig.order.getBgColor(colors), categoryConfig.order.getBorderColor(colors), categoryConfig.order.icon)}
+          {renderJudgmentSection(categoryConfig.preliminary.label, categoryConfig.preliminary.description, filteredPreliminary, 'preliminary', categoryConfig.preliminary.getColor(colors), categoryConfig.preliminary.getBgColor(colors), categoryConfig.preliminary.getBorderColor(colors), categoryConfig.preliminary.icon)}
+          {renderJudgmentSection(categoryConfig.final.label, categoryConfig.final.description, filteredFinal, 'final', categoryConfig.final.getColor(colors), categoryConfig.final.getBgColor(colors), categoryConfig.final.getBorderColor(colors), categoryConfig.final.icon)}
         </>
       )}
 
@@ -348,32 +352,32 @@ export default function Judgments() {
   );
 }
 
-const styles = {
+const getStyles = (colors) => ({
   page: { padding: '24px', maxWidth: '1200px', margin: '0 auto' },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' },
   headerLeft: { display: 'flex', alignItems: 'center', gap: '16px' },
-  headerIcon: { width: '52px', height: '52px', background: 'linear-gradient(135deg, #1e3a8a, #1e40af)', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px rgba(30, 64, 175, 0.25)' },
-  headerTitle: { fontSize: '24px', fontWeight: '700', color: '#f3f4f6', margin: '0 0 4px 0' },
-  headerSubtitle: { fontSize: '14px', color: '#6b7280', margin: 0 },
-  addBtn: { display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px', background: '#d97706', color: 'white', border: 'none', borderRadius: '14px', fontSize: '15px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s ease', boxShadow: '0 4px 16px rgba(217, 119, 6, 0.3)', fontFamily: 'inherit' },
+  headerIcon: { width: '52px', height: '52px', background: `linear-gradient(135deg, ${colors.accent.blue.dark}, ${colors.accent.blue.main})`, borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 8px 24px ${colors.accent.blue.main}40` },
+  headerTitle: { fontSize: '24px', fontWeight: '700', color: colors.text.primary, margin: '0 0 4px 0' },
+  headerSubtitle: { fontSize: '14px', color: colors.text.muted, margin: 0 },
+  addBtn: { display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px', background: colors.accent.amber.main, color: 'white', border: 'none', borderRadius: '14px', fontSize: '15px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s ease', boxShadow: `0 4px 16px ${colors.accent.amber.main}40`, fontFamily: 'inherit' },
   statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '24px' },
-  statCard: { background: '#1e293b', border: '1px solid rgba(55, 65, 81, 0.5)', borderRadius: '16px', padding: '16px', textAlign: 'center', transition: 'all 0.2s ease' },
+  statCard: { background: colors.bg.card, border: `1px solid ${colors.border.default}`, borderRadius: '16px', padding: '16px', textAlign: 'center', transition: 'all 0.2s ease' },
   statIcon: { width: '40px', height: '40px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' },
   statValue: { fontSize: '24px', fontWeight: '700', marginBottom: '4px' },
-  statLabel: { fontSize: '12px', color: '#6b7280', fontWeight: '500' },
+  statLabel: { fontSize: '12px', color: colors.text.muted, fontWeight: '500' },
   controls: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' },
   searchBox: { position: 'relative', width: '100%', maxWidth: '400px' },
-  searchInput: { width: '100%', padding: '10px 16px 10px 40px', background: '#1e293b', border: '1px solid rgba(55, 65, 81, 0.5)', borderRadius: '14px', color: '#e5e7eb', fontSize: '14px', outline: 'none', transition: 'all 0.2s', fontFamily: 'inherit' },
+  searchInput: { width: '100%', padding: '10px 16px 10px 40px', background: colors.bg.input, border: `1px solid ${colors.border.default}`, borderRadius: '14px', color: colors.text.primary, fontSize: '14px', outline: 'none', transition: 'all 0.2s', fontFamily: 'inherit' },
   loadingContainer: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '300px' },
-  spinner: { width: '40px', height: '40px', border: '3px solid rgba(30, 64, 175, 0.2)', borderTopColor: '#1e40af', borderRadius: '50%', animation: 'spin 1s linear infinite' },
+  spinner: { width: '40px', height: '40px', border: `3px solid ${colors.accent.blue.bg}`, borderTopColor: colors.accent.blue.dark, borderRadius: '50%', animation: 'spin 1s linear infinite' },
   sectionHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderRadius: '16px', cursor: 'pointer', transition: 'all 0.2s ease', marginBottom: '12px' },
   sectionHeaderLeft: { display: 'flex', alignItems: 'center', gap: '14px' },
   sectionIcon: { width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   sectionTitle: { fontSize: '18px', fontWeight: '700', margin: '0 0 4px 0' },
-  sectionDescription: { fontSize: '13px', color: '#6b7280', margin: 0 },
+  sectionDescription: { fontSize: '13px', color: colors.text.muted, margin: 0 },
   sectionHeaderRight: { display: 'flex', alignItems: 'center', gap: '12px' },
   sectionCount: { padding: '4px 12px', borderRadius: '20px', fontSize: '14px', fontWeight: '700' },
   sectionContent: { padding: '0 8px' },
-  emptySection: { background: '#1e293b', border: '1px dashed rgba(55, 65, 81, 0.5)', borderRadius: '16px', padding: '40px 24px', textAlign: 'center' },
-  emptyText: { color: '#6b7280', fontSize: '14px', marginTop: '12px' },
-};
+  emptySection: { background: colors.bg.card, border: `1px dashed ${colors.border.default}`, borderRadius: '16px', padding: '40px 24px', textAlign: 'center' },
+  emptyText: { color: colors.text.muted, fontSize: '14px', marginTop: '12px' },
+});

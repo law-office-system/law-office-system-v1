@@ -1,39 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useTheme } from '../../context/ThemeContext.jsx';
 import {
   Calendar, Clock, MapPin, FileText, ChevronDown, ChevronUp,
   Edit2, Trash2, CheckCircle2, Landmark, Gavel, Briefcase,
   MoreVertical, Link2, AlertTriangle, RotateCcw, Scale,
   Send, FileCheck, Sparkles, ArrowRight, UserCheck
 } from 'lucide-react';
-import { colors, spacing, radius, shadows, transitions } from '../../styles/design-system';
 import { formatDate, formatTime } from '../../utils/date';
-
-// ─── Decision Type Config (sync with SessionForm) ────────────────
-const DECISION_CONFIG = {
-  pending:        { label: 'لم يُصدر',      color: colors.text.disabled, icon: Clock,       stageLabel: '' },
-  adjourned:      { label: 'تأجيل',         color: colors.accent.amber.main, icon: RotateCcw,   stageLabel: 'مؤجلة' },
-  adjourned_notice:{ label: 'تأجيل لإعلان', color: colors.accent.amber.dark, icon: Send,        stageLabel: 'مؤجلة لإعلان' },
-  judgment:       { label: 'حكم',           color: colors.accent.green.main, icon: Gavel,       stageLabel: 'حُكمت' },
-  referred:       { label: 'إحالة',         color: colors.accent.blue.main, icon: ArrowRight,  stageLabel: 'محالة' },
-  absence:        { label: 'غياب',          color: colors.accent.red.main, icon: UserCheck,   stageLabel: 'غياب' },
-  expert:         { label: 'خبير',          color: colors.accent.purple.main, icon: Scale,       stageLabel: 'معينة خبير' },
-  settlement:     { label: 'تسوية',         color: colors.accent.cyan.main, icon: FileCheck,   stageLabel: 'مسوّاة' },
-};
-
-const JUDGMENT_TYPE_LABELS = {
-  accept: { label: 'قبول', color: colors.accent.green.main, bg: colors.accent.green.bg, border: colors.accent.green.main + '25' },
-  reject: { label: 'رفض', color: colors.accent.red.main, bg: colors.accent.red.bg, border: colors.accent.red.main + '25' },
-  partial:{ label: 'جزئي', color: colors.accent.amber.main, bg: colors.accent.amber.bg, border: colors.accent.amber.main + '25' },
-};
-
-const statusConfig = {
-  scheduled:  { label: "مجدولة", color: colors.accent.blue.light, bg: colors.accent.blue.bg, border: colors.accent.blue.main + '25', icon: Calendar, glow: shadows.glow(colors.accent.blue.main) },
-  completed:  { label: "منعقدة", color: colors.accent.green.main, bg: colors.accent.green.bg, border: colors.accent.green.main + '25', icon: CheckCircle2, glow: shadows.glow(colors.accent.green.main) },
-  postponed:  { label: "مؤجلة", color: colors.accent.amber.main, bg: colors.accent.amber.bg, border: colors.accent.amber.main + '25', icon: Clock, glow: shadows.glow(colors.accent.amber.main) },
-  cancelled:  { label: "ملغاة", color: colors.accent.red.main, bg: colors.accent.red.bg, border: colors.accent.red.main + '25', icon: Trash2, glow: shadows.glow(colors.accent.red.main) },
-  "in-progress":{ label: "جارية", color: colors.accent.purple.light, bg: colors.accent.purple.bg, border: colors.accent.purple.main + '25', icon: Clock, glow: shadows.glow(colors.accent.purple.main) },
-  default:    { label: "غير محدد", color: colors.text.disabled, bg: 'rgba(107, 114, 128, 0.12)', border: colors.text.disabled + '25', icon: Calendar, glow: 'none' },
-};
 
 export default function SessionCard({
   session,
@@ -45,6 +18,36 @@ export default function SessionCard({
   linkedTasks = [],
   isAdmin = false
 }) {
+  const { theme } = useTheme();
+  const { colors, spacing, radius, shadows, transitions } = theme;
+
+  // ✅ Configs بتتبني داخل المكون عشان تستخدم الألوان الحية من الثيم
+  const DECISION_CONFIG = useMemo(() => ({
+    pending:        { label: 'لم يُصدر',      color: colors.text.disabled, icon: Clock,       stageLabel: '' },
+    adjourned:      { label: 'تأجيل',         color: colors.accent.amber.main, icon: RotateCcw,   stageLabel: 'مؤجلة' },
+    adjourned_notice:{ label: 'تأجيل لإعلان', color: colors.accent.amber.dark, icon: Send,        stageLabel: 'مؤجلة لإعلان' },
+    judgment:       { label: 'حكم',           color: colors.accent.green.main, icon: Gavel,       stageLabel: 'حُكمت' },
+    referred:       { label: 'إحالة',         color: colors.accent.blue.main, icon: ArrowRight,  stageLabel: 'محالة' },
+    absence:        { label: 'غياب',          color: colors.accent.red.main, icon: UserCheck,   stageLabel: 'غياب' },
+    expert:         { label: 'خبير',          color: colors.accent.purple.main, icon: Scale,       stageLabel: 'معينة خبير' },
+    settlement:     { label: 'تسوية',         color: colors.accent.cyan.main, icon: FileCheck,   stageLabel: 'مسوّاة' },
+  }), [colors]);
+
+  const JUDGMENT_TYPE_LABELS = useMemo(() => ({
+    accept: { label: 'قبول', color: colors.accent.green.main, bg: colors.accent.green.bg, border: colors.accent.green.main + '25' },
+    reject: { label: 'رفض', color: colors.accent.red.main, bg: colors.accent.red.bg, border: colors.accent.red.main + '25' },
+    partial:{ label: 'جزئي', color: colors.accent.amber.main, bg: colors.accent.amber.bg, border: colors.accent.amber.main + '25' },
+  }), [colors]);
+
+  const statusConfig = useMemo(() => ({
+    scheduled:  { label: "مجدولة", color: colors.accent.blue.light, bg: colors.accent.blue.bg, border: colors.accent.blue.main + '25', icon: Calendar, glow: shadows.glow(colors.accent.blue.main) },
+    completed:  { label: "منعقدة", color: colors.accent.green.main, bg: colors.accent.green.bg, border: colors.accent.green.main + '25', icon: CheckCircle2, glow: shadows.glow(colors.accent.green.main) },
+    postponed:  { label: "مؤجلة", color: colors.accent.amber.main, bg: colors.accent.amber.bg, border: colors.accent.amber.main + '25', icon: Clock, glow: shadows.glow(colors.accent.amber.main) },
+    cancelled:  { label: "ملغاة", color: colors.accent.red.main, bg: colors.accent.red.bg, border: colors.accent.red.main + '25', icon: Trash2, glow: shadows.glow(colors.accent.red.main) },
+    "in-progress":{ label: "جارية", color: colors.accent.purple.light, bg: colors.accent.purple.bg, border: colors.accent.purple.main + '25', icon: Clock, glow: shadows.glow(colors.accent.purple.main) },
+    default:    { label: "غير محدد", color: colors.text.disabled, bg: 'rgba(107, 114, 128, 0.12)', border: colors.text.disabled + '25', icon: Calendar, glow: 'none' },
+  }), [colors, shadows]);
+
   const [expanded, setExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -64,7 +67,6 @@ export default function SessionCard({
   const sc = statusConfig[status] || statusConfig.default;
   const StatusIcon = sc.icon;
 
-  // ─── NEW: Decision metadata ─────────────────────────────────────
   const decisionType = session.decisionType || 'pending';
   const decisionMeta = DECISION_CONFIG[decisionType] || DECISION_CONFIG.pending;
   const DecisionIcon = decisionMeta.icon;
@@ -164,7 +166,7 @@ export default function SessionCard({
                 {sc.label}
               </div>
 
-              {/* ── NEW: Decision Type Badge ── */}
+              {/* Decision Type Badge */}
               {hasDecision && (
                 <div style={{
                   display: "flex",
@@ -184,7 +186,7 @@ export default function SessionCard({
                 </div>
               )}
 
-              {/* ── NEW: Auto Stage Badge ── */}
+              {/* Auto Stage Badge */}
               {session.suggestedStage && decisionMeta.stageLabel && (
                 <div style={{
                   display: "flex",
@@ -204,7 +206,7 @@ export default function SessionCard({
                 </div>
               )}
 
-              {/* ── NEW: Judgment Result Badge ── */}
+              {/* Judgment Result Badge */}
               {hasJudgment && judgmentMeta && (
                 <div style={{
                   display: "flex",
@@ -409,7 +411,7 @@ export default function SessionCard({
         }}>
           <div style={{ paddingTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
 
-            {/* ── Decision Details (NEW) ── */}
+            {/* ── Decision Details ── */}
             {hasDecision && (
               <DetailBox
                 icon={DecisionIcon}
@@ -436,7 +438,6 @@ export default function SessionCard({
                   </p>
                 )}
 
-                {/* Decision Date */}
                 {session.decisionDate && (
                   <div style={{
                     marginTop: 10,
@@ -453,7 +454,7 @@ export default function SessionCard({
               </DetailBox>
             )}
 
-            {/* ── Judgment Details (NEW, conditional) ── */}
+            {/* ── Judgment Details ── */}
             {hasJudgment && (
               <DetailBox
                 icon={Gavel}
@@ -462,7 +463,6 @@ export default function SessionCard({
                 bg={`${colors.accent.green.main}06`}
                 border={`${colors.accent.green.main}20`}
               >
-                {/* Judgment Type */}
                 {judgmentMeta && (
                   <div style={{
                     display: "inline-flex",
@@ -482,7 +482,6 @@ export default function SessionCard({
                   </div>
                 )}
 
-                {/* Judgment Summary */}
                 {session.judgmentSummary && (
                   <p style={{
                     fontSize: `clamp(12px, 3.5vw, 14px)`,
@@ -497,7 +496,6 @@ export default function SessionCard({
                   </p>
                 )}
 
-                {/* Appeal Info */}
                 <div style={{
                   marginTop: 10,
                   display: "flex",
@@ -551,7 +549,7 @@ export default function SessionCard({
               </DetailBox>
             )}
 
-            {/* ── Suggested Task (NEW) ── */}
+            {/* ── Suggested Task ── */}
             {session.suggestedTask && (
               <DetailBox
                 icon={Sparkles}
@@ -623,7 +621,11 @@ export default function SessionCard({
 
             {/* ── Description ── */}
             {session.description && (
-              <DetailSection icon={FileText} iconColor={colors.accent.purple.light} title="تفاصيل الجلسة">
+              <DetailSection
+                icon={FileText}
+                iconColor={colors.accent.purple.light}
+                title="تفاصيل الجلسة"
+              >
                 <p style={{
                   fontSize: `clamp(12px, 3.5vw, 14px)`,
                   color: colors.text.muted,
@@ -641,7 +643,11 @@ export default function SessionCard({
 
             {/* ── Notes ── */}
             {session.notes && (
-              <DetailSection icon={FileText} iconColor={colors.accent.blue.light} title="ملاحظات">
+              <DetailSection
+                icon={FileText}
+                iconColor={colors.accent.blue.light}
+                title="ملاحظات"
+              >
                 <p style={{
                   fontSize: `clamp(12px, 3.5vw, 14px)`,
                   color: colors.text.muted,
@@ -659,7 +665,11 @@ export default function SessionCard({
 
             {/* ── Attachments ── */}
             {session.attachments?.length > 0 && (
-              <DetailSection icon={Link2} iconColor={colors.accent.green.light} title="المرفقات">
+              <DetailSection
+                icon={Link2}
+                iconColor={colors.accent.green.light}
+                title="المرفقات"
+              >
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {session.attachments.map((file, idx) => (
                     <a
@@ -682,7 +692,7 @@ export default function SessionCard({
                         wordBreak: "break-all",
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(55, 65, 81, 0.7)';
+                        e.currentTarget.style.background = colors.bg.hover;
                         e.currentTarget.style.borderColor = `${colors.accent.blue.main}30`;
                         e.currentTarget.style.color = colors.text.primary;
                       }}
@@ -707,10 +717,13 @@ export default function SessionCard({
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// SUB COMPONENTS
+// SUB COMPONENTS — كل واحد بيستخدم useTheme independently
 // ═══════════════════════════════════════════════════════════════════
 
 function MetaItem({ icon: Icon, iconColor, label, highlight = false }) {
+  const { theme } = useTheme();
+  const { colors, spacing, radius, transitions } = theme;
+
   return (
     <div style={{
       display: "flex",
@@ -735,6 +748,9 @@ function MetaItem({ icon: Icon, iconColor, label, highlight = false }) {
 }
 
 function MenuItem({ icon: Icon, label, color, danger, onClick }) {
+  const { theme } = useTheme();
+  const { colors, spacing, transitions } = theme;
+
   return (
     <button
       onClick={onClick}
@@ -774,6 +790,9 @@ function MenuItem({ icon: Icon, label, color, danger, onClick }) {
 }
 
 function DetailBox({ icon: Icon, title, color, bg, border, children }) {
+  const { theme } = useTheme();
+  const { radius } = theme;
+
   return (
     <div style={{
       padding: `clamp(12px, 3.5vw, 16px)`,
@@ -799,6 +818,9 @@ function DetailBox({ icon: Icon, title, color, bg, border, children }) {
 }
 
 function DetailSection({ icon: Icon, iconColor, title, children }) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+
   return (
     <div>
       <h5 style={{

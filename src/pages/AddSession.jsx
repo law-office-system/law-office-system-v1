@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Calendar, Clock, MapPin, FileText, Landmark, AlertCircle, CheckCircle2, ArrowRight, Layers } from "lucide-react";
 import { doc, updateDoc, arrayUnion, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext.jsx";
 import { db } from "../firebaseDb";
 
 // ✅ خريطة ترجمة درجات التقاضي
@@ -33,14 +34,17 @@ const translateLevelType = (type) => {
 };
 
 const statusOptions = [
-  { value: 'scheduled', label: 'مجدولة', color: '#60a5fa' },
-  { value: 'in-progress', label: 'جارية', color: '#a78bfa' },
-  { value: 'completed', label: 'منعقدة', color: '#10b981' },
-  { value: 'postponed', label: 'مؤجلة', color: '#f59e0b' },
-  { value: 'cancelled', label: 'ملغاة', color: '#ef4444' },
+  { value: 'scheduled', label: 'مجدولة', getColor: (c) => c.accent.blue.light },
+  { value: 'in-progress', label: 'جارية', getColor: (c) => c.accent.purple.light },
+  { value: 'completed', label: 'منعقدة', getColor: (c) => c.accent.green.main },
+  { value: 'postponed', label: 'مؤجلة', getColor: (c) => c.accent.amber.main },
+  { value: 'cancelled', label: 'ملغاة', getColor: (c) => c.accent.red.main },
 ];
 
 export default function AddSession() {
+  const { theme } = useTheme();
+  const { colors } = theme;
+  const styles = getStyles(colors);
   const { id } = useParams();
   const navigate = useNavigate();
   const { userData } = useAuth();
@@ -183,7 +187,7 @@ export default function AddSession() {
         {/* Header */}
         <div style={styles.header}>
           <div style={styles.headerIcon}>
-            <Calendar color="#fbbf24" size={24} strokeWidth={2.5} />
+            <Calendar color={colors.accent.amber.light} size={24} strokeWidth={2.5} />
           </div>
           <div>
             <h2 style={styles.headerTitle}>جدولة جلسة جديدة</h2>
@@ -198,7 +202,7 @@ export default function AddSession() {
               <span style={styles.required}>*</span> عنوان الجلسة
             </label>
             <div style={styles.inputWrapper}>
-              <FileText size={16} color="#6b7280" style={styles.inputIcon} />
+              <FileText size={16} color={colors.text.muted} style={styles.inputIcon} />
               <input
                 type="text"
                 name="title"
@@ -207,14 +211,14 @@ export default function AddSession() {
                 style={{
                   ...styles.input,
                   paddingRight: '40px',
-                  borderColor: errors.title ? '#ef4444' : 'rgba(55, 65, 81, 0.5)',
+                  borderColor: errors.title ? colors.accent.red.main : colors.border.default,
                 }}
                 placeholder="مثال: جلسة نظر الدعوى"
               />
             </div>
             {errors.title && (
               <div style={styles.error}>
-                <AlertCircle size={14} color="#ef4444" />
+                <AlertCircle size={14} color={colors.accent.red.main} />
                 {errors.title}
               </div>
             )}
@@ -226,7 +230,7 @@ export default function AddSession() {
               <span style={styles.required}>*</span> درجة التقاضي
             </label>
             <div style={styles.inputWrapper}>
-              <Layers size={16} color="#6b7280" style={styles.inputIcon} />
+              <Layers size={16} color={colors.text.muted} style={styles.inputIcon} />
               <select
                 name="litigationLevelId"
                 value={form.litigationLevelId}
@@ -234,7 +238,7 @@ export default function AddSession() {
                 style={{
                   ...styles.input,
                   paddingRight: '40px',
-                  borderColor: errors.litigationLevelId ? '#ef4444' : 'rgba(55, 65, 81, 0.5)',
+                  borderColor: errors.litigationLevelId ? colors.accent.red.main : colors.border.default,
                   cursor: levelsLoading ? 'not-allowed' : 'pointer',
                   appearance: 'none',
                   WebkitAppearance: 'none',
@@ -255,12 +259,12 @@ export default function AddSession() {
             </div>
             {errors.litigationLevelId && (
               <div style={styles.error}>
-                <AlertCircle size={14} color="#ef4444" />
+                <AlertCircle size={14} color={colors.accent.red.main} />
                 {errors.litigationLevelId}
               </div>
             )}
             {levels.length === 0 && !levelsLoading && (
-              <p style={{ color: '#f59e0b', fontSize: 13, marginTop: 4 }}>
+              <p style={{ color: colors.accent.amber.main, fontSize: 13, marginTop: 4 }}>
                 ⚠️ لا توجد درجات تقاضي مسجلة لهذه القضية. يمكنك إضافة درجات من صفحة تفاصيل القضية.
               </p>
             )}
@@ -279,12 +283,12 @@ export default function AddSession() {
                     onClick={() => handleStatusSelect(opt.value)}
                     style={{
                       ...styles.statusBtn,
-                      background: isSelected ? opt.color + '15' : 'rgba(31, 41, 55, 0.5)',
-                      borderColor: isSelected ? opt.color + '50' : 'rgba(55, 65, 81, 0.3)',
-                      color: isSelected ? opt.color : '#9ca3af',
+                      background: isSelected ? opt.getColor(colors) + '15' : colors.bg.hover,
+                      borderColor: isSelected ? opt.getColor(colors) + '50' : colors.border.default,
+                      color: isSelected ? opt.getColor(colors) : colors.text.muted,
                     }}
                   >
-                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: opt.color }} />
+                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: opt.getColor(colors) }} />
                     {opt.label}
                   </button>
                 );
@@ -299,7 +303,7 @@ export default function AddSession() {
                 <span style={styles.required}>*</span> تاريخ الجلسة
               </label>
               <div style={styles.inputWrapper}>
-                <Calendar size={16} color="#6b7280" style={styles.inputIcon} />
+                <Calendar size={16} color={colors.text.muted} style={styles.inputIcon} />
                 <input
                   type="date"
                   name="nextSessionDate"
@@ -308,13 +312,13 @@ export default function AddSession() {
                   style={{
                     ...styles.input,
                     paddingRight: '40px',
-                    borderColor: errors.nextSessionDate ? '#ef4444' : 'rgba(55, 65, 81, 0.5)',
+                    borderColor: errors.nextSessionDate ? colors.accent.red.main : colors.border.default,
                   }}
                 />
               </div>
               {errors.nextSessionDate && (
                 <div style={styles.error}>
-                  <AlertCircle size={14} color="#ef4444" />
+                  <AlertCircle size={14} color={colors.accent.red.main} />
                   {errors.nextSessionDate}
                 </div>
               )}
@@ -323,7 +327,7 @@ export default function AddSession() {
             <div style={styles.fieldGroup}>
               <label style={styles.label}>وقت الجلسة</label>
               <div style={styles.inputWrapper}>
-                <Clock size={16} color="#6b7280" style={styles.inputIcon} />
+                <Clock size={16} color={colors.text.muted} style={styles.inputIcon} />
                 <input
                   type="time"
                   name="time"
@@ -340,7 +344,7 @@ export default function AddSession() {
             <div style={styles.fieldGroup}>
               <label style={styles.label}>مكان الانعقاد</label>
               <div style={styles.inputWrapper}>
-                <MapPin size={16} color="#6b7280" style={styles.inputIcon} />
+                <MapPin size={16} color={colors.text.muted} style={styles.inputIcon} />
                 <input
                   type="text"
                   name="location"
@@ -355,7 +359,7 @@ export default function AddSession() {
             <div style={styles.fieldGroup}>
               <label style={styles.label}>رقم الرول</label>
               <div style={styles.inputWrapper}>
-                <Landmark size={16} color="#6b7280" style={styles.inputIcon} />
+                <Landmark size={16} color={colors.text.muted} style={styles.inputIcon} />
                 <input
                   type="text"
                   name="roll"
@@ -431,17 +435,17 @@ export default function AddSession() {
   );
 }
 
-const styles = {
+const getStyles = (colors) => ({
   page: {
     padding: "clamp(12px, 3vw, 24px)",
-    background: "#0f172a",
+    background: colors.bg.page,
     minHeight: "100vh",
     direction: "rtl",
     fontFamily: "'Segoe UI', 'Tahoma', 'Arial', sans-serif",
   },
   card: {
-    background: "#1e293b",
-    border: "1px solid rgba(55, 65, 81, 0.5)",
+    background: colors.bg.card,
+    border: `1px solid ${colors.border.default}`,
     borderRadius: 24,
     maxWidth: 700,
     margin: "0 auto",
@@ -452,29 +456,29 @@ const styles = {
     alignItems: "center",
     gap: 16,
     padding: "24px 24px 16px",
-    borderBottom: "1px solid rgba(55, 65, 81, 0.3)",
+    borderBottom: `1px solid ${colors.border.default}`,
   },
   headerIcon: {
     width: 52,
     height: 52,
-    background: "linear-gradient(135deg, #1e3a8a, #1e40af)",
+    background: `linear-gradient(135deg, ${colors.accent.blue.dark}, ${colors.accent.blue.main})`,
     borderRadius: 16,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    boxShadow: "0 8px 24px rgba(30, 64, 175, 0.25)",
+    boxShadow: `0 8px 24px ${colors.accent.blue.main}40`,
     flexShrink: 0,
   },
   headerTitle: {
     margin: 0,
     fontSize: 20,
     fontWeight: 700,
-    color: "#f3f4f6",
+    color: colors.text.primary,
   },
   headerSubtitle: {
     margin: "4px 0 0 0",
     fontSize: 14,
-    color: "#9ca3af",
+    color: colors.text.muted,
   },
   form: {
     padding: "20px 24px 24px",
@@ -490,13 +494,13 @@ const styles = {
   label: {
     fontSize: 14,
     fontWeight: 600,
-    color: "#d1d5db",
+    color: colors.text.secondary,
     display: "flex",
     alignItems: "center",
     gap: 4,
   },
   required: {
-    color: "#ef4444",
+    color: colors.accent.red.main,
     fontSize: 16,
   },
   inputWrapper: {
@@ -512,10 +516,10 @@ const styles = {
   input: {
     width: "100%",
     padding: "12px 16px",
-    background: "rgba(15, 23, 42, 0.6)",
-    border: "1px solid rgba(55, 65, 81, 0.5)",
+    background: colors.bg.input,
+    border: `1px solid ${colors.border.default}`,
     borderRadius: 12,
-    color: "#f3f4f6",
+    color: colors.text.primary,
     fontSize: 14,
     fontFamily: "inherit",
     outline: "none",
@@ -525,10 +529,10 @@ const styles = {
   textarea: {
     width: "100%",
     padding: "12px 16px",
-    background: "rgba(15, 23, 42, 0.6)",
-    border: "1px solid rgba(55, 65, 81, 0.5)",
+    background: colors.bg.input,
+    border: `1px solid ${colors.border.default}`,
     borderRadius: 12,
-    color: "#f3f4f6",
+    color: colors.text.primary,
     fontSize: 14,
     fontFamily: "inherit",
     outline: "none",
@@ -566,7 +570,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     gap: 6,
-    color: "#ef4444",
+    color: colors.accent.red.main,
     fontSize: 13,
     marginTop: 4,
   },
@@ -575,15 +579,15 @@ const styles = {
     gap: 12,
     marginTop: 8,
     paddingTop: 16,
-    borderTop: "1px solid rgba(55, 65, 81, 0.3)",
+    borderTop: `1px solid ${colors.border.default}`,
   },
   cancelBtn: {
     flex: 1,
     padding: "12px 24px",
     background: "transparent",
-    border: "1px solid rgba(55, 65, 81, 0.5)",
+    border: `1px solid ${colors.border.default}`,
     borderRadius: 14,
-    color: "#9ca3af",
+    color: colors.text.muted,
     fontSize: 15,
     fontWeight: 600,
     cursor: "pointer",
@@ -593,7 +597,7 @@ const styles = {
   submitBtn: {
     flex: 1,
     padding: "12px 24px",
-    background: "#1e40af",
+    background: colors.accent.blue.dark,
     border: "none",
     borderRadius: 14,
     color: "white",
@@ -602,7 +606,7 @@ const styles = {
     cursor: "pointer",
     transition: "all 0.2s ease",
     fontFamily: "inherit",
-    boxShadow: "0 4px 16px rgba(30, 64, 175, 0.3)",
+    boxShadow: `0 4px 16px ${colors.accent.blue.main}40`,
   },
   spinner: {
     width: 18,
@@ -613,4 +617,4 @@ const styles = {
     animation: "spin 0.8s linear infinite",
     display: "inline-block",
   },
-};
+});

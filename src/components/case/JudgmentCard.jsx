@@ -5,6 +5,7 @@ import {
   User, FileText, ChevronDown, ChevronUp, Bell, FolderOpen
 } from 'lucide-react';
 import { formatDate } from '../../utils/date';
+import { useTheme } from '../../context/ThemeContext.jsx';
 
 // ========== CONFIGS - MATCHING JUDGMENT FORM ==========
 
@@ -17,31 +18,34 @@ const categoryLabels = {
 const categoryConfig = {
   order: {
     label: 'أمر',
-    color: '#6b7280',
-    bg: 'rgba(107, 114, 128, 0.15)',
-    border: 'rgba(107, 114, 128, 0.3)',
+    getColor: (c) => c.text.muted,
+    getBg: (c) => c.text.disabled + '25',
+    getBorder: (c) => c.text.disabled + '40',
   },
   preliminary: {
     label: 'حكم تمهيدي',
-    color: '#d97706',
-    bg: 'rgba(217, 119, 6, 0.15)',
-    border: 'rgba(217, 119, 6, 0.3)',
+    getColor: (c) => c.accent.amber.main,
+    getBg: (c) => c.accent.amber.bg,
+    getBorder: (c) => c.accent.amber.main + '30',
   },
   final: {
     label: 'حكم قطعي',
-    color: '#1e40af',
-    bg: 'rgba(30, 64, 175, 0.15)',
-    border: 'rgba(30, 64, 175, 0.3)',
+    getColor: (c) => c.accent.blue.dark,
+    getBg: (c) => c.accent.blue.bg,
+    getBorder: (c) => c.accent.blue.main + '30',
   },
 };
 
 const resultConfig = {
-  win: { label: 'لصالحنا', color: '#10b981', bg: 'rgba(16, 185, 129, 0.15)', icon: CheckCircle2 },
-  lose: { label: 'ضدنا', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.15)', icon: AlertCircle },
-  draw: { label: 'متعادل', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)', icon: Scale },
+  win: { label: 'لصالحنا', getColor: (c) => c.accent.green.main, getBg: (c) => c.accent.green.bg, icon: CheckCircle2 },
+  lose: { label: 'ضدنا', getColor: (c) => c.accent.red.main, getBg: (c) => c.accent.red.bg, icon: AlertCircle },
+  draw: { label: 'متعادل', getColor: (c) => c.accent.amber.main, getBg: (c) => c.accent.amber.bg, icon: Scale },
 };
 
 export default function JudgmentCard({ judgment, caseInfo, onEdit, onDelete, onToggleFollowUp }) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+  const styles = getStyles(colors);
   const [expanded, setExpanded] = useState(false);
 
   const handleEdit = () => {
@@ -77,14 +81,14 @@ export default function JudgmentCard({ judgment, caseInfo, onEdit, onDelete, onT
     <div 
       style={{
         ...styles.card,
-        borderRight: result ? `4px solid ${result.color}` : '4px solid transparent',
-        borderColor: needsFollowUp ? 'rgba(217, 119, 6, 0.5)' : 'rgba(55, 65, 81, 0.5)',
+        borderRight: result ? `4px solid ${result.getColor(colors)}` : '4px solid transparent',
+        borderColor: needsFollowUp ? colors.accent.amber.main + '50' : colors.border.default,
       }}
     >
       {/* Case Header */}
       {caseInfo && (
         <div style={styles.caseHeader}>
-          <FolderOpen size={14} color="#60a5fa" />
+          <FolderOpen size={14} color={colors.accent.blue.light} />
           <span style={styles.caseTitle}>{caseInfo.title}</span>
           {caseInfo.number && (
             <span style={styles.caseNumber}>(رقم: {caseInfo.number})</span>
@@ -93,8 +97,8 @@ export default function JudgmentCard({ judgment, caseInfo, onEdit, onDelete, onT
       )}
       {judgment.caseId === 'general' && (
         <div style={styles.caseHeader}>
-          <FolderOpen size={14} color="#6b7280" />
-          <span style={{ ...styles.caseTitle, color: '#6b7280' }}>حكم عام (غير مرتبط بقضية)</span>
+          <FolderOpen size={14} color={colors.text.muted} />
+          <span style={{ ...styles.caseTitle, color: colors.text.muted }}>حكم عام (غير مرتبط بقضية)</span>
         </div>
       )}
 
@@ -106,9 +110,9 @@ export default function JudgmentCard({ judgment, caseInfo, onEdit, onDelete, onT
             {/* Category Badge */}
             <div style={{
               ...styles.categoryBadge,
-              background: catConfig.bg,
-              border: `1px solid ${catConfig.border}`,
-              color: catConfig.color,
+              background: catConfig.getBg(colors),
+              border: `1px solid ${catConfig.getBorder(colors)}`,
+              color: catConfig.getColor(colors),
             }}>
               <Scale size={13} strokeWidth={2.5} />
               {catConfig.label}
@@ -118,9 +122,9 @@ export default function JudgmentCard({ judgment, caseInfo, onEdit, onDelete, onT
             {judgment.type && (
               <div style={{
                 ...styles.typeBadge,
-                background: 'rgba(31, 41, 55, 0.5)',
-                border: '1px solid rgba(55, 65, 81, 0.3)',
-                color: '#d1d5db',
+                background: colors.bg.hover,
+                border: `1px solid ${colors.border.default}`,
+                color: colors.text.secondary,
               }}>
                 {judgment.type}
               </div>
@@ -130,8 +134,8 @@ export default function JudgmentCard({ judgment, caseInfo, onEdit, onDelete, onT
             {result && (
               <div style={{
                 ...styles.resultBadge,
-                background: result.bg,
-                color: result.color,
+                background: result.getBg(colors),
+                color: result.getColor(colors),
               }}>
                 <result.icon size={13} strokeWidth={2.5} />
                 {result.label}
@@ -161,8 +165,8 @@ export default function JudgmentCard({ judgment, caseInfo, onEdit, onDelete, onT
                 onClick={handleToggleFollowUp}
                 style={{
                   ...styles.actionBtn,
-                  background: needsFollowUp ? 'rgba(217, 119, 6, 0.15)' : 'transparent',
-                  color: needsFollowUp ? '#d97706' : '#6b7280',
+                  background: needsFollowUp ? colors.accent.amber.bg : 'transparent',
+                  color: needsFollowUp ? colors.accent.amber.main : colors.text.muted,
                 }}
                 title={needsFollowUp ? 'إلغاء المتابعة' : 'تحديد للمتابعة'}
               >
@@ -175,12 +179,12 @@ export default function JudgmentCard({ judgment, caseInfo, onEdit, onDelete, onT
                 onClick={handleEdit}
                 style={styles.actionBtn}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)';
-                  e.currentTarget.style.color = '#60a5fa';
+                  e.currentTarget.style.background = colors.accent.blue.bg;
+                  e.currentTarget.style.color = colors.accent.blue.light;
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = '#6b7280';
+                  e.currentTarget.style.color = colors.text.muted;
                 }}
                 title="تعديل"
               >
@@ -192,12 +196,12 @@ export default function JudgmentCard({ judgment, caseInfo, onEdit, onDelete, onT
                 onClick={handleDelete}
                 style={styles.actionBtn}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(248, 113, 113, 0.15)';
-                  e.currentTarget.style.color = '#f87171';
+                  e.currentTarget.style.background = colors.accent.red.bg;
+                  e.currentTarget.style.color = colors.accent.red.light;
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = '#6b7280';
+                  e.currentTarget.style.color = colors.text.muted;
                 }}
                 title="حذف"
               >
@@ -221,27 +225,27 @@ export default function JudgmentCard({ judgment, caseInfo, onEdit, onDelete, onT
         {/* Meta Info */}
         <div style={styles.metaRow}>
           <div style={styles.metaItem}>
-            <Calendar size={13} color="#8b5cf6" />
+            <Calendar size={13} color={colors.accent.purple.main} />
             <span>تاريخ {isOrder ? 'الأمر' : 'الحكم'}: {formatDate(judgment.date)}</span>
           </div>
 
           {judgment.sessionDate && (
             <div style={styles.metaItem}>
-              <Clock size={13} color="#60a5fa" />
+              <Clock size={13} color={colors.accent.blue.light} />
               <span>الجلسة: {formatDate(judgment.sessionDate)}</span>
             </div>
           )}
 
           {judgment.judge && (
             <div style={styles.metaItem}>
-              <User size={13} color="#fbbf24" />
+              <User size={13} color={colors.accent.amber.light} />
               <span>القاضي: {judgment.judge}</span>
             </div>
           )}
 
           {judgment.caseNumber && (
             <div style={styles.metaItem}>
-              <FileText size={13} color="#9ca3af" />
+              <FileText size={13} color={colors.text.muted} />
               <span>القضية: {judgment.caseNumber}</span>
             </div>
           )}
@@ -254,7 +258,7 @@ export default function JudgmentCard({ judgment, caseInfo, onEdit, onDelete, onT
           {judgment.summary && (
             <div style={styles.detailSection}>
               <h5 style={styles.detailTitle}>
-                <FileText size={14} color="#8b5cf6" />
+                <FileText size={14} color={colors.accent.purple.main} />
                 ملخص {isOrder ? 'الأمر' : 'الحكم'}
               </h5>
               <p style={styles.detailText}>{judgment.summary}</p>
@@ -265,7 +269,7 @@ export default function JudgmentCard({ judgment, caseInfo, onEdit, onDelete, onT
           {isFinal && judgment.details && (
             <div style={styles.detailSection}>
               <h5 style={styles.detailTitle}>
-                <FileText size={14} color="#60a5fa" />
+                <FileText size={14} color={colors.accent.blue.light} />
                 التفاصيل الكاملة
               </h5>
               <p style={styles.detailText}>{judgment.details}</p>
@@ -275,7 +279,7 @@ export default function JudgmentCard({ judgment, caseInfo, onEdit, onDelete, onT
           {isFinal && judgment.obligations && (
             <div style={styles.detailSection}>
               <h5 style={styles.detailTitle}>
-                <AlertCircle size={14} color="#ef4444" />
+                <AlertCircle size={14} color={colors.accent.red.main} />
                 الالتزامات
               </h5>
               <p style={styles.detailText}>{judgment.obligations}</p>
@@ -286,19 +290,19 @@ export default function JudgmentCard({ judgment, caseInfo, onEdit, onDelete, onT
           {(isOrder || isPreliminary) && judgment.appealDeadline && (
             <div style={{
               ...styles.followUpBox,
-              background: isOverdue ? 'rgba(239, 68, 68, 0.1)' : 'rgba(217, 119, 6, 0.1)',
-              borderColor: isOverdue ? 'rgba(239, 68, 68, 0.3)' : 'rgba(217, 119, 6, 0.3)',
+              background: isOverdue ? colors.accent.red.bg : colors.accent.amber.bg,
+              borderColor: isOverdue ? colors.accent.red.main + '30' : colors.accent.amber.main + '30',
             }}>
               <h5 style={{
                 ...styles.followUpTitle,
-                color: isOverdue ? '#ef4444' : '#d97706',
+                color: isOverdue ? colors.accent.red.main : colors.accent.amber.main,
               }}>
                 <Clock size={14} />
                 موعد المتابعة
               </h5>
               <p style={{
                 ...styles.followUpText,
-                color: isOverdue ? '#ef4444' : '#d97706',
+                color: isOverdue ? colors.accent.red.main : colors.accent.amber.main,
               }}>
                 {formatDate(judgment.appealDeadline)}
                 {isOverdue && <span style={{ marginRight: '8px', fontWeight: 700 }}>(انتهى الموعد)</span>}
@@ -310,19 +314,19 @@ export default function JudgmentCard({ judgment, caseInfo, onEdit, onDelete, onT
           {isFinal && judgment.appealDeadline && (
             <div style={{
               ...styles.appealBox,
-              background: isOverdue ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-              borderColor: isOverdue ? 'rgba(239, 68, 68, 0.3)' : 'rgba(245, 158, 11, 0.3)',
+              background: isOverdue ? colors.accent.red.bg : colors.accent.amber.bg,
+              borderColor: isOverdue ? colors.accent.red.main + '30' : colors.accent.amber.main + '30',
             }}>
               <h5 style={{
                 ...styles.appealTitle,
-                color: isOverdue ? '#ef4444' : '#f59e0b',
+                color: isOverdue ? colors.accent.red.main : colors.accent.amber.main,
               }}>
                 <Clock size={14} />
                 موعد الاستئناف
               </h5>
               <p style={{
                 ...styles.appealText,
-                color: isOverdue ? '#ef4444' : '#f59e0b',
+                color: isOverdue ? colors.accent.red.main : colors.accent.amber.main,
               }}>
                 {formatDate(judgment.appealDeadline)}
                 {isOverdue && <span style={{ marginRight: '8px', fontWeight: 700 }}>(انتهى الموعد)</span>}
@@ -333,7 +337,7 @@ export default function JudgmentCard({ judgment, caseInfo, onEdit, onDelete, onT
           {judgment.attachments?.length > 0 && (
             <div style={styles.detailSection}>
               <h5 style={styles.detailTitle}>
-                <FileText size={14} color="#10b981" />
+                <FileText size={14} color={colors.accent.green.main} />
                 المرفقات
               </h5>
               <div style={styles.attachmentsGrid}>
@@ -358,10 +362,10 @@ export default function JudgmentCard({ judgment, caseInfo, onEdit, onDelete, onT
   );
 }
 
-const styles = {
+const getStyles = (colors) => ({
   card: {
-    background: '#1e293b',
-    border: '1px solid rgba(55, 65, 81, 0.5)',
+    background: colors.bg.card,
+    border: `1px solid ${colors.border.default}`,
     borderRadius: '16px',
     overflow: 'hidden',
     transition: 'all 0.2s ease',
@@ -372,17 +376,17 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     padding: '10px 20px',
-    background: 'rgba(15, 23, 42, 0.6)',
-    borderBottom: '1px solid rgba(55, 65, 81, 0.3)',
+    background: colors.bg.page,
+    borderBottom: `1px solid ${colors.border.default}`,
   },
   caseTitle: {
     fontSize: '13px',
     fontWeight: '600',
-    color: '#60a5fa',
+    color: colors.accent.blue.light,
   },
   caseNumber: {
     fontSize: '12px',
-    color: '#6b7280',
+    color: colors.text.muted,
     fontWeight: '500',
   },
   cardInner: {
@@ -434,8 +438,8 @@ const styles = {
     alignItems: 'center',
     gap: '4px',
     padding: '4px 10px',
-    background: 'rgba(217, 119, 6, 0.15)',
-    color: '#d97706',
+    background: colors.accent.amber.bg,
+    color: colors.accent.amber.main,
     borderRadius: '20px',
     fontSize: '11px',
     fontWeight: '700',
@@ -445,8 +449,8 @@ const styles = {
     alignItems: 'center',
     gap: '4px',
     padding: '4px 10px',
-    background: 'rgba(239, 68, 68, 0.15)',
-    color: '#ef4444',
+    background: colors.accent.red.bg,
+    color: colors.accent.red.main,
     borderRadius: '20px',
     fontSize: '11px',
     fontWeight: '700',
@@ -462,7 +466,7 @@ const styles = {
     borderRadius: '10px',
     border: 'none',
     background: 'transparent',
-    color: '#6b7280',
+    color: colors.text.muted,
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     display: 'flex',
@@ -472,7 +476,7 @@ const styles = {
   title: {
     fontSize: '16px',
     fontWeight: '700',
-    color: '#f3f4f6',
+    color: colors.text.primary,
     margin: '0 0 10px 0',
     lineHeight: 1.4,
     wordBreak: 'break-word',
@@ -488,14 +492,14 @@ const styles = {
     alignItems: 'center',
     gap: '5px',
     fontSize: '13px',
-    color: '#9ca3af',
+    color: colors.text.muted,
     padding: '4px 10px',
-    background: 'rgba(31, 41, 55, 0.5)',
+    background: colors.bg.hover,
     borderRadius: '8px',
   },
   expandedContent: {
     padding: '16px 20px',
-    borderTop: '1px solid rgba(55, 65, 81, 0.3)',
+    borderTop: `1px solid ${colors.border.default}`,
   },
   detailSection: {
     marginBottom: '16px',
@@ -506,16 +510,16 @@ const styles = {
     gap: '8px',
     fontSize: '13px',
     fontWeight: '600',
-    color: '#d1d5db',
+    color: colors.text.secondary,
     margin: '0 0 8px 0',
   },
   detailText: {
     fontSize: '14px',
-    color: '#9ca3af',
+    color: colors.text.muted,
     lineHeight: 1.7,
     margin: 0,
     padding: '12px',
-    background: 'rgba(15, 23, 42, 0.5)',
+    background: colors.bg.input,
     borderRadius: '12px',
   },
   followUpBox: {
@@ -564,11 +568,11 @@ const styles = {
     alignItems: 'center',
     gap: '6px',
     padding: '8px 14px',
-    background: 'rgba(55, 65, 81, 0.5)',
-    color: '#d1d5db',
+    background: colors.bg.hover,
+    color: colors.text.secondary,
     borderRadius: '10px',
     fontSize: '13px',
     textDecoration: 'none',
     transition: 'all 0.2s',
   },
-};
+});
