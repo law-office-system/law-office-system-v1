@@ -47,6 +47,9 @@ const OfficeConnections = lazy(() => import("./pages/OfficeConnections"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 
+/* 🆕 NEW: Documents Page */
+const Documents = lazy(() => import("./pages/Documents"));
+
 /* 🆕 NEW: Office Settings Page */
 const OfficeSettings = lazy(() => import("./pages/OfficeSettings"));
 
@@ -103,7 +106,6 @@ function NotificationSync() {
     if (!userData?.officeId || isSyncing) return;
 
     const now = Date.now();
-    // ✅ منع التزامن المتكرر (أقل من 5 دقائق)
     if (now - lastSyncRef.current < 5 * 60 * 1000) return;
 
     setIsSyncing(true);
@@ -131,25 +133,22 @@ function NotificationSync() {
   useEffect(() => {
     if (!userData?.officeId) return;
 
-    // ✅ التزامن الأولي بعد 3 ثواني (مش فوراً)
     const initialTimer = setTimeout(() => {
       checkAndSync();
     }, 3000);
 
-    // ✅ التزامن الدوري كل 15 دقيقة (مش 10)
     const interval = setInterval(() => {
       if (!document.hidden) {
         checkAndSync();
       }
     }, 15 * 60 * 1000);
 
-    // ✅ التزامن عند العودة للصفحة بعد 30 ثانية
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
         syncTimeoutRef.current = setTimeout(() => {
           checkAndSync();
-        }, 30000); // 30 ثانية بعد العودة
+        }, 30000);
       }
     };
 
@@ -171,7 +170,6 @@ function HomeRedirect() {
   const { user, userData, loading } = useAuth();
   const location = window.location;
 
-  // Don't redirect if on public pages
   const publicPaths = ["/verify-email", "/forgot-password", "/login", "/register", "/home"];
   if (publicPaths.includes(location.pathname)) {
     return null;
@@ -190,7 +188,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <ThemeProvider>          {/* ← 🆕 NEW: ThemeProvider wraps everything */}
+        <ThemeProvider>
           <BrowserRouter>
             <Suspense fallback={<LoadingScreen />}>
               <NotificationSync />
@@ -219,14 +217,15 @@ export default function App() {
                   <Route path="admin-tasks" element={<ProtectedRoute page="cases"><AdminTasks /></ProtectedRoute>} />
                   <Route path="add-session/:id" element={<ProtectedRoute page="cases"><AddSession /></ProtectedRoute>} />
                   <Route path="add-stage/:id" element={<ProtectedRoute page="cases"><AddStage /></ProtectedRoute>} />
+                  
+                  {/* 🆕 NEW: Documents Route */}
+                  <Route path="documents" element={<ProtectedRoute page="documents"><Documents /></ProtectedRoute>} />
+                  
                   <Route path="finance" element={<ProtectedRoute page="finance"><Finance /></ProtectedRoute>} />
                   <Route path="case-finance/:id" element={<ProtectedRoute page="finance"><CaseFinance /></ProtectedRoute>} />
                   <Route path="office" element={<ProtectedRoute page="dashboard"><OfficeInfo /></ProtectedRoute>} />
                   <Route path="office/rooms" element={<ProtectedRoute page="officeRooms"><OfficeRoomsManagement /></ProtectedRoute>} />
-
-                  {/* 🆕 NEW: Office Settings Route */}
                   <Route path="office/settings" element={<ProtectedRoute page="dashboard"><OfficeSettings /></ProtectedRoute>} />
-
                   <Route path="profile" element={<ProtectedRoute page="profile"><Profile /></ProtectedRoute>} />
                   <Route path="chat" element={<ProtectedRoute page="chat"><Chat /></ProtectedRoute>} />
                   <Route path="rooms/:roomId" element={<ProtectedRoute page="chat"><Chat /></ProtectedRoute>} />
@@ -244,7 +243,7 @@ export default function App() {
               </Routes>
             </Suspense>
           </BrowserRouter>
-        </ThemeProvider>       {/* ← 🆕 NEW: ThemeProvider closes here */}
+        </ThemeProvider>
       </AuthProvider>
     </ErrorBoundary>
   );

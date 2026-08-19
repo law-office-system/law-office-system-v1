@@ -4,7 +4,7 @@ import {
   Landmark, Edit3, Calendar, Users, Shield, FileText,
   Clock, MapPin, ChevronDown, Gavel, Briefcase,
   DollarSign, ArrowLeft, Sparkles, Scale, AlertTriangle,
-  RotateCcw
+  RotateCcw, FileArchive, X, Upload
 } from "lucide-react";
 import {
   doc, onSnapshot, getDoc, updateDoc, collection,
@@ -18,6 +18,9 @@ import JudgmentsSection from "../components/case/JudgmentsSection";
 import SessionForm from "../components/case/SessionForm";
 import SessionsTimeline from "../components/case/SessionsTimeline";
 import CreateNextLevelButton from "../components/case/CreateNextLevelButton";
+import DocumentUploader from "../components/documents/DocumentUploader";
+import DocumentCard from "../components/documents/DocumentCard";
+import { getDocuments } from "../services/documents";
 import { CASE_STATUS_LIST } from "../constants/caseStatus";
 import {
   getLitigationLevelLabel,
@@ -335,8 +338,16 @@ export default function CaseDetails() {
   const [linkedSessionForDecision, setLinkedSessionForDecision] = useState(null);
   const [activeTab, setActiveTab] = useState("sessions");
 
+  // ═══════════════════════════════════════════════════════════════
+  // 📁 DOCUMENTS STATE
+  // ═══════════════════════════════════════════════════════════════
+  const [caseDocs, setCaseDocs] = useState([]);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [showDocUploader, setShowDocUploader] = useState(false);
+  const [selectedDoc, setSelectedDoc] = useState(null);
+
   const isAdmin = useMemo(() => isAdminRole(userData?.role), [userData?.role]);
-  // ✅ DEBUG: طباعة القيم للتأكد
+
   useEffect(() => {
     console.log("🔍 CaseDetails Debug:", {
       isAdmin,
@@ -513,6 +524,35 @@ export default function CaseDetails() {
     };
   }, [id]);
 
+  // ═══════════════════════════════════════════════════════════════
+  // 📁 LOAD DOCUMENTS FOR THIS CASE
+  // ═══════════════════════════════════════════════════════════════
+  const loadCaseDocuments = useCallback(async () => {
+    if (!userData?.officeId || !id) return;
+    setDocsLoading(true);
+    try {
+      const docs = await getDocuments(userData.officeId, { caseId: id });
+      setCaseDocs(docs);
+    } catch (err) {
+      console.error("Error loading case documents:", err);
+    } finally {
+      setDocsLoading(false);
+    }
+  }, [userData?.officeId, id]);
+
+  useEffect(() => {
+    loadCaseDocuments();
+  }, [loadCaseDocuments]);
+
+  const handleDocUploadComplete = () => {
+    setShowDocUploader(false);
+    loadCaseDocuments();
+  };
+
+  const handleDocDelete = (docId) => {
+    setCaseDocs(prev => prev.filter(d => d.id !== docId));
+  };
+
   useEffect(() => {
     const action = searchParams.get("action");
     const sessionDate = searchParams.get("sessionDate");
@@ -547,6 +587,8 @@ export default function CaseDetails() {
         setShowDecisionForm(false);
         setShowJudgmentForm(false);
         setShowTaskForm(false);
+        setShowDocUploader(false);
+        setSelectedDoc(null);
         setEditingSession(null);
         setLinkedSessionForJudgment(null);
         setLinkedSessionForDecision(null);
@@ -781,13 +823,11 @@ export default function CaseDetails() {
     setShowDecisionForm(true);
   }, []);
 
-  // ✅ FIXED: Auto-creates judgment record when decisionType === 'judgment'
   const handleSaveDecision = useCallback(async (decisionData) => {
     if (!linkedSessionForDecision) return;
     try {
       const now = new Date().toISOString();
 
-      // ✅ NEW: Auto-create judgment record when decision is a judgment
       if (decisionData.decisionType === 'judgment') {
         await addDoc(collection(db, "judgments"), {
           title: decisionData.decisionDetails || 'حكم في الجلسة',
@@ -815,7 +855,6 @@ export default function CaseDetails() {
         });
       }
 
-      // ✅ NEW: Added officeId to decision record
       await addDoc(collection(db, "decisions"), {
         ...decisionData,
         caseId: id,
@@ -898,7 +937,6 @@ export default function CaseDetails() {
     setShowJudgmentForm(true);
   }, []);
 
-  // ✅ FIXED: Added officeId to judgment record
   const handleSaveJudgment = useCallback(async (judgmentData) => {
     try {
       await addDoc(collection(db, "judgments"), {
@@ -907,7 +945,7 @@ export default function CaseDetails() {
         sessionId: linkedSessionForJudgment?.id || null,
         sessionTitle: linkedSessionForJudgment?.title || '',
         sessionDate: linkedSessionForJudgment?.date || '',
-        officeId: userData?.officeId || '',        // ✅ NEW
+        officeId: userData?.officeId || '',
         levelId: selectedLevel?.id || activeLevel?.id || null,
         createdAt: new Date().toISOString(),
         createdBy: userData?.uid || null,
@@ -983,6 +1021,7 @@ export default function CaseDetails() {
     { key: "sessions", label: "سير الدعوى", count: levelSessions.length, icon: Calendar },
     { key: "judgments", label: "الأحكام", count: levelJudgments.length, icon: Gavel },
     { key: "admin", label: "الأعمال الإدارية", count: levelTasks.length, icon: Briefcase },
+    { key: "documents", label: "المستندات", count: caseDocs.length, icon: FileArchive },
   ];
 
   const getStatusStyle = (status) => {
@@ -1436,7 +1475,6 @@ export default function CaseDetails() {
           )
         )}
 
-        {/* ✅ FIXED: Pass levelJudgments directly + onSave handler */}
         {activeTab === "judgments" && (
           <JudgmentsSection
             caseId={id}
@@ -1453,6 +1491,99 @@ export default function CaseDetails() {
             tasks={levelTasks}
             onAddTask={isAdmin ? handleAddTask : null}
           />
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════
+            📁 DOCUMENTS TAB
+            ═══════════════════════════════════════════════════════════════ */}
+        {activeTab === "documents" && (
+          <div>
+            {/* Upload Button */}
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              marginBottom: 20, flexWrap: "wrap", gap: 12,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{
+                  width: 44, height: 44,
+                  background: `linear-gradient(135deg, ${colors.accent.blue.dark}, ${colors.accent.blue.main})`,
+                  borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center",
+                  boxShadow: `0 8px 24px ${colors.accent.blue.main}30`,
+                }}>
+                  <FileArchive size={22} color="white" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, color: colors.text.primary, fontSize: 18, fontWeight: 700 }}>
+                    مستندات القضية
+                  </h3>
+                  <p style={{ margin: '4px 0 0 0', color: colors.text.muted, fontSize: 13 }}>
+                    {caseDocs.length} مستند{caseDocs.length !== 1 ? 'ات' : ''}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDocUploader(true)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: '10px 20px', background: colors.accent.blue.dark,
+                  color: 'white', border: 'none', borderRadius: 14,
+                  fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                  fontFamily: 'inherit', boxShadow: `0 4px 16px ${colors.accent.blue.main}30`,
+                }}
+              >
+                <Upload size={16} />
+                رفع مستند
+              </button>
+            </div>
+
+            {/* Document Uploader */}
+            {showDocUploader && (
+              <div style={{ marginBottom: 24 }}>
+                <DocumentUploader
+                  caseId={id}
+                  onUpload={handleDocUploadComplete}
+                  onClose={() => setShowDocUploader(false)}
+                />
+              </div>
+            )}
+
+            {/* Documents List */}
+            {docsLoading ? (
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                height: 200, color: colors.text.muted,
+              }}>
+                <div style={{
+                  width: 32, height: 32,
+                  border: `3px solid ${colors.accent.blue.bg}`,
+                  borderTopColor: colors.accent.blue.dark,
+                  borderRadius: "50%",
+                  animation: "spin 1s linear infinite",
+                }} />
+              </div>
+            ) : caseDocs.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "50px 20px", color: colors.text.muted }}>
+                <FileArchive size={48} style={{ marginBottom: 16, opacity: 0.4 }} />
+                <p style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0' }}>لا توجد مستندات</p>
+                <p style={{ fontSize: 14, margin: 0 }}>ابدأ برفع أول مستند لهذه القضية</p>
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+                gap: 16,
+              }}>
+                {caseDocs.map(doc => (
+                  <DocumentCard
+                    key={doc.id}
+                    doc={doc}
+                    onDelete={handleDocDelete}
+                    onPreview={setSelectedDoc}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -1508,6 +1639,18 @@ export default function CaseDetails() {
               </ActionButton>
             </Link>
           )}
+
+          {/* 📁 NEW: Upload Document Quick Action */}
+          <ActionButton 
+            icon={FileArchive} 
+            color={colors.accent.cyan.main} 
+            onClick={() => {
+              setActiveTab("documents");
+              setShowDocUploader(true);
+            }}
+          >
+            إضافة مستند
+          </ActionButton>
         </div>
       </div>
 
@@ -1569,6 +1712,65 @@ export default function CaseDetails() {
           onClose={handleCloseTaskForm}
           onSave={handleSaveTask}
         />
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          📁 DOCUMENT PREVIEW MODAL
+          ═══════════════════════════════════════════════════════════════ */}
+      {selectedDoc && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, padding: 20,
+        }} onClick={() => setSelectedDoc(null)}>
+          <div
+            style={{
+              background: colors.bg.card, borderRadius: 20,
+              maxWidth: '90vw', maxHeight: '90vh', width: '100%',
+              overflow: 'hidden', display: 'flex', flexDirection: 'column',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              padding: '16px 20px', borderBottom: `1px solid ${colors.border.default}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <h3 style={{ margin: 0, color: colors.text.primary, fontSize: 16 }}>
+                {selectedDoc.name || selectedDoc.fileName}
+              </h3>
+              <button onClick={() => setSelectedDoc(null)}
+                style={{ background: 'none', border: 'none', color: colors.text.muted, cursor: 'pointer', padding: 4 }}>
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
+              {selectedDoc.fileType?.startsWith('image/') ? (
+                <img src={selectedDoc.downloadURL} alt={selectedDoc.fileName}
+                  style={{ maxWidth: '100%', borderRadius: 12 }} />
+              ) : selectedDoc.fileType === 'application/pdf' ? (
+                <iframe src={selectedDoc.downloadURL}
+                  style={{ width: '100%', height: '70vh', border: 'none', borderRadius: 12 }}
+                  title={selectedDoc.fileName} />
+              ) : (
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                  <FileText size={64} color={colors.text.muted} />
+                  <p style={{ color: colors.text.muted, marginTop: 16 }}>
+                    لا يمكن معاينة هذا النوع من الملفات
+                  </p>
+                  <a href={selectedDoc.downloadURL} target="_blank" rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 8,
+                      marginTop: 16, padding: '10px 20px',
+                      background: colors.accent.blue.dark, color: 'white',
+                      borderRadius: 12, textDecoration: 'none', fontWeight: 600,
+                    }}>
+                    تحميل الملف
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

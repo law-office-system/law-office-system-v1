@@ -5,7 +5,8 @@ import {
   Gavel, ClipboardList, MessageSquare, Bell, 
   LogOut, DollarSign, Archive, Building2,
   X, Scale, ChevronRight,
-  Crown, User, Settings
+  Crown, User, Settings,
+  FileArchive  // ← 🆕 NEW
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import useNotifications from "../hooks/useNotifications";
@@ -139,6 +140,7 @@ export default function Sidebar({ open, setOpen, isMobile }) {
     { path: "/cases", label: "جميع القضايا", icon: Scale },
     { path: "/cases/active", label: "القضايا النشطة", icon: Briefcase },
     { path: "/archive", label: "الأرشيف", icon: Archive },
+    { path: "/documents", label: "المستندات", icon: FileArchive },  // ← 🆕 NEW
     { path: "/judgments", label: "الأحكام", icon: Gavel },
     { path: "/admin-tasks", label: "الأعمال الإدارية", icon: ClipboardList },
     { path: "/clients", label: "العملاء", icon: Users },
