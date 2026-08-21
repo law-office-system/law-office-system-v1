@@ -6,7 +6,8 @@ import {
   LogOut, DollarSign, Archive, Building2,
   X, Scale, ChevronRight,
   Crown, User, Settings,
-  FileArchive  // ← 🆕 NEW
+  FileArchive,  // ← المستندات
+  FileText      // ← 🆕 المحرر
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import useNotifications from "../hooks/useNotifications";
@@ -140,7 +141,8 @@ export default function Sidebar({ open, setOpen, isMobile }) {
     { path: "/cases", label: "جميع القضايا", icon: Scale },
     { path: "/cases/active", label: "القضايا النشطة", icon: Briefcase },
     { path: "/archive", label: "الأرشيف", icon: Archive },
-    { path: "/documents", label: "المستندات", icon: FileArchive },  // ← 🆕 NEW
+    { path: "/documents", label: "المستندات", icon: FileArchive },
+    { path: "/documents/editor", label: "المحرر", icon: FileText },  // ← 🆕 NEW
     { path: "/judgments", label: "الأحكام", icon: Gavel },
     { path: "/admin-tasks", label: "الأعمال الإدارية", icon: ClipboardList },
     { path: "/clients", label: "العملاء", icon: Users },
@@ -157,7 +159,11 @@ export default function Sidebar({ open, setOpen, isMobile }) {
   // ✅ عرض Sidebar: موبايل 280px، مفتوح 260px، مطوي 85px
   const sidebarWidth = isMobile ? 280 : (open ? 260 : 85);
 
+  // 🆕 تعديل isActive: المستندات exact match فقط
   const isActive = (path) => {
+    if (path === "/documents") {
+      return location.pathname === "/documents";
+    }
     return location.pathname === path || location.pathname.startsWith(path + "/");
   };
 

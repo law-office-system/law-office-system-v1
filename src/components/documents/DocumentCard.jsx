@@ -1,19 +1,25 @@
 import React, { useState } from 'react';
 import { useTheme } from '../../context/ThemeContext.jsx';
 import { deleteDocument, getFileMeta, formatFileSize, getCategoryMeta } from '../../services/documents';
-import { FileText, File, Image, Table, Download, Trash2, Eye, MoreVertical, CheckCircle2 } from 'lucide-react';
+import { FileText, File, Image, Table, Download, Trash2, Eye, MoreVertical, PenLine, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export default function DocumentCard({ doc, onDelete, onPreview }) {
   const { theme } = useTheme();
   const { colors } = theme;
+  const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const meta = getFileMeta(doc.fileType, doc.fileName);
+  const isEditorDoc = doc.source === 'editor';
+  const meta = isEditorDoc
+    ? { icon: 'FileText', color: '#d4af37', label: 'محرر' }
+    : getFileMeta(doc.fileType, doc.fileName);
   const catMeta = getCategoryMeta(doc.category);
 
   const getIcon = () => {
     const props = { size: 28, color: meta.color };
+    if (isEditorDoc) return <PenLine {...props} />;
     switch (meta.icon) {
       case 'Image': return <Image {...props} />;
       case 'Table': return <Table {...props} />;
@@ -39,6 +45,10 @@ export default function DocumentCard({ doc, onDelete, onPreview }) {
     if (doc.downloadURL) window.open(doc.downloadURL, '_blank');
   };
 
+  const handleOpenEditor = () => {
+    navigate(`/documents/editor/${doc.id}`);
+  };
+
   const formatDate = (timestamp) => {
     if (!timestamp) return '';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -55,9 +65,13 @@ export default function DocumentCard({ doc, onDelete, onPreview }) {
       position: 'relative',
     }}
     onMouseEnter={(e) => {
-      e.currentTarget.style.borderColor = colors.accent.blue.main + '40';
+      e.currentTarget.style.borderColor = isEditorDoc
+        ? (colors.accent.gold?.main || '#d4af37') + '40'
+        : colors.accent.blue.main + '40';
       e.currentTarget.style.transform = 'translateY(-2px)';
-      e.currentTarget.style.boxShadow = `0 8px 24px ${colors.accent.blue.main}10`;
+      e.currentTarget.style.boxShadow = isEditorDoc
+        ? `0 8px 24px ${colors.accent.gold?.main || '#d4af37'}10`
+        : `0 8px 24px ${colors.accent.blue.main}10`;
     }}
     onMouseLeave={(e) => {
       e.currentTarget.style.borderColor = colors.border.default;
@@ -82,8 +96,8 @@ export default function DocumentCard({ doc, onDelete, onPreview }) {
           {/* Badges */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
             <span style={{
-              padding: '3px 10px', background: colors.accent.blue.bg,
-              color: colors.accent.blue.light, borderRadius: 20,
+              padding: '3px 10px', background: catMeta.color + '15',
+              color: catMeta.color, borderRadius: 20,
               fontSize: 11, fontWeight: 700,
             }}>
               {catMeta.label}
@@ -95,6 +109,15 @@ export default function DocumentCard({ doc, onDelete, onPreview }) {
             }}>
               {meta.label}
             </span>
+            {isEditorDoc && (
+              <span style={{
+                padding: '3px 8px', background: 'rgba(212,175,55,0.15)',
+                color: '#d4af37', borderRadius: 8,
+                fontSize: 11, fontWeight: 700,
+              }}>
+                ✏️ محرر
+              </span>
+            )}
           </div>
 
           {/* Name */}
@@ -103,7 +126,7 @@ export default function DocumentCard({ doc, onDelete, onPreview }) {
             fontSize: 15, fontWeight: 700,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>
-            {doc.name || doc.fileName}
+            {doc.name || doc.fileName || 'وثيقة بدون عنوان'}
           </h4>
 
           {/* Meta */}
@@ -113,15 +136,17 @@ export default function DocumentCard({ doc, onDelete, onPreview }) {
               fontSize: 12, color: colors.text.muted,
               padding: '3px 8px', background: colors.bg.hover, borderRadius: 8,
             }}>
-              {formatDate(doc.uploadedAt)}
+              {formatDate(doc.updatedAt || doc.uploadedAt)}
             </span>
-            <span style={{
-              display: 'flex', alignItems: 'center', gap: 4,
-              fontSize: 12, color: colors.text.muted,
-              padding: '3px 8px', background: colors.bg.hover, borderRadius: 8,
-            }}>
-              {formatFileSize(doc.fileSize)}
-            </span>
+            {!isEditorDoc && doc.fileSize > 0 && (
+              <span style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                fontSize: 12, color: colors.text.muted,
+                padding: '3px 8px', background: colors.bg.hover, borderRadius: 8,
+              }}>
+                {formatFileSize(doc.fileSize)}
+              </span>
+            )}
           </div>
 
           {doc.description && (
@@ -155,18 +180,27 @@ export default function DocumentCard({ doc, onDelete, onPreview }) {
           {menuOpen && (
             <div style={{
               position: 'absolute', top: 'calc(100% + 4px)', left: 0,
-              width: 150, background: colors.bg.card,
+              width: 160, background: colors.bg.card,
               border: `1px solid ${colors.border.default}`, borderRadius: 12,
               boxShadow: '0 8px 24px rgba(0,0,0,0.3)', zIndex: 100, overflow: 'hidden',
             }}>
-              <button onClick={() => { handleDownload(); setMenuOpen(false); }}
-                style={menuItemStyle(colors)}>
-                <Download size={14} /> تحميل
-              </button>
-              <button onClick={() => { onPreview?.(doc); setMenuOpen(false); }}
-                style={menuItemStyle(colors)}>
-                <Eye size={14} /> معاينة
-              </button>
+              {isEditorDoc ? (
+                <button onClick={() => { handleOpenEditor(); setMenuOpen(false); }}
+                  style={menuItemStyle(colors)}>
+                  <PenLine size={14} /> فتح في المحرر
+                </button>
+              ) : (
+                <>
+                  <button onClick={() => { handleDownload(); setMenuOpen(false); }}
+                    style={menuItemStyle(colors)}>
+                    <Download size={14} /> تحميل
+                  </button>
+                  <button onClick={() => { onPreview?.(doc); setMenuOpen(false); }}
+                    style={menuItemStyle(colors)}>
+                    <Eye size={14} /> معاينة
+                  </button>
+                </>
+              )}
               <div style={{ height: 1, background: colors.border.default, margin: '4px 8px' }} />
               <button onClick={() => { handleDelete(); setMenuOpen(false); }}
                 style={{ ...menuItemStyle(colors), color: colors.accent.red.main }}>

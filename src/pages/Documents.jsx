@@ -4,12 +4,14 @@ import { useAuth } from '../context/AuthContext';
 import { getDocuments, DOC_CATEGORIES } from '../services/documents';
 import DocumentUploader from '../components/documents/DocumentUploader';
 import DocumentCard from '../components/documents/DocumentCard';
-import { FileArchive, Search, Upload, Grid3X3, List, Loader2, X, FileText, AlertTriangle } from 'lucide-react';
+import { FileArchive, Search, Upload, Grid3X3, List, Loader2, X, FileText, AlertTriangle, PenLine } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export default function Documents() {
   const { theme } = useTheme();
   const { colors } = theme;
   const { userData } = useAuth();
+  const navigate = useNavigate();
 
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,11 +19,11 @@ export default function Documents() {
   const [showUploader, setShowUploader] = useState(false);
   const [viewMode, setViewMode] = useState('grid');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [filterSource, setFilterSource] = useState('all');
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [indexError, setIndexError] = useState(false);
   const [indexUrl, setIndexUrl] = useState('');
 
-  // Debounce search
   const searchTimeout = useRef(null);
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
@@ -43,23 +45,22 @@ export default function Documents() {
       const filters = {};
       if (debouncedSearch) filters.search = debouncedSearch;
       if (filterCategory !== 'all') filters.category = filterCategory;
+      if (filterSource !== 'all') filters.source = filterSource;
 
       const docs = await getDocuments(userData.officeId, filters);
       setDocuments(docs);
     } catch (err) {
       console.error('Failed to load documents:', err);
 
-      // لو الخطأ بسبب Index — نعرض رسالة واضحة مع الرابط
       if (err.message?.includes('requires an index') || err.code === 'failed-precondition') {
         setIndexError(true);
-        // نستخرج الرابط من الـ error لو موجود
         const urlMatch = err.message?.match(/https:\/\/console\.firebase\.google\.com[^\s]*/);
         if (urlMatch) setIndexUrl(urlMatch[0]);
       }
     } finally {
       setLoading(false);
     }
-  }, [userData?.officeId, debouncedSearch, filterCategory]);
+  }, [userData?.officeId, debouncedSearch, filterCategory, filterSource]);
 
   useEffect(() => {
     loadDocuments();
@@ -76,6 +77,8 @@ export default function Documents() {
 
   const stats = {
     total: documents.length,
+    uploads: documents.filter(d => d.source === 'upload' || !d.source).length,
+    editor: documents.filter(d => d.source === 'editor').length,
     byCategory: DOC_CATEGORIES.reduce((acc, cat) => {
       acc[cat.id] = documents.filter(d => d.category === cat.id).length;
       return acc;
@@ -110,24 +113,39 @@ export default function Documents() {
               المستندات
             </h1>
             <p style={{ margin: '4px 0 0 0', color: colors.text.muted, fontSize: 14 }}>
-              إدارة ملفات المكتب والقضايا
+              إدارة ملفات المكتب والقضايا والوثائق القانونية
             </p>
           </div>
         </div>
 
-        <button
-          onClick={() => setShowUploader(!showUploader)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '12px 24px', background: colors.accent.blue.dark,
-            color: 'white', border: 'none', borderRadius: 14,
-            fontSize: 15, fontWeight: 700, cursor: 'pointer',
-            fontFamily: 'inherit', boxShadow: `0 4px 16px ${colors.accent.blue.main}30`,
-          }}
-        >
-          <Upload size={18} />
-          رفع مستند
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={() => navigate('/documents/editor/new')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '12px 24px', background: colors.accent.gold?.dark || '#d4af37',
+              color: '#0a0e1a', border: 'none', borderRadius: 14,
+              fontSize: 15, fontWeight: 700, cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            <PenLine size={18} />
+            وثيقة جديدة
+          </button>
+          <button
+            onClick={() => setShowUploader(!showUploader)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '12px 24px', background: colors.accent.blue.dark,
+              color: 'white', border: 'none', borderRadius: 14,
+              fontSize: 15, fontWeight: 700, cursor: 'pointer',
+              fontFamily: 'inherit', boxShadow: `0 4px 16px ${colors.accent.blue.main}30`,
+            }}
+          >
+            <Upload size={18} />
+            رفع مستند
+          </button>
+        </div>
       </div>
 
       {/* Index Error Banner */}
@@ -182,10 +200,10 @@ export default function Documents() {
         marginBottom: 20,
       }}>
         <button
-          onClick={() => setFilterCategory('all')}
+          onClick={() => setFilterSource('all')}
           style={{
-            padding: '12px', background: filterCategory === 'all' ? colors.accent.blue.bg : colors.bg.card,
-            border: `1px solid ${filterCategory === 'all' ? colors.accent.blue.main + '40' : colors.border.default}`,
+            padding: '12px', background: filterSource === 'all' ? colors.accent.blue.bg : colors.bg.card,
+            border: `1px solid ${filterSource === 'all' ? colors.accent.blue.main + '40' : colors.border.default}`,
             borderRadius: 14, textAlign: 'center', cursor: 'pointer',
             fontFamily: 'inherit', transition: 'all 0.2s',
           }}
@@ -195,7 +213,38 @@ export default function Documents() {
           </p>
           <p style={{ margin: 0, fontSize: 11, color: colors.text.muted, fontWeight: 600 }}>الكل</p>
         </button>
-        {DOC_CATEGORIES.slice(0, 5).map(cat => (
+
+        <button
+          onClick={() => setFilterSource('upload')}
+          style={{
+            padding: '12px', background: filterSource === 'upload' ? colors.accent.blue.bg : colors.bg.card,
+            border: `1px solid ${filterSource === 'upload' ? colors.accent.blue.main + '40' : colors.border.default}`,
+            borderRadius: 14, textAlign: 'center', cursor: 'pointer',
+            fontFamily: 'inherit', transition: 'all 0.2s',
+          }}
+        >
+          <p style={{ margin: '0 0 4px 0', fontSize: 20, fontWeight: 700, color: colors.accent.blue.light }}>
+            {stats.uploads}
+          </p>
+          <p style={{ margin: 0, fontSize: 11, color: colors.text.muted, fontWeight: 600 }}>مرفقة</p>
+        </button>
+
+        <button
+          onClick={() => setFilterSource('editor')}
+          style={{
+            padding: '12px', background: filterSource === 'editor' ? colors.accent.gold?.bg || 'rgba(212,175,55,0.1)' : colors.bg.card,
+            border: `1px solid ${filterSource === 'editor' ? (colors.accent.gold?.main || '#d4af37') + '40' : colors.border.default}`,
+            borderRadius: 14, textAlign: 'center', cursor: 'pointer',
+            fontFamily: 'inherit', transition: 'all 0.2s',
+          }}
+        >
+          <p style={{ margin: '0 0 4px 0', fontSize: 20, fontWeight: 700, color: colors.accent.gold?.main || '#d4af37' }}>
+            {stats.editor}
+          </p>
+          <p style={{ margin: 0, fontSize: 11, color: colors.text.muted, fontWeight: 600 }}>محرر</p>
+        </button>
+
+        {DOC_CATEGORIES.slice(0, 4).map(cat => (
           <button
             key={cat.id}
             onClick={() => setFilterCategory(filterCategory === cat.id ? 'all' : cat.id)}
@@ -279,7 +328,7 @@ export default function Documents() {
           <FileArchive size={48} style={{ marginBottom: 16, opacity: 0.5 }} />
           <p style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0' }}>لا توجد مستندات</p>
           <p style={{ fontSize: 14, margin: 0 }}>
-            {search || filterCategory !== 'all' ? 'جرب تغيير معايير البحث' : 'ابدأ برفع أول مستند'}
+            {search || filterCategory !== 'all' || filterSource !== 'all' ? 'جرب تغيير معايير البحث' : 'ابدأ برفع أول مستند أو إنشاء وثيقة جديدة'}
           </p>
         </div>
       ) : (
@@ -328,7 +377,29 @@ export default function Documents() {
               </button>
             </div>
             <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
-              {selectedDoc.fileType?.startsWith('image/') ? (
+              {selectedDoc.source === 'editor' ? (
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                  <PenLine size={64} color={colors.accent.gold?.main || '#d4af37'} />
+                  <p style={{ color: colors.text.muted, marginTop: 16 }}>
+                    وثيقة من المحرر — افتحها للتعديل
+                  </p>
+                  <button
+                    onClick={() => {
+                      setSelectedDoc(null);
+                      navigate(`/documents/editor/${selectedDoc.id}`);
+                    }}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 8,
+                      marginTop: 16, padding: '10px 20px',
+                      background: colors.accent.gold?.dark || '#d4af37', color: '#0a0e1a',
+                      borderRadius: 12, border: 'none',
+                      fontWeight: 700, fontSize: 15, cursor: 'pointer',
+                    }}
+                  >
+                    فتح في المحرر
+                  </button>
+                </div>
+              ) : selectedDoc.fileType?.startsWith('image/') ? (
                 <img src={selectedDoc.downloadURL} alt={selectedDoc.fileName}
                   style={{ maxWidth: '100%', borderRadius: 12 }} />
               ) : selectedDoc.fileType === 'application/pdf' ? (

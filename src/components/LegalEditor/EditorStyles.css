@@ -1,0 +1,895 @@
+/* ═══════════════════════════════════════════════════════════════
+   Legal Editor — Multi-Page A4 with Automatic Boundaries
+   ═══════════════════════════════════════════════════════════════ */
+
+.legal-editor-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: #b8b8b8;
+  font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+  overflow: hidden;
+}
+
+/* ─── Header ─── */
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: #fff;
+  border-bottom: 1px solid #ddd;
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+.document-title-input {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a1a;
+  border: none;
+  background: transparent;
+  outline: none;
+  width: 400px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: inherit;
+}
+
+.document-title-input:hover,
+.document-title-input:focus { background: #f0f0f0; }
+
+.document-title-input::placeholder { color: #999; }
+
+.editor-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.save-status {
+  font-size: 13px;
+  color: #666;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: #f0f0f0;
+  white-space: nowrap;
+}
+
+.last-saved {
+  font-size: 12px;
+  color: #888;
+  white-space: nowrap;
+}
+
+.save-btn {
+  padding: 8px 20px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.save-btn:hover { background: #1d4ed8; }
+.save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ─── Toolbar ─── */
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: #fff;
+  border-bottom: 1px solid #ddd;
+  overflow-x: auto;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  z-index: 15;
+}
+
+.toolbar-group {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 28px;
+  background: #ddd;
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.toolbar-btn {
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #444;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+}
+
+.toolbar-btn:hover { background: #f0f0f0; border-color: #ddd; }
+.toolbar-btn.active { background: #e3e9ff; color: #2563eb; border-color: #2563eb; }
+.toolbar-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.toolbar-dropdown {
+  padding: 5px 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  background: white;
+  color: #444;
+  cursor: pointer;
+  outline: none;
+  height: 32px;
+}
+
+.toolbar-dropdown:hover { border-color: #2563eb; }
+
+.toolbar-label { font-size: 11px; color: #888; margin-right: 2px; }
+.toolbar-label-sm { font-size: 11px; color: #666; white-space: nowrap; }
+
+.toolbar-colors { display: flex; gap: 6px; }
+
+.color-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  background: white;
+  cursor: pointer;
+}
+
+.color-wrapper:hover { border-color: #2563eb; }
+
+.color-label { font-size: 12px; font-weight: 600; color: #444; }
+
+.toolbar-color-input {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+  background: transparent;
+}
+
+.toolbar-popup {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  margin: 4px 0;
+  width: 100%;
+  order: 99;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.toolbar-popup-input {
+  flex: 1;
+  min-width: 150px;
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+
+.toolbar-popup-input:focus { border-color: #2563eb; }
+
+.toolbar-popup-btn {
+  padding: 6px 14px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.toolbar-popup-btn.secondary { background: #e5e7eb; color: #444; }
+
+.shape-btn {
+  padding: 6px 12px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.shape-btn:hover { border-color: #2563eb; background: #f0f7ff; }
+
+.spacing-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  margin: 4px 0;
+  width: 100%;
+  order: 99;
+}
+
+.spacing-row { display: flex; align-items: center; gap: 8px; }
+.spacing-label { font-size: 12px; color: #666; width: 40px; text-align: left; }
+.spacing-unit { font-size: 11px; color: #888; }
+
+/* ─── Editor Container ─── */
+.editor-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 30px 40px;
+  background: #b8b8b8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   A4 Page — Automatic page boundaries every 297mm
+   ═══════════════════════════════════════════════════════════════ */
+
+.legal-editor-content,
+.legal-editor-content.ProseMirror {
+  width: 210mm;
+  max-width: 100%;
+  min-height: 297mm;
+  padding: 40px 50px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #999, 0 4px 20px rgba(0,0,0,0.15);
+  border-radius: 2px;
+  font-size: 16px;
+  line-height: 2;
+  color: #1a1a1a;
+  text-align: right;
+  direction: rtl;
+  outline: none;
+  position: relative;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+
+  /* ═══ AUTOMATIC PAGE BOUNDARIES ═══ */
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0mm,
+    transparent 296mm,
+    #2563eb 296mm,
+    #2563eb 296.5mm,
+    transparent 296.5mm,
+    transparent 297mm
+  );
+  background-size: 100% 297mm;
+  background-repeat: repeat-y;
+  background-position: 0 0;
+}
+
+.legal-editor-content:focus { outline: none; }
+
+/* Protect all children from overflow */
+.legal-editor-content * {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* ─── Typography ─── */
+.legal-editor-content p { margin: 0 0 16px 0; }
+
+.legal-editor-content h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0 0 20px 0;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #2563eb;
+}
+
+.legal-editor-content h2 {
+  font-size: 22px;
+  font-weight: 600;
+  color: #333;
+  margin: 24px 0 16px 0;
+}
+
+.legal-editor-content h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #444;
+  margin: 20px 0 12px 0;
+}
+
+.legal-editor-content ul,
+.legal-editor-content ol {
+  padding-right: 24px;
+  margin: 0 0 16px 0;
+}
+
+.legal-editor-content li { margin-bottom: 8px; }
+.legal-editor-content li > p { margin: 0; }
+
+.legal-editor-content blockquote {
+  border-right: 4px solid #2563eb;
+  padding-right: 16px;
+  margin: 16px 0;
+  color: #555;
+  font-style: italic;
+}
+
+.legal-editor-content strong { color: #1a1a1a; }
+
+.legal-editor-content u {
+  text-decoration: underline;
+  text-decoration-color: #2563eb;
+  text-underline-offset: 3px;
+}
+
+/* Placeholder */
+.legal-editor-content .is-empty::before {
+  content: attr(data-placeholder);
+  float: right;
+  color: #aaa;
+  pointer-events: none;
+  height: 0;
+}
+
+/* ─── Footer ─── */
+.editor-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 24px;
+  background: #fff;
+  border-top: 1px solid #e0e0e0;
+  font-size: 12px;
+  color: #666;
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+/* ─── Loading ─── */
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  font-size: 18px;
+  color: #666;
+}
+
+/* ─── Modal ─── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.modal-content {
+  background: white;
+  padding: 24px;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  direction: rtl;
+}
+
+.modal-title { margin: 0 0 16px 0; font-size: 18px; color: #1a1a1a; font-weight: 700; }
+.modal-desc { margin: 0 0 12px 0; color: #666; font-size: 14px; }
+
+.modal-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  font-size: 15px;
+  font-family: inherit;
+  margin-bottom: 16px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.modal-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+.modal-btn {
+  padding: 8px 18px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.modal-btn.primary { background: #2563eb; color: white; }
+.modal-btn.primary:hover { background: #1d4ed8; }
+.modal-btn.secondary { background: #f0f0f0; color: #444; }
+
+/* ─── Print ─── */
+@media print {
+  .editor-toolbar, .editor-header, .editor-footer, .editor-ruler-interactive { display: none !important; }
+  .editor-container { padding: 0; background: white; }
+  .legal-editor-content {
+    box-shadow: none;
+    width: 100%;
+    max-width: 100%;
+    padding: 20px;
+    margin: 0;
+    border: none;
+    page-break-inside: avoid;
+    min-height: auto;
+    background-image: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Tables — Stable, RTL, bounded
+   ═══════════════════════════════════════════════════════════════ */
+
+.legal-editor-content table {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 14px;
+  table-layout: fixed;
+  direction: rtl;
+  border: 1px solid #d0d0d0;
+}
+
+.legal-editor-content th,
+.legal-editor-content td {
+  border: 1px solid #d0d0d0;
+  padding: 10px 14px;
+  text-align: right;
+  vertical-align: top;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 40px;
+}
+
+.legal-editor-content th { background: #f5f5f5; font-weight: 700; color: #1a1a1a; }
+.legal-editor-content tr:nth-child(even) { background: #fafafa; }
+
+/* ═══════════════════════════════════════════════════════════════
+   Images — bounded
+   ═══════════════════════════════════════════════════════════════ */
+
+.legal-editor-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 16px 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  display: block;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Links
+   ═══════════════════════════════════════════════════════════════ */
+
+.legal-editor-content a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  word-break: break-all;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Highlight
+   ═══════════════════════════════════════════════════════════════ */
+
+.legal-editor-content mark {
+  background: #fef08a;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Manual Page Break (from button)
+   ═══════════════════════════════════════════════════════════════ */
+
+.page-break-visual,
+.legal-editor-content [data-page-break] {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 30px 0;
+  margin: 0;
+  user-select: none;
+  position: relative;
+}
+
+.page-break-visual::before,
+.legal-editor-content [data-page-break]::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, #dc2626 20%, #dc2626 80%, transparent 100%);
+}
+
+.page-break-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #dc2626;
+  white-space: nowrap;
+  padding: 4px 12px;
+  background: #fee2e2;
+  border-radius: 16px;
+  border: 2px solid #dc2626;
+  letter-spacing: 0.5px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Interactive Shapes — Visual offset via transform (in flow)
+   ═══════════════════════════════════════════════════════════════ */
+
+.editor-shape-wrapper {
+  position: relative;
+  display: inline-block;
+  vertical-align: top;
+  cursor: grab;
+  border-radius: 4px;
+  transition: box-shadow 0.2s;
+}
+
+.editor-shape-wrapper:hover {
+  box-shadow: 0 0 0 2px rgba(37,99,235,0.3);
+}
+
+.editor-shape-wrapper.ProseMirror-selectednode {
+  box-shadow: 0 0 0 3px #2563eb;
+}
+
+.editor-shape-wrapper:active {
+  cursor: grabbing;
+}
+
+/* ═══ Resize Handles ═══ */
+.shape-resize-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border: 2.5px solid #2563eb;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.15s;
+  z-index: 999;
+}
+
+.editor-shape-wrapper:hover .shape-resize-handle,
+.editor-shape-wrapper.ProseMirror-selectednode .shape-resize-handle,
+.editor-shape-wrapper.shape-editing .shape-resize-handle {
+  opacity: 1;
+}
+
+.shape-resize-handle:hover {
+  transform: scale(1.4);
+  background: #2563eb;
+}
+
+/* ═══ Rotation Handle ═══ */
+.shape-rotate-handle {
+  position: absolute;
+  top: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border: 2.5px solid #dc2626;
+  border-radius: 50%;
+  z-index: 999;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.15s;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #dc2626;
+  user-select: none;
+}
+
+.shape-rotate-handle:active {
+  cursor: grabbing;
+  transform: translateX(-50%) scale(1.3);
+}
+
+/* Connector line between shape and rotation handle */
+.shape-rotate-line {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  width: 2px;
+  height: 14px;
+  background: #dc2626;
+  transform: translateX(-50%);
+  z-index: 998;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+/* Show rotation handle on hover/select/edit */
+.editor-shape-wrapper:hover .shape-rotate-handle,
+.editor-shape-wrapper.ProseMirror-selectednode .shape-rotate-handle,
+.editor-shape-wrapper.shape-editing .shape-rotate-handle,
+.editor-shape-wrapper:hover .shape-rotate-line,
+.editor-shape-wrapper.ProseMirror-selectednode .shape-rotate-line,
+.editor-shape-wrapper.shape-editing .shape-rotate-line {
+  opacity: 1;
+}
+
+/* ═══ Text Content Inside Shape ═══ */
+.shape-text-content {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 12px;
+  box-sizing: border-box;
+  outline: none;
+  min-height: 20px;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.shape-text-content:empty::before {
+  content: 'اكتب هنا...';
+  color: #aaa;
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.shape-text-content p { margin: 0; width: 100%; }
+
+/* Line shape (no text) */
+.editor-shape-wrapper[data-shape="line"] .shape-text-content {
+  display: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SHAPE EDITING MODE — Drag fix
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Default: text content does NOT receive mouse events (for drag) */
+.shape-text-content {
+  pointer-events: none;
+}
+
+/* When in editing mode: text content receives mouse events */
+.editor-shape-wrapper.shape-editing .shape-text-content {
+  pointer-events: all;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 4px;
+}
+
+/* Visual indicator for editing mode */
+.editor-shape-wrapper.shape-editing {
+  box-shadow: 0 0 0 3px #2563eb, 0 0 0 6px rgba(37, 99, 235, 0.2) !important;
+}
+
+/* Ensure SVG catches all mouse events for drag */
+.editor-shape-wrapper svg {
+  pointer-events: all !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   INTERACTIVE RULER — Draggable Margin Handles
+   ═══════════════════════════════════════════════════════════════ */
+
+.editor-ruler-interactive {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 4px 50px 2px 50px;
+  background: linear-gradient(to bottom, #e8e8e8 0%, #d0d0d0 100%);
+  border-bottom: 2px solid #bbb;
+  font-size: 10px;
+  color: #555;
+  direction: ltr;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  user-select: none;
+  flex-shrink: 0;
+  height: 32px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Ruler track line */
+.ruler-track {
+  position: absolute;
+  bottom: 6px;
+  left: 50px;
+  right: 50px;
+  height: 1px;
+  background: #888;
+  pointer-events: none;
+}
+
+/* Number marks */
+.ruler-mark {
+  position: relative;
+  width: 5%;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #444;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.ruler-tick {
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  width: 1px;
+  height: 6px;
+  background: #888;
+  transform: translateX(-50%);
+}
+
+/* ═══ Margin Handles ═══ */
+.ruler-handle {
+  position: absolute;
+  bottom: 0;
+  transform: translateX(-50%);
+  z-index: 20;
+  cursor: ew-resize;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: transform 0.1s;
+}
+
+.ruler-handle:hover {
+  transform: translateX(-50%) scale(1.15);
+}
+
+.ruler-handle.dragging {
+  transform: translateX(-50%) scale(1.3);
+  z-index: 30;
+}
+
+/* Triangle shape */
+.ruler-triangle {
+  width: 0;
+  height: 0;
+  border-style: solid;
+}
+
+.ruler-triangle-right {
+  border-width: 0 8px 14px 8px;
+  border-color: transparent transparent #2563eb transparent;
+  filter: drop-shadow(0 1px 2px rgba(37, 99, 235, 0.4));
+}
+
+.ruler-triangle-left {
+  border-width: 0 8px 14px 8px;
+  border-color: transparent transparent #dc2626 transparent;
+  filter: drop-shadow(0 1px 2px rgba(220, 38, 38, 0.4));
+}
+
+/* Handle label (shows cm value) */
+.ruler-handle-label {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+.ruler-handle:hover .ruler-handle-label,
+.ruler-handle.dragging .ruler-handle-label {
+  opacity: 1;
+}
+
+/* ═══ Writing Area Highlight on Ruler ═══ */
+.ruler-writing-area {
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* ═══ Margin Guides inside the Page ═══ */
+.legal-editor-content.ProseMirror::before,
+.legal-editor-content.ProseMirror::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 4px,
+    rgba(37, 99, 235, 0.2) 4px,
+    rgba(37, 99, 235, 0.2) 8px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ═══ Scrollbar ═══ */
+.editor-container::-webkit-scrollbar { width: 8px; }
+.editor-container::-webkit-scrollbar-track { background: #b8b8b8; }
+.editor-container::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+.editor-container::-webkit-scrollbar-thumb:hover { background: #666; }
+
+/* ═══ Responsive ═══ */
+@media (max-width: 768px) {
+  .editor-header { flex-direction: column; gap: 8px; padding: 10px 16px; }
+  .document-title-input { width: 100%; font-size: 16px; }
+  .editor-meta { width: 100%; justify-content: space-between; }
+  .editor-toolbar { padding: 6px 10px; }
+  .toolbar-btn { padding: 5px 8px; font-size: 12px; }
+  .editor-container { padding: 15px; }
+  .legal-editor-content { width: 100%; padding: 25px 20px; min-height: auto; background-image: none; }
+
+  .editor-ruler-interactive {
+    padding: 4px 20px 2px 20px;
+    height: 28px;
+  }
+  .ruler-track {
+    left: 20px;
+    right: 20px;
+  }
+  .ruler-triangle-right,
+  .ruler-triangle-left {
+    border-width: 0 6px 10px 6px;
+  }
+  .ruler-handle-label {
+    font-size: 9px;
+    padding: 1px 4px;
+    top: -16px;
+  }
+}

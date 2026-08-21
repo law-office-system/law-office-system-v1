@@ -50,6 +50,9 @@ const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 /* 🆕 NEW: Documents Page */
 const Documents = lazy(() => import("./pages/Documents"));
 
+/* 🆕 NEW: Document Editor Page (Tiptap) */
+const DocumentEditor = lazy(() => import("./pages/DocumentEditor"));
+
 /* 🆕 NEW: Office Settings Page */
 const OfficeSettings = lazy(() => import("./pages/OfficeSettings"));
 
@@ -218,8 +221,9 @@ export default function App() {
                   <Route path="add-session/:id" element={<ProtectedRoute page="cases"><AddSession /></ProtectedRoute>} />
                   <Route path="add-stage/:id" element={<ProtectedRoute page="cases"><AddStage /></ProtectedRoute>} />
                   
-                  {/* 🆕 NEW: Documents Route */}
+                  {/* 🆕 Documents Routes */}
                   <Route path="documents" element={<ProtectedRoute page="documents"><Documents /></ProtectedRoute>} />
+                  <Route path="documents/editor/:docId?" element={<ProtectedRoute page="documents"><DocumentEditor /></ProtectedRoute>} />
                   
                   <Route path="finance" element={<ProtectedRoute page="finance"><Finance /></ProtectedRoute>} />
                   <Route path="case-finance/:id" element={<ProtectedRoute page="finance"><CaseFinance /></ProtectedRoute>} />
