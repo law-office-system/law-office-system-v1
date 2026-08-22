@@ -1,12 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { exportToPDF, exportToDOCX } from './ExportUtils';
 
-const ToolbarButton = ({ onClick, isActive, children, title, disabled }) => (
+/* ═══ Hook: Detect Mobile Screen ═══ */
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  return isMobile;
+};
+
+const ToolbarButton = ({ onClick, isActive, children, title, disabled, className = '' }) => (
   <button 
     onClick={onClick} 
     title={title} 
-    className={`toolbar-btn ${isActive ? 'active' : ''}`}
+    className={`toolbar-btn ${isActive ? 'active' : ''} ${className}`}
     disabled={disabled}
+    type="button"
   >
     {children}
   </button>
@@ -66,6 +81,9 @@ const Toolbar = ({ editor, selectedFont, setSelectedFont, selectedFontSize, setS
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [showShapes, setShowShapes] = useState(false);
   const [showSpacingPanel, setShowSpacingPanel] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showMobileExport, setShowMobileExport] = useState(false);
+  const isMobile = useIsMobile();
 
   if (!editor) return null;
 
@@ -124,16 +142,11 @@ const Toolbar = ({ editor, selectedFont, setSelectedFont, selectedFontSize, setS
     editor.chain().focus().decreaseIndent().run();
   };
 
-  // Check if cursor is inside a table
   const isInTable = editor.isActive('table');
-
   const currentFontSize = editor.getAttributes('textStyle').fontSize || selectedFontSize || '16';
-
-  // Get current line height from editor
   const currentLineHeight = editor.getAttributes('paragraph')?.lineHeight || 
                            editor.getAttributes('heading')?.lineHeight || '2.0';
 
-  // ═══ FIXED: Use editorContentRef for PDF export ═══
   const handleExportPDF = async () => {
     const element = editorContentRef?.current?.querySelector('.legal-editor-content') || 
                     document.querySelector('.legal-editor-content');
@@ -147,7 +160,6 @@ const Toolbar = ({ editor, selectedFont, setSelectedFont, selectedFontSize, setS
     }
   };
 
-  // ═══ FIXED: Safe DOCX export ═══
   const handleExportDOCX = async () => {
     try {
       const json = editor.getJSON();
@@ -158,9 +170,355 @@ const Toolbar = ({ editor, selectedFont, setSelectedFont, selectedFontSize, setS
     }
   };
 
-  // Get document title from parent (passed via props or read from DOM)
   const title = editorContentRef?.current?.closest('.legal-editor-wrapper')?.querySelector('.document-title-input')?.value || 'وثيقة قانونية';
 
+  // ═══ MOBILE: Close menus when clicking outside ═══
+  useEffect(() => {
+    if (!isMobile) return;
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.mobile-menu-panel') && !e.target.closest('.mobile-menu-btn')) {
+        setShowMobileMenu(false);
+      }
+      if (!e.target.closest('.mobile-export-panel') && !e.target.closest('.mobile-export-btn')) {
+        setShowMobileExport(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [isMobile]);
+
+  /* ═══════════════════════════════════════════════════════════════
+     MOBILE TOOLBAR — Compact + Bottom Sheet for Extra Tools
+     ═══════════════════════════════════════════════════════════════ */
+  if (isMobile) {
+    return (
+      <>
+        {/* ─── Mobile Compact Toolbar (Always Visible) ─── */}
+        <div className="editor-toolbar mobile-toolbar" dir="rtl">
+
+          {/* Undo/Redo */}
+          <div className="toolbar-group mobile-group">
+            <ToolbarButton onClick={() => editor.chain().focus().undo().run()} title="تراجع">
+              ↩️
+            </ToolbarButton>
+            <ToolbarButton onClick={() => editor.chain().focus().redo().run()} title="إعادة">
+              ↪️
+            </ToolbarButton>
+          </div>
+
+          <div className="toolbar-divider mobile-divider" />
+
+          {/* Font Size (compact) */}
+          <div className="toolbar-group mobile-group">
+            <ToolbarDropdown
+              value={currentFontSize}
+              onChange={handleFontSizeChange}
+              options={FONT_SIZE_OPTIONS}
+              title="حجم الخط"
+              width={55}
+            />
+          </div>
+
+          <div className="toolbar-divider mobile-divider" />
+
+          {/* Bold / Italic / Underline */}
+          <div className="toolbar-group mobile-group">
+            <ToolbarButton 
+              onClick={() => editor.chain().focus().toggleBold().run()} 
+              isActive={editor.isActive('bold')} 
+              title="عريض"
+            >
+              <strong>B</strong>
+            </ToolbarButton>
+            <ToolbarButton 
+              onClick={() => editor.chain().focus().toggleItalic().run()} 
+              isActive={editor.isActive('italic')} 
+              title="مائل"
+            >
+              <em>I</em>
+            </ToolbarButton>
+            <ToolbarButton 
+              onClick={() => editor.chain().focus().toggleUnderline().run()} 
+              isActive={editor.isActive('underline')} 
+              title="تسطير"
+            >
+              <u>U</u>
+            </ToolbarButton>
+          </div>
+
+          <div className="toolbar-divider mobile-divider" />
+
+          {/* Alignment */}
+          <div className="toolbar-group mobile-group">
+            <ToolbarButton 
+              onClick={() => editor.chain().focus().setTextAlign('right').run()} 
+              isActive={editor.isActive({ textAlign: 'right' })} 
+              title="يمين"
+            >
+              ⬅️
+            </ToolbarButton>
+            <ToolbarButton 
+              onClick={() => editor.chain().focus().setTextAlign('center').run()} 
+              isActive={editor.isActive({ textAlign: 'center' })} 
+              title="توسيط"
+            >
+              ⬆️
+            </ToolbarButton>
+            <ToolbarButton 
+              onClick={() => editor.chain().focus().setTextAlign('left').run()} 
+              isActive={editor.isActive({ textAlign: 'left' })} 
+              title="يسار"
+            >
+              ➡️
+            </ToolbarButton>
+          </div>
+
+          <div className="toolbar-divider mobile-divider" />
+
+          {/* More Tools Button */}
+          <div className="toolbar-group mobile-group">
+            <ToolbarButton 
+              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              isActive={showMobileMenu}
+              title="أدوات إضافية"
+              className="mobile-menu-btn"
+            >
+              ☰
+            </ToolbarButton>
+          </div>
+
+          <div className="toolbar-divider mobile-divider" />
+
+          {/* Export Button */}
+          <div className="toolbar-group mobile-group">
+            <ToolbarButton 
+              onClick={() => setShowMobileExport(!showMobileExport)}
+              isActive={showMobileExport}
+              title="تصدير"
+              className="mobile-export-btn"
+            >
+              📤
+            </ToolbarButton>
+          </div>
+        </div>
+
+        {/* ─── Mobile More Tools Bottom Sheet ─── */}
+        {showMobileMenu && (
+          <div className="mobile-menu-overlay">
+            <div className="mobile-menu-panel" dir="rtl">
+              <div className="mobile-menu-header">
+                <span>أدوات إضافية</span>
+                <button className="mobile-menu-close" onClick={() => setShowMobileMenu(false)}>✕</button>
+              </div>
+
+              <div className="mobile-menu-section">
+                <h4>الخط</h4>
+                <div className="mobile-menu-row">
+                  <select
+                    value={selectedFont}
+                    onChange={(e) => setSelectedFont(e.target.value)}
+                    className="toolbar-dropdown mobile-full"
+                  >
+                    <option value="Segoe UI">الافتراضي</option>
+                    <option value="Amiri, serif">أميري</option>
+                    <option value="Cairo, sans-serif">القاهرة</option>
+                    <option value="Tajawal, sans-serif">تجوال</option>
+                    <option value="Almarai, sans-serif">المراعي</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="mobile-menu-section">
+                <h4>تنسيق</h4>
+                <div className="mobile-menu-grid">
+                  <ToolbarButton onClick={() => { editor.chain().focus().toggleStrike().run(); setShowMobileMenu(false); }} isActive={editor.isActive('strike')}>
+                    <s>شطب</s>
+                  </ToolbarButton>
+                  <ToolbarButton onClick={() => { increaseIndent(); setShowMobileMenu(false); }}>
+                    →| مسافة
+                  </ToolbarButton>
+                  <ToolbarButton onClick={() => { decreaseIndent(); setShowMobileMenu(false); }}>
+                    |← مسافة
+                  </ToolbarButton>
+                </div>
+              </div>
+
+              <div className="mobile-menu-section">
+                <h4>الألوان</h4>
+                <div className="mobile-menu-row colors-row">
+                  <div className="color-wrapper mobile-color">
+                    <span className="color-label">لون الخط</span>
+                    <input 
+                      type="color" 
+                      value={editor.getAttributes('textStyle').color || '#000000'}
+                      onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
+                      className="toolbar-color-input"
+                    />
+                  </div>
+                  <div className="color-wrapper mobile-color">
+                    <span className="color-label">تظليل</span>
+                    <input 
+                      type="color" 
+                      value="#ffff00"
+                      onChange={(e) => editor.chain().focus().toggleHighlight({ color: e.target.value }).run()}
+                      className="toolbar-color-input"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mobile-menu-section">
+                <h4>عناوين وقوائم</h4>
+                <div className="mobile-menu-grid">
+                  <ToolbarButton onClick={() => { editor.chain().focus().toggleHeading({ level: 1 }).run(); setShowMobileMenu(false); }} isActive={editor.isActive('heading', { level: 1 })}>
+                    H1
+                  </ToolbarButton>
+                  <ToolbarButton onClick={() => { editor.chain().focus().toggleHeading({ level: 2 }).run(); setShowMobileMenu(false); }} isActive={editor.isActive('heading', { level: 2 })}>
+                    H2
+                  </ToolbarButton>
+                  <ToolbarButton onClick={() => { editor.chain().focus().setParagraph().run(); setShowMobileMenu(false); }} isActive={editor.isActive('paragraph')}>
+                    ¶ فقرة
+                  </ToolbarButton>
+                  <ToolbarButton onClick={() => { editor.chain().focus().toggleBulletList().run(); setShowMobileMenu(false); }} isActive={editor.isActive('bulletList')}>
+                    • نقطي
+                  </ToolbarButton>
+                  <ToolbarButton onClick={() => { editor.chain().focus().toggleOrderedList().run(); setShowMobileMenu(false); }} isActive={editor.isActive('orderedList')}>
+                    ١. رقمي
+                  </ToolbarButton>
+                </div>
+              </div>
+
+              <div className="mobile-menu-section">
+                <h4>تباعد</h4>
+                <div className="mobile-menu-row">
+                  <span className="mobile-label">تباعد الأسطر:</span>
+                  <ToolbarDropdown
+                    value={currentLineHeight}
+                    onChange={handleLineHeightChange}
+                    options={LINE_HEIGHT_OPTIONS}
+                    width={70}
+                  />
+                </div>
+              </div>
+
+              <div className="mobile-menu-section">
+                <h4>جداول</h4>
+                <div className="mobile-menu-grid">
+                  <ToolbarButton onClick={() => { editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(); setShowMobileMenu(false); }}>
+                    📊 جدول
+                  </ToolbarButton>
+                  <ToolbarButton onClick={() => { editor.chain().focus().addColumnAfter().run(); setShowMobileMenu(false); }} disabled={!isInTable}>
+                    ➕ عمود
+                  </ToolbarButton>
+                  <ToolbarButton onClick={() => { editor.chain().focus().deleteColumn().run(); setShowMobileMenu(false); }} disabled={!isInTable}>
+                    ➖ عمود
+                  </ToolbarButton>
+                  <ToolbarButton onClick={() => { editor.chain().focus().addRowAfter().run(); setShowMobileMenu(false); }} disabled={!isInTable}>
+                    ➕ صف
+                  </ToolbarButton>
+                  <ToolbarButton onClick={() => { editor.chain().focus().deleteRow().run(); setShowMobileMenu(false); }} disabled={!isInTable}>
+                    ➖ صف
+                  </ToolbarButton>
+                  <ToolbarButton onClick={() => { editor.chain().focus().deleteTable().run(); setShowMobileMenu(false); }} disabled={!isInTable}>
+                    🗑️ جدول
+                  </ToolbarButton>
+                </div>
+              </div>
+
+              <div className="mobile-menu-section">
+                <h4>إدراج</h4>
+                <div className="mobile-menu-grid">
+                  <ToolbarButton onClick={() => { setShowLinkInput(!showLinkInput); setShowMobileMenu(false); }} isActive={editor.isActive('link')}>
+                    🔗 رابط
+                  </ToolbarButton>
+                  <ToolbarButton onClick={() => { onImageUpload(); setShowMobileMenu(false); }}>
+                    🖼️ صورة
+                  </ToolbarButton>
+                  <ToolbarButton onClick={() => { insertPageBreak(); setShowMobileMenu(false); }}>
+                    ⤶ فاصل
+                  </ToolbarButton>
+                  <ToolbarButton onClick={() => { insertDate(); setShowMobileMenu(false); }}>
+                    📅 تاريخ
+                  </ToolbarButton>
+                  <ToolbarButton onClick={() => { insertSignature(); setShowMobileMenu(false); }}>
+                    ✍️ توقيع
+                  </ToolbarButton>
+                </div>
+              </div>
+
+              <div className="mobile-menu-section">
+                <h4>أشكال</h4>
+                <div className="mobile-menu-grid shapes-grid">
+                  {SHAPE_TYPES.map(shape => (
+                    <button 
+                      key={shape.type} 
+                      onClick={() => { insertShape(shape.type); setShowMobileMenu(false); }}
+                      title={shape.title}
+                      className="shape-btn mobile-shape"
+                    >
+                      {shape.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── Mobile Export Bottom Sheet ─── */}
+        {showMobileExport && (
+          <div className="mobile-menu-overlay">
+            <div className="mobile-menu-panel mobile-export-panel" dir="rtl">
+              <div className="mobile-menu-header">
+                <span>تصدير الوثيقة</span>
+                <button className="mobile-menu-close" onClick={() => setShowMobileExport(false)}>✕</button>
+              </div>
+              <div className="mobile-menu-section">
+                <div className="mobile-menu-grid export-grid">
+                  <button onClick={() => { handleExportPDF(); setShowMobileExport(false); }} className="mobile-export-btn-item pdf">
+                    📄 تصدير PDF
+                  </button>
+                  <button onClick={() => { handleExportDOCX(); setShowMobileExport(false); }} className="mobile-export-btn-item docx">
+                    📝 تصدير Word
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── Link Popup (Mobile) ─── */}
+        {showLinkInput && (
+          <div className="mobile-menu-overlay">
+            <div className="mobile-menu-panel" dir="rtl">
+              <div className="mobile-menu-header">
+                <span>إضافة رابط</span>
+                <button className="mobile-menu-close" onClick={() => setShowLinkInput(false)}>✕</button>
+              </div>
+              <div className="mobile-menu-section">
+                <input 
+                  type="text" 
+                  value={linkUrl} 
+                  onChange={(e) => setLinkUrl(e.target.value)} 
+                  placeholder="https://..." 
+                  className="toolbar-popup-input mobile-full"
+                  autoFocus
+                />
+                <div className="mobile-menu-row" style={{ marginTop: 12, gap: 8 }}>
+                  <button onClick={addLink} className="toolbar-popup-btn mobile-full">إضافة</button>
+                  <button onClick={() => setShowLinkInput(false)} className="toolbar-popup-btn secondary mobile-full">إلغاء</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     DESKTOP TOOLBAR — Full Layout (Original)
+     ═══════════════════════════════════════════════════════════════ */
   return (
     <div className="editor-toolbar" dir="rtl">
 

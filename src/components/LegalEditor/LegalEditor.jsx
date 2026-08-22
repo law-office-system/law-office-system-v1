@@ -22,8 +22,7 @@ import { storage } from '../../firebaseStorage';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import './EditorStyles.css';
 
-// 🚀 DYNAMIC IMPORT: Toolbar بس بيتحمل لما يظهر
-// ده بيوفر 1.35MB (export-vendor) من الـ LegalEditor bundle
+// 🚀 DYNAMIC IMPORT: Toolbar بس بيتحمل لما تدخل الصفحة
 const Toolbar = lazy(() => import('./Toolbar'));
 
 const FONT_OPTIONS = [
@@ -39,8 +38,21 @@ const toArabicNumbers = (str) => {
   return str.replace(/[0-9]/g, (w) => map[w]);
 };
 
+/* ═══ Hook: Detect Mobile Screen ═══ */
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+  return isMobile;
+};
+
 // ═══════════════════════════════════════════════════════════════
-// ═══ INTERACTIVE RULER — Per-Paragraph + Page Margins ═══
+// ═══ INTERACTIVE RULER — Per-Paragraph + Page Margins
+// ═══ NOW WITH TOUCH SUPPORT FOR MOBILE
 // ═══════════════════════════════════════════════════════════════
 const RULER_WIDTH_CM = 21;
 const RULER_PX = 794;
@@ -58,7 +70,8 @@ const InteractiveRuler = ({
   const rightPos = RULER_WIDTH_CM - marginRight;
   const leftPos = marginLeft;
 
-  const handleMouseDown = (side, e) => {
+  // ✅ UNIFIED: Handle both mouse and touch start
+  const handleStart = (side, e) => {
     e.preventDefault();
     e.stopPropagation();
     setDragging(side);
@@ -67,10 +80,16 @@ const InteractiveRuler = ({
   useEffect(() => {
     if (!dragging) return;
 
+    const getClientX = (e) => {
+      if (e.touches && e.touches.length > 0) return e.touches[0].clientX;
+      return e.clientX;
+    };
+
     const onMove = (e) => {
       if (!rulerRef.current) return;
       const rect = rulerRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left;
+      const clientX = getClientX(e);
+      const x = clientX - rect.left;
       let cm = (x / rect.width) * RULER_WIDTH_CM;
       cm = Math.max(0, Math.min(RULER_WIDTH_CM, cm));
       cm = Math.round(cm * 10) / 10;
@@ -84,13 +103,20 @@ const InteractiveRuler = ({
       }
     };
 
-    const onUp = () => setDragging(null);
+    const onEnd = () => setDragging(null);
 
+    // Mouse events
     document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    document.addEventListener('mouseup', onEnd);
+    // Touch events ✅
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onEnd);
+
     return () => {
       document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('mouseup', onEnd);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
     };
   }, [dragging, marginRight, marginLeft, onMarginChange]);
 
@@ -104,7 +130,8 @@ const InteractiveRuler = ({
       style={{
         position: 'relative',
         userSelect: 'none',
-        cursor: dragging ? 'ew-resize' : 'default'
+        cursor: dragging ? 'ew-resize' : 'default',
+        touchAction: 'none', // ✅ Prevent scroll while dragging
       }}
     >
       <div className="ruler-track" />
@@ -134,11 +161,12 @@ const InteractiveRuler = ({
         </span>
       ))}
 
-      {/* Right margin handle */}
+      {/* Right margin handle — MOUSE + TOUCH ✅ */}
       <div
         className={`ruler-handle ruler-handle-right ${dragging === 'right' ? 'dragging' : ''}`}
         style={{ left: `${(rightPos / RULER_WIDTH_CM) * 100}%` }}
-        onMouseDown={(e) => handleMouseDown('right', e)}
+        onMouseDown={(e) => handleStart('right', e)}
+        onTouchStart={(e) => handleStart('right', e)}
         title={`الهامش الأيمن: ${marginRight.toFixed(1)} سم`}
       >
         <div className="ruler-triangle ruler-triangle-right"
@@ -147,11 +175,12 @@ const InteractiveRuler = ({
         <div className="ruler-handle-label">{marginRight.toFixed(1)}</div>
       </div>
 
-      {/* Left margin handle */}
+      {/* Left margin handle — MOUSE + TOUCH ✅ */}
       <div
         className={`ruler-handle ruler-handle-left ${dragging === 'left' ? 'dragging' : ''}`}
         style={{ left: `${(leftPos / RULER_WIDTH_CM) * 100}%` }}
-        onMouseDown={(e) => handleMouseDown('left', e)}
+        onMouseDown={(e) => handleStart('left', e)}
+        onTouchStart={(e) => handleStart('left', e)}
         title={`الهامش الأيسر: ${marginLeft.toFixed(1)} سم`}
       >
         <div className="ruler-triangle ruler-triangle-left"
@@ -227,6 +256,7 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
   const [selectedFont, setSelectedFont] = useState('Segoe UI');
   const [selectedFontSize, setSelectedFontSize] = useState('16');
   const [showNameModal, setShowNameModal] = useState(false);
+  const [pageZoom, setPageZoom] = useState(1); // ✅ Zoom level
 
   // ═══ Page margins (global) ═══
   const [pageMarginRight, setPageMarginRight] = useState(2.5);
@@ -241,6 +271,7 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
 
   const fileInputRef = useRef(null);
   const editorContentRef = useRef(null);
+  const isMobile = useIsMobile();
 
   const marginRightPx = pageMarginRight * CM_TO_PX;
   const marginLeftPx = pageMarginLeft * CM_TO_PX;
@@ -369,7 +400,6 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
       },
     },
     onSelectionUpdate: ({ editor }) => {
-      // ═══ Detect paragraph/heading under cursor ═══
       const { $from } = editor.state.selection;
 
       let targetNode = null;
@@ -552,7 +582,6 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
     if (!editor) return;
 
     if (paragraphMode && paragraphPosRef.current !== null) {
-      // Apply to the current paragraph using setNodeMarkup
       const { state } = editor;
       const pos = paragraphPosRef.current;
       const node = state.doc.nodeAt(pos);
@@ -567,7 +596,6 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
         setSelectedParagraphMargins({ marginRight: mr, marginLeft: ml });
       }
     } else {
-      // Apply to page
       setPageMarginRight(mr);
       setPageMarginLeft(ml);
     }
@@ -595,6 +623,11 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
     paragraphPosRef.current = null;
   }, [editor]);
 
+  // ✅ Zoom controls for mobile
+  const zoomIn = () => setPageZoom(z => Math.min(z + 0.1, 1.5));
+  const zoomOut = () => setPageZoom(z => Math.max(z - 0.1, 0.5));
+  const zoomReset = () => setPageZoom(1);
+
   if (isLoading) {
     return (
       <div className="legal-editor-wrapper">
@@ -610,6 +643,8 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
           min-height: 297mm !important;
           padding-right: ${marginRightPx}px !important;
           padding-left: ${marginLeftPx}px !important;
+          transform: scale(${pageZoom});
+          transform-origin: top center;
         }
         .legal-editor-content.ProseMirror::before {
           content: '';
@@ -671,6 +706,15 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
               آخر حفظ: {lastSaved.toLocaleTimeString('ar-EG')}
             </span>
           )}
+          {/* ✅ Mobile Zoom Controls */}
+          {isMobile && (
+            <div className="zoom-controls">
+              <button onClick={zoomOut} className="zoom-btn" title="تصغير">−</button>
+              <span className="zoom-level">{Math.round(pageZoom * 100)}%</span>
+              <button onClick={zoomIn} className="zoom-btn" title="تكبير">+</button>
+              <button onClick={zoomReset} className="zoom-btn reset" title="إعادة">⟲</button>
+            </div>
+          )}
           <button
             onClick={requestSave}
             className="save-btn"
@@ -681,7 +725,6 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
         </div>
       </div>
 
-      {/* 🚀 Toolbar بيتحمل بشكل ديناميكي — بيوفر 1.35MB من الـ bundle الأساسي */}
       <Suspense fallback={
         <div className="toolbar-loading" style={{ 
           height: '48px', 

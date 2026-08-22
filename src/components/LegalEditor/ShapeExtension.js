@@ -39,6 +39,17 @@ const SHAPE_CONFIG = {
   },
 };
 
+// ✅ Helper: Get clientX/clientY from mouse or touch event
+const getClientPos = (e) => {
+  if (e.touches && e.touches.length > 0) {
+    return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }
+  if (e.changedTouches && e.changedTouches.length > 0) {
+    return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+  }
+  return { x: e.clientX, y: e.clientY };
+};
+
 export default Node.create({
   name: 'shape',
   group: 'block',
@@ -173,10 +184,8 @@ export default Node.create({
         isEditing = true;
         dom.classList.add('shape-editing');
         contentDOM.style.pointerEvents = 'all';
-        // Small delay to ensure focus works after selection
         setTimeout(() => {
           contentDOM.focus();
-          // Place cursor at end or select all
           const range = document.createRange();
           const sel = window.getSelection();
           if (contentDOM.lastChild) {
@@ -239,20 +248,20 @@ export default Node.create({
         }
       };
       document.addEventListener('mousedown', onDocumentClick);
+      document.addEventListener('touchstart', onDocumentClick, { passive: true });
 
       // ═══ Escape key to exit edit mode ═══
       const onKeyDown = (e) => {
         if (e.key === 'Escape' && isEditing) {
           e.preventDefault();
           exitEditMode();
-          // Refocus the editor
           editor.view.focus();
         }
       };
       document.addEventListener('keydown', onKeyDown);
 
-      // ═══ Event Handlers ═══
-      const onMouseDown = (e) => {
+      // ═══ Event Handlers — MOUSE + TOUCH ✅ ═══
+      const onPointerDown = (e) => {
         const target = e.target;
         const isHandle = target.closest('.shape-resize-handle');
         const isRot = target.closest('.shape-rotate-handle');
@@ -260,7 +269,6 @@ export default Node.create({
         const isText = contentDOM && contentDOM.contains(target);
         const isSvg = target.closest('svg');
 
-        // If clicking on text and in editing mode, let ProseMirror handle it
         if (isText && isEditing) return;
 
         e.preventDefault();
@@ -272,6 +280,8 @@ export default Node.create({
           editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos)));
         }
 
+        const startPos = getClientPos(e);
+
         // ═══ Resize ═══
         if (isHandle) {
           exitEditMode();
@@ -279,14 +289,14 @@ export default Node.create({
           const dir = isHandle.classList.contains('nw') ? 'nw' :
                       isHandle.classList.contains('ne') ? 'ne' :
                       isHandle.classList.contains('sw') ? 'sw' : 'se';
-          const startX = e.clientX;
-          const startY = e.clientY;
           const startW = state.width;
           const startH = state.height;
 
           const onMove = (ev) => {
-            const dx = ev.clientX - startX;
-            const dy = ev.clientY - startY;
+            ev.preventDefault();
+            const pos = getClientPos(ev);
+            const dx = pos.x - startPos.x;
+            const dy = pos.y - startPos.y;
             let newW = startW, newH = startH;
             if (dir.includes('e')) newW = Math.max(60, startW + dx);
             if (dir.includes('w')) newW = Math.max(60, startW - dx);
@@ -299,15 +309,19 @@ export default Node.create({
             svg.setAttribute('viewBox', `0 0 ${newW} ${newH}`);
           };
 
-          const onUp = () => {
+          const onUp = (ev) => {
             state.isResizing = false;
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
+            document.removeEventListener('touchmove', onMove);
+            document.removeEventListener('touchend', onUp);
             saveToProseMirror();
           };
 
           document.addEventListener('mousemove', onMove);
           document.addEventListener('mouseup', onUp);
+          document.addEventListener('touchmove', onMove, { passive: false });
+          document.addEventListener('touchend', onUp);
           return;
         }
 
@@ -320,44 +334,49 @@ export default Node.create({
           const centerY = rect.top + rect.height / 2;
 
           const onMove = (ev) => {
-            const dx = ev.clientX - centerX;
-            const dy = ev.clientY - centerY;
+            ev.preventDefault();
+            const pos = getClientPos(ev);
+            const dx = pos.x - centerX;
+            const dy = pos.y - centerY;
             let angle = Math.atan2(dy, dx) * (180 / Math.PI) - 90;
             state.rotation = Math.round(angle);
             applyTransform();
           };
 
-          const onUp = () => {
+          const onUp = (ev) => {
             state.isRotating = false;
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
+            document.removeEventListener('touchmove', onMove);
+            document.removeEventListener('touchend', onUp);
             saveToProseMirror();
           };
 
           document.addEventListener('mousemove', onMove);
           document.addEventListener('mouseup', onUp);
+          document.addEventListener('touchmove', onMove, { passive: false });
+          document.addEventListener('touchend', onUp);
           return;
         }
 
         // ═══ Drag shape body OR click to enter edit mode ═══
-        const startX = e.clientX;
-        const startY = e.clientY;
         const startOffsetX = state.x;
         const startOffsetY = state.y;
-        const clickThreshold = 5; // pixels - to distinguish click from drag
+        const clickThreshold = 5;
         let hasMoved = false;
 
         dom.style.cursor = 'move';
 
         const onMove = (ev) => {
-          const dx = ev.clientX - startX;
-          const dy = ev.clientY - startY;
+          ev.preventDefault();
+          const pos = getClientPos(ev);
+          const dx = pos.x - startPos.x;
+          const dy = pos.y - startPos.y;
 
-          // If moved beyond threshold, it's a drag
           if (!hasMoved && (Math.abs(dx) > clickThreshold || Math.abs(dy) > clickThreshold)) {
             hasMoved = true;
             state.isDragging = true;
-            exitEditMode(); // Exit edit mode if dragging
+            exitEditMode();
           }
 
           if (state.isDragging) {
@@ -372,9 +391,10 @@ export default Node.create({
           dom.style.cursor = '';
           document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup', onUp);
+          document.removeEventListener('touchmove', onMove);
+          document.removeEventListener('touchend', onUp);
 
           if (!hasMoved) {
-            // It was a click, not a drag
             if (isText && contentDOM) {
               enterEditMode();
             }
@@ -385,17 +405,31 @@ export default Node.create({
 
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('touchend', onUp);
       };
 
-      dom.addEventListener('mousedown', onMouseDown, true);
+      dom.addEventListener('mousedown', onPointerDown, true);
+      dom.addEventListener('touchstart', onPointerDown, { passive: false, capture: true });
 
-      // ═══ Double-click to enter edit mode (anywhere on shape) ═══
+      // ═══ Double-click / Double-tap to enter edit mode ═══
       if (contentDOM) {
+        let lastTap = 0;
         dom.addEventListener('dblclick', (e) => {
           e.preventDefault();
           e.stopPropagation();
           enterEditMode();
         });
+        // Double-tap for mobile
+        dom.addEventListener('touchend', (e) => {
+          const now = Date.now();
+          if (now - lastTap < 300) {
+            e.preventDefault();
+            e.stopPropagation();
+            enterEditMode();
+          }
+          lastTap = now;
+        }, { passive: false });
       }
 
       return {
@@ -409,7 +443,6 @@ export default Node.create({
           if (state.isDragging) return true;
           if (state.isResizing) return true;
           if (state.isRotating) return true;
-          // Allow text editing events when in edit mode
           if (isEditing && contentDOM && contentDOM.contains(event.target)) {
             return false;
           }
@@ -448,7 +481,6 @@ export default Node.create({
             }
           }
 
-          // Only update from ProseMirror if we're NOT currently interacting
           if (!state.isDragging && !state.isResizing && !state.isRotating) {
             const newX = nx || 0;
             const newY = ny || 0;
@@ -472,8 +504,10 @@ export default Node.create({
 
         destroy: () => {
           observer.disconnect();
-          dom.removeEventListener('mousedown', onMouseDown, true);
+          dom.removeEventListener('mousedown', onPointerDown, true);
+          dom.removeEventListener('touchstart', onPointerDown, { capture: true });
           document.removeEventListener('mousedown', onDocumentClick);
+          document.removeEventListener('touchstart', onDocumentClick);
           document.removeEventListener('keydown', onKeyDown);
         },
       };
