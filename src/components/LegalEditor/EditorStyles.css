@@ -370,12 +370,12 @@
   max-width: 100%;
   min-height: 297mm;
   padding: 40px 50px;
-  background: #ffffff; /* ← الصفحة بيضاء دائماً */
+  background: #ffffff;
   box-shadow: 0 0 0 1px rgba(0,0,0,0.2), 0 8px 32px rgba(0,0,0,0.3);
   border-radius: 2px;
   font-size: 16px;
   line-height: 2;
-  color: #1a1a1a; /* ← نص داكن للقراءة على الورقة البيضاء */
+  color: #1a1a1a;
   text-align: right;
   direction: rtl;
   outline: none;
@@ -729,7 +729,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Interactive Shapes
+   Interactive Shapes — FIXED for Mobile (No Freeze)
    ═══════════════════════════════════════════════════════════════ */
 
 .editor-shape-wrapper {
@@ -739,6 +739,12 @@
   cursor: grab;
   border-radius: 4px;
   transition: box-shadow 0.2s;
+  /* ✅ touch-action: manipulation — allows scroll, prevents double-tap zoom */
+  touch-action: manipulation;
+  /* ✅ Prevent text selection & callout on shape elements (stops freeze) */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .editor-shape-wrapper:hover {
@@ -873,6 +879,10 @@
   pointer-events: all;
   background: rgba(255, 255, 255, 0.9);
   border-radius: 4px;
+  /* ✅ Allow text selection when editing */
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 .editor-shape-wrapper.shape-editing {
@@ -1334,8 +1344,6 @@
   }
 }
 
-
-
 /* ═══════════════════════════════════════════════════════════════
    MOBILE TOOLBAR — Touch-Friendly Optimizations
    ═══════════════════════════════════════════════════════════════ */
@@ -1775,7 +1783,6 @@ body.mobile-menu-open {
   }
 }
 
-
 /* ═══════════════════════════════════════════════════════════════
    ZOOM CONTROLS — Mobile Only
    ═══════════════════════════════════════════════════════════════ */
@@ -1841,5 +1848,41 @@ body.mobile-menu-open {
   .zoom-level {
     font-size: 11px;
     min-width: 30px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE SHAPE FIX — Prevents freeze/hang on mobile
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Only apply touch restrictions to shape elements, NOT the whole page */
+.editor-shape-wrapper,
+.editor-shape-wrapper svg,
+.editor-shape-wrapper .shape-resize-handle,
+.editor-shape-wrapper .shape-rotate-handle,
+.editor-shape-wrapper .shape-rotate-line {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Allow text selection inside shape when editing */
+.editor-shape-wrapper.shape-editing .shape-text-content {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* Larger handles on touch devices */
+@media (hover: none) and (pointer: coarse) {
+  .shape-resize-handle {
+    width: 28px !important;
+    height: 28px !important;
+    opacity: 1 !important;
+  }
+  .shape-rotate-handle {
+    width: 32px !important;
+    height: 32px !important;
+    opacity: 1 !important;
   }
 }

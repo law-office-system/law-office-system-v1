@@ -39,17 +39,6 @@ const SHAPE_CONFIG = {
   },
 };
 
-// ✅ Helper: Get clientX/clientY from mouse or touch event
-const getClientPos = (e) => {
-  if (e.touches && e.touches.length > 0) {
-    return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-  }
-  if (e.changedTouches && e.changedTouches.length > 0) {
-    return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
-  }
-  return { x: e.clientX, y: e.clientY };
-};
-
 export default Node.create({
   name: 'shape',
   group: 'block',
@@ -94,15 +83,14 @@ export default Node.create({
       const { type, color, width, height, x = 0, y = 0, rotation = 0 } = node.attrs;
       const cfg = SHAPE_CONFIG[type] || SHAPE_CONFIG.rectangle;
 
-      // ═══ State ═══
       const state = {
         x: x, y: y, rotation: rotation, width: width, height: height,
         isDragging: false, isResizing: false, isRotating: false,
       };
 
       let isEditing = false;
+      let saveTimer = null;
 
-      // ═══ Create DOM ═══
       const dom = document.createElement('div');
       dom.className = 'editor-shape-wrapper';
       dom.setAttribute('data-shape', type);
@@ -113,14 +101,13 @@ export default Node.create({
         dom.style.cssText = `width:${state.width}px;height:${state.height}px;position:relative;display:inline-block;vertical-align:top;transform:translate(${state.x}px,${state.y}px) rotate(${state.rotation}deg);margin:8px 0;`;
       }
 
-      // ═══ SVG with transparent background to catch clicks ═══
+      // SVG
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('width', '100%');
       svg.setAttribute('height', '100%');
       svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
       svg.style.cssText = 'display:block;position:absolute;inset:0;pointer-events:all;';
 
-      // Transparent background rect to catch clicks in empty areas
       const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       bgRect.setAttribute('x', '0');
       bgRect.setAttribute('y', '0');
@@ -135,7 +122,7 @@ export default Node.create({
       svg.appendChild(shape);
       dom.appendChild(svg);
 
-      // ═══ Resize Handles ═══
+      // Resize Handles
       const corners = [
         { cls: 'nw', cursor: 'nw-resize' },
         { cls: 'ne', cursor: 'ne-resize' },
@@ -173,30 +160,16 @@ export default Node.create({
       if (cfg.hasText) {
         contentDOM = document.createElement('div');
         contentDOM.className = 'shape-text-content';
-        contentDOM.setAttribute('contenteditable', 'true');
-        contentDOM.style.pointerEvents = 'none'; // Default: no mouse events (for drag)
+        contentDOM.style.pointerEvents = 'none';
         dom.appendChild(contentDOM);
       }
 
-      // ═══ Edit Mode Helpers ═══
       const enterEditMode = () => {
         if (!contentDOM || isEditing) return;
         isEditing = true;
         dom.classList.add('shape-editing');
         contentDOM.style.pointerEvents = 'all';
-        setTimeout(() => {
-          contentDOM.focus();
-          const range = document.createRange();
-          const sel = window.getSelection();
-          if (contentDOM.lastChild) {
-            range.setStartAfter(contentDOM.lastChild);
-          } else {
-            range.setStart(contentDOM, 0);
-          }
-          range.collapse(true);
-          sel.removeAllRanges();
-          sel.addRange(range);
-        }, 10);
+        setTimeout(() => contentDOM.focus(), 10);
       };
 
       const exitEditMode = () => {
@@ -207,50 +180,34 @@ export default Node.create({
         contentDOM.blur();
       };
 
-      // ═══ Save to ProseMirror ═══
       const saveToProseMirror = () => {
-        const p = getPos();
-        if (typeof p !== 'number') return;
-        try {
-          editor.view.dispatch(
-            editor.state.tr.setNodeMarkup(p, undefined, {
-              ...node.attrs,
-              x: state.x,
-              y: state.y,
-              rotation: state.rotation,
-              width: state.width,
-              height: state.height,
-            })
-          );
-        } catch (err) {
-          console.warn('save failed:', err);
-        }
+        if (saveTimer) clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
+          const p = getPos();
+          if (typeof p !== 'number') return;
+          try {
+            editor.view.dispatch(
+              editor.state.tr.setNodeMarkup(p, undefined, {
+                ...node.attrs,
+                x: state.x,
+                y: state.y,
+                rotation: state.rotation,
+                width: state.width,
+                height: state.height,
+              })
+            );
+          } catch (err) {
+            console.warn('save failed:', err);
+          }
+        }, 150);
       };
 
-      // ═══ MutationObserver ═══
-      const observer = new MutationObserver((mutations) => {
-        for (const m of mutations) {
-          if (m.type === 'attributes' && m.attributeName === 'style') {
-            const currentTransform = dom.style.transform;
-            const expectedTransform = `translate(${state.x}px, ${state.y}px) rotate(${state.rotation}deg)`;
-            if (!currentTransform.includes(`translate(${state.x}px`) || !currentTransform.includes(`rotate(${state.rotation}deg)`)) {
-              applyTransform();
-            }
-          }
-        }
-      });
-      observer.observe(dom, { attributes: true, attributeFilter: ['style'] });
-
-      // ═══ Click outside to exit edit mode ═══
       const onDocumentClick = (e) => {
-        if (!dom.contains(e.target)) {
-          exitEditMode();
-        }
+        if (!dom.contains(e.target)) exitEditMode();
       };
       document.addEventListener('mousedown', onDocumentClick);
       document.addEventListener('touchstart', onDocumentClick, { passive: true });
 
-      // ═══ Escape key to exit edit mode ═══
       const onKeyDown = (e) => {
         if (e.key === 'Escape' && isEditing) {
           e.preventDefault();
@@ -260,29 +217,28 @@ export default Node.create({
       };
       document.addEventListener('keydown', onKeyDown);
 
-      // ═══ Event Handlers — MOUSE + TOUCH ✅ ═══
-      const onPointerDown = (e) => {
+      // ═══════════════════════════════════════════════════════════════
+      // MOUSE handlers (desktop) — unchanged
+      // ═══════════════════════════════════════════════════════════════
+      const onMouseDown = (e) => {
         const target = e.target;
         const isHandle = target.closest('.shape-resize-handle');
         const isRot = target.closest('.shape-rotate-handle');
         const isRotLine = target.classList?.contains('shape-rotate-line');
         const isText = contentDOM && contentDOM.contains(target);
-        const isSvg = target.closest('svg');
 
         if (isText && isEditing) return;
 
         e.preventDefault();
         e.stopPropagation();
 
-        // Select shape in ProseMirror
         const pos = getPos();
         if (typeof pos === 'number') {
           editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos)));
         }
 
-        const startPos = getClientPos(e);
+        const startPos = { x: e.clientX, y: e.clientY };
 
-        // ═══ Resize ═══
         if (isHandle) {
           exitEditMode();
           state.isResizing = true;
@@ -292,11 +248,10 @@ export default Node.create({
           const startW = state.width;
           const startH = state.height;
 
-          const onMove = (ev) => {
+          const onMouseMove = (ev) => {
             ev.preventDefault();
-            const pos = getClientPos(ev);
-            const dx = pos.x - startPos.x;
-            const dy = pos.y - startPos.y;
+            const dx = ev.clientX - startPos.x;
+            const dy = ev.clientY - startPos.y;
             let newW = startW, newH = startH;
             if (dir.includes('e')) newW = Math.max(60, startW + dx);
             if (dir.includes('w')) newW = Math.max(60, startW - dx);
@@ -309,23 +264,18 @@ export default Node.create({
             svg.setAttribute('viewBox', `0 0 ${newW} ${newH}`);
           };
 
-          const onUp = (ev) => {
+          const onMouseUp = () => {
             state.isResizing = false;
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-            document.removeEventListener('touchmove', onMove);
-            document.removeEventListener('touchend', onUp);
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
             saveToProseMirror();
           };
 
-          document.addEventListener('mousemove', onMove);
-          document.addEventListener('mouseup', onUp);
-          document.addEventListener('touchmove', onMove, { passive: false });
-          document.addEventListener('touchend', onUp);
+          document.addEventListener('mousemove', onMouseMove);
+          document.addEventListener('mouseup', onMouseUp);
           return;
         }
 
-        // ═══ Rotate ═══
         if (isRot || isRotLine) {
           exitEditMode();
           state.isRotating = true;
@@ -333,33 +283,27 @@ export default Node.create({
           const centerX = rect.left + rect.width / 2;
           const centerY = rect.top + rect.height / 2;
 
-          const onMove = (ev) => {
+          const onMouseMove = (ev) => {
             ev.preventDefault();
-            const pos = getClientPos(ev);
-            const dx = pos.x - centerX;
-            const dy = pos.y - centerY;
+            const dx = ev.clientX - centerX;
+            const dy = ev.clientY - centerY;
             let angle = Math.atan2(dy, dx) * (180 / Math.PI) - 90;
             state.rotation = Math.round(angle);
             applyTransform();
           };
 
-          const onUp = (ev) => {
+          const onMouseUp = () => {
             state.isRotating = false;
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-            document.removeEventListener('touchmove', onMove);
-            document.removeEventListener('touchend', onUp);
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
             saveToProseMirror();
           };
 
-          document.addEventListener('mousemove', onMove);
-          document.addEventListener('mouseup', onUp);
-          document.addEventListener('touchmove', onMove, { passive: false });
-          document.addEventListener('touchend', onUp);
+          document.addEventListener('mousemove', onMouseMove);
+          document.addEventListener('mouseup', onMouseUp);
           return;
         }
 
-        // ═══ Drag shape body OR click to enter edit mode ═══
         const startOffsetX = state.x;
         const startOffsetY = state.y;
         const clickThreshold = 5;
@@ -367,11 +311,10 @@ export default Node.create({
 
         dom.style.cursor = 'move';
 
-        const onMove = (ev) => {
+        const onMouseMove = (ev) => {
           ev.preventDefault();
-          const pos = getClientPos(ev);
-          const dx = pos.x - startPos.x;
-          const dy = pos.y - startPos.y;
+          const dx = ev.clientX - startPos.x;
+          const dy = ev.clientY - startPos.y;
 
           if (!hasMoved && (Math.abs(dx) > clickThreshold || Math.abs(dy) > clickThreshold)) {
             hasMoved = true;
@@ -386,33 +329,171 @@ export default Node.create({
           }
         };
 
-        const onUp = (ev) => {
+        const onMouseUp = () => {
           state.isDragging = false;
           dom.style.cursor = '';
-          document.removeEventListener('mousemove', onMove);
-          document.removeEventListener('mouseup', onUp);
-          document.removeEventListener('touchmove', onMove);
-          document.removeEventListener('touchend', onUp);
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
 
-          if (!hasMoved) {
-            if (isText && contentDOM) {
-              enterEditMode();
-            }
+          if (!hasMoved && isText && contentDOM) {
+            enterEditMode();
           } else {
             saveToProseMirror();
           }
         };
 
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-        document.addEventListener('touchmove', onMove, { passive: false });
-        document.addEventListener('touchend', onUp);
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
       };
 
-      dom.addEventListener('mousedown', onPointerDown, true);
-      dom.addEventListener('touchstart', onPointerDown, { passive: false, capture: true });
+      // ═══════════════════════════════════════════════════════════════
+      // TOUCH handlers (mobile) — prevents scroll during drag/resize/rotate
+      // Key: touchmove with { passive: false } + preventDefault()
+      // ═══════════════════════════════════════════════════════════════
+      const onTouchStart = (e) => {
+        if (e.touches.length !== 1) return;
 
-      // ═══ Double-click / Double-tap to enter edit mode ═══
+        const target = e.target;
+        const isHandle = target.closest('.shape-resize-handle');
+        const isRot = target.closest('.shape-rotate-handle');
+        const isRotLine = target.classList?.contains('shape-rotate-line');
+        const isText = contentDOM && contentDOM.contains(target);
+
+        if (isText && isEditing) return;
+
+        e.stopPropagation();
+
+        const pos = getPos();
+        if (typeof pos === 'number') {
+          editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos)));
+        }
+
+        const touch = e.touches[0];
+        const startPos = { x: touch.clientX, y: touch.clientY };
+
+        // ═══ Touch Resize ═══
+        if (isHandle) {
+          exitEditMode();
+          state.isResizing = true;
+          const dir = isHandle.classList.contains('nw') ? 'nw' :
+                      isHandle.classList.contains('ne') ? 'ne' :
+                      isHandle.classList.contains('sw') ? 'sw' : 'se';
+          const startW = state.width;
+          const startH = state.height;
+
+          const onTouchMove = (ev) => {
+            if (ev.touches.length !== 1) return;
+            ev.preventDefault(); // ✅ Prevent page scroll
+            const t = ev.touches[0];
+            const dx = t.clientX - startPos.x;
+            const dy = t.clientY - startPos.y;
+            let newW = startW, newH = startH;
+            if (dir.includes('e')) newW = Math.max(60, startW + dx);
+            if (dir.includes('w')) newW = Math.max(60, startW - dx);
+            if (dir.includes('s')) newH = Math.max(40, startH + dy);
+            if (dir.includes('n')) newH = Math.max(40, startH - dy);
+            state.width = newW;
+            state.height = newH;
+            dom.style.width = `${newW}px`;
+            dom.style.height = `${newH}px`;
+            svg.setAttribute('viewBox', `0 0 ${newW} ${newH}`);
+          };
+
+          const onTouchEnd = () => {
+            state.isResizing = false;
+            document.removeEventListener('touchmove', onTouchMove);
+            document.removeEventListener('touchend', onTouchEnd);
+            document.removeEventListener('touchcancel', onTouchEnd);
+            saveToProseMirror();
+          };
+
+          document.addEventListener('touchmove', onTouchMove, { passive: false });
+          document.addEventListener('touchend', onTouchEnd);
+          document.addEventListener('touchcancel', onTouchEnd);
+          return;
+        }
+
+        // ═══ Touch Rotate ═══
+        if (isRot || isRotLine) {
+          exitEditMode();
+          state.isRotating = true;
+          const rect = dom.getBoundingClientRect();
+          const centerX = rect.left + rect.width / 2;
+          const centerY = rect.top + rect.height / 2;
+
+          const onTouchMove = (ev) => {
+            if (ev.touches.length !== 1) return;
+            ev.preventDefault(); // ✅ Prevent page scroll
+            const t = ev.touches[0];
+            const dx = t.clientX - centerX;
+            const dy = t.clientY - centerY;
+            let angle = Math.atan2(dy, dx) * (180 / Math.PI) - 90;
+            state.rotation = Math.round(angle);
+            applyTransform();
+          };
+
+          const onTouchEnd = () => {
+            state.isRotating = false;
+            document.removeEventListener('touchmove', onTouchMove);
+            document.removeEventListener('touchend', onTouchEnd);
+            document.removeEventListener('touchcancel', onTouchEnd);
+            saveToProseMirror();
+          };
+
+          document.addEventListener('touchmove', onTouchMove, { passive: false });
+          document.addEventListener('touchend', onTouchEnd);
+          document.addEventListener('touchcancel', onTouchEnd);
+          return;
+        }
+
+        // ═══ Touch Drag ═══
+        const startOffsetX = state.x;
+        const startOffsetY = state.y;
+        const clickThreshold = 8;
+        let hasMoved = false;
+
+        const onTouchMove = (ev) => {
+          if (ev.touches.length !== 1) return;
+          const t = ev.touches[0];
+          const dx = t.clientX - startPos.x;
+          const dy = t.clientY - startPos.y;
+
+          if (!hasMoved && (Math.abs(dx) > clickThreshold || Math.abs(dy) > clickThreshold)) {
+            hasMoved = true;
+            state.isDragging = true;
+            exitEditMode();
+          }
+
+          if (state.isDragging) {
+            ev.preventDefault(); // ✅ Prevent page scroll only when dragging
+            state.x = startOffsetX + dx;
+            state.y = startOffsetY + dy;
+            applyTransform();
+          }
+        };
+
+        const onTouchEnd = () => {
+          state.isDragging = false;
+          document.removeEventListener('touchmove', onTouchMove);
+          document.removeEventListener('touchend', onTouchEnd);
+          document.removeEventListener('touchcancel', onTouchEnd);
+
+          if (!hasMoved && isText && contentDOM) {
+            enterEditMode();
+          } else if (hasMoved) {
+            saveToProseMirror();
+          }
+        };
+
+        document.addEventListener('touchmove', onTouchMove, { passive: true });
+        document.addEventListener('touchend', onTouchEnd);
+        document.addEventListener('touchcancel', onTouchEnd);
+      };
+
+      dom.addEventListener('mousedown', onMouseDown, true);
+      dom.addEventListener('touchstart', onTouchStart, { passive: true });
+
+      // Double-click / Double-tap
       if (contentDOM) {
         let lastTap = 0;
         dom.addEventListener('dblclick', (e) => {
@@ -420,7 +501,6 @@ export default Node.create({
           e.stopPropagation();
           enterEditMode();
         });
-        // Double-tap for mobile
         dom.addEventListener('touchend', (e) => {
           const now = Date.now();
           if (now - lastTap < 300) {
@@ -503,9 +583,9 @@ export default Node.create({
         },
 
         destroy: () => {
-          observer.disconnect();
-          dom.removeEventListener('mousedown', onPointerDown, true);
-          dom.removeEventListener('touchstart', onPointerDown, { capture: true });
+          if (saveTimer) clearTimeout(saveTimer);
+          dom.removeEventListener('mousedown', onMouseDown, true);
+          dom.removeEventListener('touchstart', onTouchStart);
           document.removeEventListener('mousedown', onDocumentClick);
           document.removeEventListener('touchstart', onDocumentClick);
           document.removeEventListener('keydown', onKeyDown);
