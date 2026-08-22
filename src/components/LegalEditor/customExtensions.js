@@ -18,7 +18,6 @@ export const FontSize = Extension.create({
             parseHTML: element => {
               const size = element.style.fontSize
               if (!size) return null
-              // Keep the original value with unit if present
               return size
             },
             renderHTML: attributes => {
@@ -58,7 +57,7 @@ export const PageBreak = Node.create({
   },
 
   renderHTML() {
-    return ['div', { 
+    return ['div', {
       'data-page-break': 'true',
       style: 'height:80px;background:repeating-linear-gradient(0deg,transparent,transparent 8px,#fee2e2 8px,#fee2e2 16px);margin:20px 0;display:flex;align-items:center;justify-content:center;'
     }, ['span', { style: 'font-size:14px;font-weight:800;color:#dc2626;background:#fff;padding:4px 16px;border-radius:8px;border:2px solid #dc2626;' }, '◆ ◆ ◆  فاصل صفحة  ◆ ◆ ◆']]
@@ -74,7 +73,7 @@ export const PageBreak = Node.create({
 })
 
 // ═══════════════════════════════════════════════════════════════
-// 3️⃣ Line Height Extension — FIXED: apply to active node type
+// 3️⃣ Line Height Extension
 // ═══════════════════════════════════════════════════════════════
 export const LineHeight = Extension.create({
   name: 'lineHeight',
@@ -101,7 +100,6 @@ export const LineHeight = Extension.create({
   addCommands() {
     return {
       setLineHeight: value => ({ chain, state }) => {
-        // FIXED: detect the actual node type at cursor position
         const { $from } = state.selection
         const nodeType = $from.parent.type.name
         const targetType = this.options.types.includes(nodeType) ? nodeType : this.options.types[0]
@@ -112,7 +110,7 @@ export const LineHeight = Extension.create({
 })
 
 // ═══════════════════════════════════════════════════════════════
-// 4️⃣ Paragraph Spacing Extension — FIXED: apply to active node type
+// 4️⃣ Paragraph Spacing & Margin Extension — ENHANCED with L/R margins
 // ═══════════════════════════════════════════════════════════════
 export const ParagraphSpacing = Extension.create({
   name: 'paragraphSpacing',
@@ -140,20 +138,46 @@ export const ParagraphSpacing = Extension.create({
               return { style: `margin-bottom: ${attributes.marginBottom}px` }
             },
           },
+          // ═══ NEW: Paragraph-level left/right margins for ruler ═══
+          marginRight: {
+            default: null,
+            parseHTML: element => {
+              const val = element.style.marginRight
+              if (!val) return null
+              return val.includes('cm') ? parseFloat(val) : parseFloat(val) / 37.8
+            },
+            renderHTML: attributes => {
+              if (attributes.marginRight === null || attributes.marginRight === undefined) return {}
+              return { style: `margin-right: ${attributes.marginRight}cm` }
+            },
+          },
+          marginLeft: {
+            default: null,
+            parseHTML: element => {
+              const val = element.style.marginLeft
+              if (!val) return null
+              return val.includes('cm') ? parseFloat(val) : parseFloat(val) / 37.8
+            },
+            renderHTML: attributes => {
+              if (attributes.marginLeft === null || attributes.marginLeft === undefined) return {}
+              return { style: `margin-left: ${attributes.marginLeft}cm` }
+            },
+          },
         },
       },
     ]
   },
   addCommands() {
     return {
-      setParagraphSpacing: ({ top, bottom }) => ({ chain, state }) => {
-        // FIXED: detect the actual node type at cursor position
+      setParagraphSpacing: ({ top, bottom, right, left }) => ({ chain, state }) => {
         const { $from } = state.selection
         const nodeType = $from.parent.type.name
         const targetType = this.options.types.includes(nodeType) ? nodeType : this.options.types[0]
         const updates = {}
         if (top !== undefined) updates.marginTop = top
         if (bottom !== undefined) updates.marginBottom = bottom
+        if (right !== undefined) updates.marginRight = right
+        if (left !== undefined) updates.marginLeft = left
         return chain().updateAttributes(targetType, updates).run()
       },
     }
@@ -161,7 +185,7 @@ export const ParagraphSpacing = Extension.create({
 })
 
 // ═══════════════════════════════════════════════════════════════
-// 5️⃣ Indent Extension (RTL) — FIXED: use tr.setNodeMarkup directly
+// 5️⃣ Indent Extension (RTL)
 // ═══════════════════════════════════════════════════════════════
 export const Indent = Extension.create({
   name: 'indent',

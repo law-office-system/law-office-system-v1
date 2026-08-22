@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   Legal Editor — Multi-Page A4 with Automatic Boundaries
+   Legal Editor — Multi-Page A4 + Interactive Ruler + Responsive
    ═══════════════════════════════════════════════════════════════ */
 
 .legal-editor-wrapper {
@@ -250,7 +250,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   A4 Page — Automatic page boundaries every 297mm
+   A4 Page
    ═══════════════════════════════════════════════════════════════ */
 
 .legal-editor-content,
@@ -274,7 +274,7 @@
   word-wrap: break-word;
   word-break: break-word;
 
-  /* ═══ AUTOMATIC PAGE BOUNDARIES ═══ */
+  /* Page boundaries */
   background-image: repeating-linear-gradient(
     to bottom,
     transparent 0mm,
@@ -291,7 +291,6 @@
 
 .legal-editor-content:focus { outline: none; }
 
-/* Protect all children from overflow */
 .legal-editor-content * {
   max-width: 100%;
   box-sizing: border-box;
@@ -452,7 +451,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Tables — Stable, RTL, bounded
+   Tables
    ═══════════════════════════════════════════════════════════════ */
 
 .legal-editor-content table {
@@ -482,7 +481,7 @@
 .legal-editor-content tr:nth-child(even) { background: #fafafa; }
 
 /* ═══════════════════════════════════════════════════════════════
-   Images — bounded
+   Images
    ═══════════════════════════════════════════════════════════════ */
 
 .legal-editor-content img {
@@ -517,7 +516,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Manual Page Break (from button)
+   Page Break
    ═══════════════════════════════════════════════════════════════ */
 
 .page-break-visual,
@@ -555,7 +554,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Interactive Shapes — Visual offset via transform (in flow)
+   Interactive Shapes
    ═══════════════════════════════════════════════════════════════ */
 
 .editor-shape-wrapper {
@@ -631,7 +630,6 @@
   transform: translateX(-50%) scale(1.3);
 }
 
-/* Connector line between shape and rotation handle */
 .shape-rotate-line {
   position: absolute;
   top: -8px;
@@ -645,7 +643,6 @@
   transition: opacity 0.2s;
 }
 
-/* Show rotation handle on hover/select/edit */
 .editor-shape-wrapper:hover .shape-rotate-handle,
 .editor-shape-wrapper.ProseMirror-selectednode .shape-rotate-handle,
 .editor-shape-wrapper.shape-editing .shape-rotate-handle,
@@ -682,39 +679,34 @@
 
 .shape-text-content p { margin: 0; width: 100%; }
 
-/* Line shape (no text) */
 .editor-shape-wrapper[data-shape="line"] .shape-text-content {
   display: none !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   SHAPE EDITING MODE — Drag fix
+   SHAPE EDITING MODE
    ═══════════════════════════════════════════════════════════════ */
 
-/* Default: text content does NOT receive mouse events (for drag) */
 .shape-text-content {
   pointer-events: none;
 }
 
-/* When in editing mode: text content receives mouse events */
 .editor-shape-wrapper.shape-editing .shape-text-content {
   pointer-events: all;
   background: rgba(255, 255, 255, 0.9);
   border-radius: 4px;
 }
 
-/* Visual indicator for editing mode */
 .editor-shape-wrapper.shape-editing {
   box-shadow: 0 0 0 3px #2563eb, 0 0 0 6px rgba(37, 99, 235, 0.2) !important;
 }
 
-/* Ensure SVG catches all mouse events for drag */
 .editor-shape-wrapper svg {
   pointer-events: all !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   INTERACTIVE RULER — Draggable Margin Handles
+   INTERACTIVE RULER — Per Paragraph + Page Margins
    ═══════════════════════════════════════════════════════════════ */
 
 .editor-ruler-interactive {
@@ -732,12 +724,11 @@
   z-index: 10;
   user-select: none;
   flex-shrink: 0;
-  height: 32px;
+  height: 36px;
   box-sizing: border-box;
   overflow: hidden;
 }
 
-/* Ruler track line */
 .ruler-track {
   position: absolute;
   bottom: 6px;
@@ -748,7 +739,6 @@
   pointer-events: none;
 }
 
-/* Number marks */
 .ruler-mark {
   position: relative;
   width: 5%;
@@ -792,7 +782,6 @@
   z-index: 30;
 }
 
-/* Triangle shape */
 .ruler-triangle {
   width: 0;
   height: 0;
@@ -811,7 +800,6 @@
   filter: drop-shadow(0 1px 2px rgba(220, 38, 38, 0.4));
 }
 
-/* Handle label (shows cm value) */
 .ruler-handle-label {
   position: absolute;
   top: -18px;
@@ -834,13 +822,36 @@
   opacity: 1;
 }
 
-/* ═══ Writing Area Highlight on Ruler ═══ */
+/* ═══ Writing Area Highlight ═══ */
 .ruler-writing-area {
   z-index: 1;
   pointer-events: none;
 }
 
-/* ═══ Margin Guides inside the Page ═══ */
+/* ═══ Paragraph Mode Indicator ═══ */
+.ruler-mode-indicator {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #dc2626;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 8px;
+  white-space: nowrap;
+  z-index: 25;
+  pointer-events: none;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; }
+}
+
+/* ═══ Margin Guides inside Page ═══ */
 .legal-editor-content.ProseMirror::before,
 .legal-editor-content.ProseMirror::after {
   content: '';
@@ -865,31 +876,222 @@
 .editor-container::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
 .editor-container::-webkit-scrollbar-thumb:hover { background: #666; }
 
-/* ═══ Responsive ═══ */
-@media (max-width: 768px) {
-  .editor-header { flex-direction: column; gap: 8px; padding: 10px 16px; }
-  .document-title-input { width: 100%; font-size: 16px; }
-  .editor-meta { width: 100%; justify-content: space-between; }
-  .editor-toolbar { padding: 6px 10px; }
-  .toolbar-btn { padding: 5px 8px; font-size: 12px; }
-  .editor-container { padding: 15px; }
-  .legal-editor-content { width: 100%; padding: 25px 20px; min-height: auto; background-image: none; }
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE — Mobile & Tablet
+   ═══════════════════════════════════════════════════════════════ */
 
+/* ─── Tablets (max-width: 1024px) ─── */
+@media (max-width: 1024px) {
+  .legal-editor-content,
+  .legal-editor-content.ProseMirror {
+    width: 100%;
+    padding: 30px 35px;
+    min-height: auto;
+  }
+
+  .editor-container {
+    padding: 20px;
+  }
+
+  .editor-toolbar {
+    padding: 6px 10px;
+    gap: 2px;
+  }
+
+  .toolbar-btn {
+    padding: 5px 8px;
+    font-size: 12px;
+    min-height: 28px;
+  }
+
+  .toolbar-dropdown {
+    height: 28px;
+    font-size: 12px;
+  }
+}
+
+/* ─── Mobile (max-width: 768px) ─── */
+@media (max-width: 768px) {
+  .legal-editor-wrapper {
+    height: 100dvh; /* Dynamic viewport height for mobile */
+  }
+
+  .editor-header {
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 16px;
+  }
+
+  .document-title-input {
+    width: 100%;
+    font-size: 16px;
+  }
+
+  .editor-meta {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .save-status {
+    font-size: 11px;
+    padding: 2px 6px;
+  }
+
+  .save-btn {
+    padding: 6px 14px;
+    font-size: 12px;
+  }
+
+  .editor-toolbar {
+    padding: 4px 8px;
+    gap: 1px;
+  }
+
+  .toolbar-btn {
+    padding: 4px 6px;
+    font-size: 11px;
+    min-height: 26px;
+  }
+
+  .toolbar-divider {
+    height: 22px;
+    margin: 0 2px;
+  }
+
+  .toolbar-dropdown {
+    height: 26px;
+    font-size: 11px;
+    padding: 3px 5px;
+  }
+
+  .toolbar-label,
+  .toolbar-label-sm {
+    display: none;
+  }
+
+  .editor-container {
+    padding: 10px;
+  }
+
+  .legal-editor-content,
+  .legal-editor-content.ProseMirror {
+    width: 100%;
+    padding: 20px 16px;
+    min-height: auto;
+    font-size: 15px;
+    line-height: 1.8;
+    background-image: none; /* Hide page boundaries on mobile */
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  }
+
+  .legal-editor-content h1 { font-size: 22px; }
+  .legal-editor-content h2 { font-size: 18px; }
+  .legal-editor-content h3 { font-size: 16px; }
+
+  /* Ruler adjustments */
   .editor-ruler-interactive {
     padding: 4px 20px 2px 20px;
     height: 28px;
   }
+
   .ruler-track {
     left: 20px;
     right: 20px;
   }
+
   .ruler-triangle-right,
   .ruler-triangle-left {
     border-width: 0 6px 10px 6px;
   }
+
   .ruler-handle-label {
     font-size: 9px;
     padding: 1px 4px;
     top: -16px;
+  }
+
+  .ruler-mode-indicator {
+    font-size: 8px;
+    padding: 1px 5px;
+  }
+
+  .editor-footer {
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px 12px;
+    font-size: 10px;
+  }
+
+  /* Touch-friendly shapes */
+  .shape-resize-handle {
+    width: 20px;
+    height: 20px;
+    opacity: 1 !important;
+  }
+
+  .shape-rotate-handle {
+    width: 24px;
+    height: 24px;
+    opacity: 1 !important;
+  }
+
+  /* Modal on mobile */
+  .modal-content {
+    width: 95%;
+    padding: 16px;
+    border-radius: 12px;
+  }
+
+  .modal-title { font-size: 16px; }
+  .modal-input { font-size: 14px; padding: 8px 12px; }
+}
+
+/* ─── Small Mobile (max-width: 480px) ─── */
+@media (max-width: 480px) {
+  .editor-toolbar {
+    padding: 3px 5px;
+  }
+
+  .toolbar-btn {
+    padding: 3px 5px;
+    font-size: 10px;
+    min-height: 24px;
+  }
+
+  .toolbar-dropdown {
+    height: 24px;
+    font-size: 10px;
+    width: 60px !important;
+  }
+
+  .legal-editor-content,
+  .legal-editor-content.ProseMirror {
+    padding: 16px 12px;
+    font-size: 14px;
+  }
+
+  .editor-footer {
+    font-size: 9px;
+    padding: 4px 8px;
+  }
+
+  .editor-footer span {
+    white-space: nowrap;
+  }
+}
+
+/* ─── Landscape Mobile ─── */
+@media (max-height: 500px) and (orientation: landscape) {
+  .editor-header {
+    padding: 6px 12px;
+  }
+
+  .editor-toolbar {
+    padding: 3px 8px;
+  }
+
+  .editor-container {
+    padding: 8px;
   }
 }

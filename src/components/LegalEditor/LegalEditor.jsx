@@ -37,17 +37,21 @@ const toArabicNumbers = (str) => {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// ═══ INTERACTIVE RULER with Draggable Margin Handles ═══
+// ═══ INTERACTIVE RULER — Per-Paragraph + Page Margins ═══
 // ═══════════════════════════════════════════════════════════════
-const RULER_WIDTH_CM = 21; // A4 width in cm
-const RULER_PX = 794;      // 210mm in px at 96dpi
-const CM_TO_PX = RULER_PX / RULER_WIDTH_CM; // ~37.8 px per cm
+const RULER_WIDTH_CM = 21;
+const RULER_PX = 794;
+const CM_TO_PX = RULER_PX / RULER_WIDTH_CM;
 
-const InteractiveRuler = ({ marginRight, marginLeft, onMarginChange }) => {
+const InteractiveRuler = ({
+  marginRight,
+  marginLeft,
+  onMarginChange,
+  paragraphMode,
+}) => {
   const rulerRef = useRef(null);
-  const [dragging, setDragging] = useState(null); // 'right' | 'left' | null
+  const [dragging, setDragging] = useState(null);
 
-  // Convert margin (cm from edge) to position (cm from left of ruler)
   const rightPos = RULER_WIDTH_CM - marginRight;
   const leftPos = marginLeft;
 
@@ -66,15 +70,13 @@ const InteractiveRuler = ({ marginRight, marginLeft, onMarginChange }) => {
       const x = e.clientX - rect.left;
       let cm = (x / rect.width) * RULER_WIDTH_CM;
       cm = Math.max(0, Math.min(RULER_WIDTH_CM, cm));
-      cm = Math.round(cm * 10) / 10; // Round to 1 decimal
+      cm = Math.round(cm * 10) / 10;
 
       if (dragging === 'right') {
-        // Right margin = distance from right edge
-        const newMarginRight = Math.max(0.5, Math.min(RULER_WIDTH_CM - leftPos - 2, RULER_WIDTH_CM - cm));
+        const newMarginRight = Math.max(0, Math.min(RULER_WIDTH_CM - leftPos - 2, RULER_WIDTH_CM - cm));
         onMarginChange({ marginRight: newMarginRight, marginLeft });
       } else {
-        // Left margin = distance from left edge
-        const newMarginLeft = Math.max(0.5, Math.min(RULER_WIDTH_CM - marginRight - 2, cm));
+        const newMarginLeft = Math.max(0, Math.min(RULER_WIDTH_CM - marginRight - 2, cm));
         onMarginChange({ marginRight, marginLeft: newMarginLeft });
       }
     };
@@ -96,9 +98,12 @@ const InteractiveRuler = ({ marginRight, marginLeft, onMarginChange }) => {
       ref={rulerRef}
       className="editor-ruler-interactive"
       dir="ltr"
-      style={{ position: 'relative', userSelect: 'none', cursor: dragging ? 'ew-resize' : 'default' }}
+      style={{
+        position: 'relative',
+        userSelect: 'none',
+        cursor: dragging ? 'ew-resize' : 'default'
+      }}
     >
-      {/* Ruler track */}
       <div className="ruler-track" />
 
       {/* Writing area highlight */}
@@ -110,14 +115,15 @@ const InteractiveRuler = ({ marginRight, marginLeft, onMarginChange }) => {
           left: `${(leftPos / RULER_WIDTH_CM) * 100}%`,
           width: `${((rightPos - leftPos) / RULER_WIDTH_CM) * 100}%`,
           height: '100%',
-          background: 'rgba(37, 99, 235, 0.08)',
-          borderTop: '2px solid rgba(37, 99, 235, 0.3)',
-          borderBottom: '2px solid rgba(37, 99, 235, 0.3)',
+          background: paragraphMode
+            ? 'rgba(220, 38, 38, 0.12)'
+            : 'rgba(37, 99, 235, 0.08)',
+          borderTop: `2px solid ${paragraphMode ? 'rgba(220,38,38,0.4)' : 'rgba(37,99,235,0.3)'}`,
+          borderBottom: `2px solid ${paragraphMode ? 'rgba(220,38,38,0.4)' : 'rgba(37,99,235,0.3)'}`,
           pointerEvents: 'none',
         }}
       />
 
-      {/* Number marks */}
       {marks.map((m) => (
         <span key={m} className="ruler-mark">
           {m}
@@ -125,32 +131,43 @@ const InteractiveRuler = ({ marginRight, marginLeft, onMarginChange }) => {
         </span>
       ))}
 
-      {/* Right margin handle (▲) — controls where RTL text STARTS */}
+      {/* Right margin handle */}
       <div
         className={`ruler-handle ruler-handle-right ${dragging === 'right' ? 'dragging' : ''}`}
         style={{ left: `${(rightPos / RULER_WIDTH_CM) * 100}%` }}
         onMouseDown={(e) => handleMouseDown('right', e)}
         title={`الهامش الأيمن: ${marginRight.toFixed(1)} سم`}
       >
-        <div className="ruler-triangle ruler-triangle-right" />
+        <div className="ruler-triangle ruler-triangle-right"
+          style={{ borderColor: paragraphMode ? 'transparent transparent #dc2626 transparent' : undefined }}
+        />
         <div className="ruler-handle-label">{marginRight.toFixed(1)}</div>
       </div>
 
-      {/* Left margin handle (▲) — controls where RTL text ENDS */}
+      {/* Left margin handle */}
       <div
         className={`ruler-handle ruler-handle-left ${dragging === 'left' ? 'dragging' : ''}`}
         style={{ left: `${(leftPos / RULER_WIDTH_CM) * 100}%` }}
         onMouseDown={(e) => handleMouseDown('left', e)}
         title={`الهامش الأيسر: ${marginLeft.toFixed(1)} سم`}
       >
-        <div className="ruler-triangle ruler-triangle-left" />
+        <div className="ruler-triangle ruler-triangle-left"
+          style={{ borderColor: paragraphMode ? 'transparent transparent #dc2626 transparent' : undefined }}
+        />
         <div className="ruler-handle-label">{marginLeft.toFixed(1)}</div>
       </div>
+
+      {/* Mode indicator */}
+      {paragraphMode && (
+        <div className="ruler-mode-indicator">
+          هوامش الفقرة المحددة
+        </div>
+      )}
     </div>
   );
 };
 
-// ═══ Modal اسم الوثيقة ═══
+// ═══ Modal ═══
 const NameModal = ({ isOpen, initialName, onConfirm, onCancel }) => {
   const [name, setName] = useState(initialName);
 
@@ -189,7 +206,7 @@ const NameModal = ({ isOpen, initialName, onConfirm, onCancel }) => {
   );
 };
 
-// ═══ Debounce helper ═══
+// ═══ Debounce ═══
 const useDebounce = (value, delay) => {
   const [debouncedValue, setDebouncedValue] = useState(value);
   useEffect(() => {
@@ -208,17 +225,22 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
   const [selectedFontSize, setSelectedFontSize] = useState('16');
   const [showNameModal, setShowNameModal] = useState(false);
 
-  // ═══ Margin state (in cm) ═══
-  const [marginRight, setMarginRight] = useState(2.5);  // Default 2.5cm from right
-  const [marginLeft, setMarginLeft] = useState(2.5);    // Default 2.5cm from left
+  // ═══ Page margins (global) ═══
+  const [pageMarginRight, setPageMarginRight] = useState(2.5);
+  const [pageMarginLeft, setPageMarginLeft] = useState(2.5);
+
+  // ═══ Paragraph mode state ═══
+  const [paragraphMode, setParagraphMode] = useState(false);
+  const [selectedParagraphMargins, setSelectedParagraphMargins] = useState({ marginRight: 0, marginLeft: 0 });
+
+  // ═══ Store paragraph position for margin updates ═══
+  const paragraphPosRef = useRef(null);
 
   const fileInputRef = useRef(null);
   const editorContentRef = useRef(null);
-  const autoSaveTimerRef = useRef(null);
 
-  // Convert cm to px for CSS padding
-  const marginRightPx = marginRight * CM_TO_PX;
-  const marginLeftPx = marginLeft * CM_TO_PX;
+  const marginRightPx = pageMarginRight * CM_TO_PX;
+  const marginLeftPx = pageMarginLeft * CM_TO_PX;
 
   const editor = useEditor({
     extensions: [
@@ -343,9 +365,37 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
         return false;
       },
     },
+    onSelectionUpdate: ({ editor }) => {
+      // ═══ Detect paragraph/heading under cursor ═══
+      const { $from } = editor.state.selection;
+
+      let targetNode = null;
+      let targetPos = null;
+      for (let d = $from.depth; d >= 0; d--) {
+        const node = $from.node(d);
+        if (node && (node.type.name === 'paragraph' || node.type.name === 'heading')) {
+          targetNode = node;
+          targetPos = $from.before(d);
+          break;
+        }
+      }
+
+      if (targetNode) {
+        const attrs = targetNode.attrs;
+        setParagraphMode(true);
+        setSelectedParagraphMargins({
+          marginRight: attrs.marginRight || 0,
+          marginLeft: attrs.marginLeft || 0,
+        });
+        paragraphPosRef.current = targetPos;
+      } else {
+        setParagraphMode(false);
+        paragraphPosRef.current = null;
+      }
+    },
   });
 
-  // ═══ Update editor font family and size dynamically ═══
+  // ═══ Update editor font ═══
   useEffect(() => {
     if (editor) {
       const el = editor.view.dom;
@@ -395,9 +445,8 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
           }
           if (data.fontFamily) setSelectedFont(data.fontFamily);
           if (data.fontSize) setSelectedFontSize(data.fontSize);
-          // ═══ Load margins ═══
-          if (data.marginRight !== undefined) setMarginRight(data.marginRight);
-          if (data.marginLeft !== undefined) setMarginLeft(data.marginLeft);
+          if (data.marginRight !== undefined) setPageMarginRight(data.marginRight);
+          if (data.marginLeft !== undefined) setPageMarginLeft(data.marginLeft);
           setLastSaved(data.updatedAt?.toDate() || new Date());
         }
       } catch (error) {
@@ -409,7 +458,7 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
     if (editor) loadDocument();
   }, [editor, tenantId, documentId]);
 
-  // ─── الحفظ الفعلي ───
+  // ─── الحفظ ───
   const doSave = useCallback(async (docTitle) => {
     if (!editor || !tenantId || !documentId) return;
     setSaveStatus('جاري الحفظ...');
@@ -439,23 +488,21 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
         description: '',
         fontFamily: selectedFont,
         fontSize: selectedFontSize,
-        // ═══ Save margins ═══
-        marginRight,
-        marginLeft,
+        marginRight: pageMarginRight,
+        marginLeft: pageMarginLeft,
         updatedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
       }, { merge: true });
       setSaveStatus('تم الحفظ ✅');
       setLastSaved(new Date());
-      if (onSave) onSave({ title: docTitle, contentJSON, contentHTML, marginRight, marginLeft });
+      if (onSave) onSave({ title: docTitle, contentJSON, contentHTML, marginRight: pageMarginRight, marginLeft: pageMarginLeft });
       setTimeout(() => setSaveStatus('جاهز'), 2000);
     } catch (error) {
       console.error('❌ خطأ في الحفظ:', error);
       setSaveStatus('فشل الحفظ ❌');
     }
-  }, [editor, tenantId, documentId, userId, selectedFont, selectedFontSize, marginRight, marginLeft, onSave]);
+  }, [editor, tenantId, documentId, userId, selectedFont, selectedFontSize, pageMarginRight, pageMarginLeft, onSave]);
 
-  // ─── طلب الحفظ ───
   const requestSave = useCallback(() => {
     if (title === 'وثيقة جديدة' || !title.trim()) {
       setShowNameModal(true);
@@ -497,11 +544,53 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [requestSave]);
 
-  // ─── Margin change handler ───
+  // ═══ Margin change handler — Page OR Paragraph ═══
   const handleMarginChange = useCallback(({ marginRight: mr, marginLeft: ml }) => {
-    setMarginRight(mr);
-    setMarginLeft(ml);
-  }, []);
+    if (!editor) return;
+
+    if (paragraphMode && paragraphPosRef.current !== null) {
+      // Apply to the current paragraph using setNodeMarkup
+      const { state } = editor;
+      const pos = paragraphPosRef.current;
+      const node = state.doc.nodeAt(pos);
+
+      if (node && ['paragraph', 'heading'].includes(node.type.name)) {
+        const tr = state.tr.setNodeMarkup(pos, undefined, {
+          ...node.attrs,
+          marginRight: mr,
+          marginLeft: ml,
+        });
+        editor.view.dispatch(tr);
+        setSelectedParagraphMargins({ marginRight: mr, marginLeft: ml });
+      }
+    } else {
+      // Apply to page
+      setPageMarginRight(mr);
+      setPageMarginLeft(ml);
+    }
+  }, [editor, paragraphMode]);
+
+  // ─── Reset paragraph margins ───
+  const resetParagraphMargins = useCallback(() => {
+    if (!editor || paragraphPosRef.current === null) return;
+
+    const { state } = editor;
+    const pos = paragraphPosRef.current;
+    const node = state.doc.nodeAt(pos);
+
+    if (node && ['paragraph', 'heading'].includes(node.type.name)) {
+      const tr = state.tr.setNodeMarkup(pos, undefined, {
+        ...node.attrs,
+        marginRight: null,
+        marginLeft: null,
+      });
+      editor.view.dispatch(tr);
+    }
+
+    setParagraphMode(false);
+    setSelectedParagraphMargins({ marginRight: 0, marginLeft: 0 });
+    paragraphPosRef.current = null;
+  }, [editor]);
 
   if (isLoading) {
     return (
@@ -519,8 +608,23 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
           padding-right: ${marginRightPx}px !important;
           padding-left: ${marginLeftPx}px !important;
         }
-        /* Visual margin guides inside the page */
-        .legal-editor-content.ProseMirror::before,
+        .legal-editor-content.ProseMirror::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 1px;
+          background: repeating-linear-gradient(
+            to bottom,
+            transparent 0px,
+            transparent 4px,
+            rgba(37, 99, 235, 0.25) 4px,
+            rgba(37, 99, 235, 0.25) 8px
+          );
+          pointer-events: none;
+          z-index: 1;
+          right: ${marginRightPx - 1}px;
+        }
         .legal-editor-content.ProseMirror::after {
           content: '';
           position: absolute;
@@ -536,11 +640,6 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
           );
           pointer-events: none;
           z-index: 1;
-        }
-        .legal-editor-content.ProseMirror::before {
-          right: ${marginRightPx - 1}px;
-        }
-        .legal-editor-content.ProseMirror::after {
           left: ${marginLeftPx - 1}px;
         }
       `}</style>
@@ -588,15 +687,15 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
         onImageUpload={() => fileInputRef.current?.click()}
       />
 
-      {/* ═══ INTERACTIVE RULER ═══ */}
       <InteractiveRuler
-        marginRight={marginRight}
-        marginLeft={marginLeft}
+        marginRight={paragraphMode ? selectedParagraphMargins.marginRight : pageMarginRight}
+        marginLeft={paragraphMode ? selectedParagraphMargins.marginLeft : pageMarginLeft}
         onMarginChange={handleMarginChange}
+        paragraphMode={paragraphMode}
       />
 
-      <div className="editor-container">
-        <EditorContent editor={editor} ref={editorContentRef} />
+      <div className="editor-container" ref={editorContentRef}>
+        <EditorContent editor={editor} />
       </div>
 
       <div className="editor-footer">
@@ -604,9 +703,20 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
         <span>📝 الكلمات: {editor?.getText().trim().split(" ").filter(w => w.length > 0).length || 0}</span>
         <span>🔤 الأحرف: {editor?.getText().length || 0}</span>
         <span>📄 الصفحات: ~{Math.ceil((editor?.getText().length || 0) / 1800)}</span>
-        <span style={{ color: '#2563eb', fontWeight: 600 }}>
-          📐 هوامش: يمين {marginRight.toFixed(1)} سم | يسار {marginLeft.toFixed(1)} سم
+        <span style={{ color: paragraphMode ? '#dc2626' : '#2563eb', fontWeight: 600 }}>
+          {paragraphMode
+            ? `📐 هوامش الفقرة: يمين ${selectedParagraphMargins.marginRight.toFixed(1)} سم | يسار ${selectedParagraphMargins.marginLeft.toFixed(1)} سم`
+            : `📐 هوامش الصفحة: يمين ${pageMarginRight.toFixed(1)} سم | يسار ${pageMarginLeft.toFixed(1)} سم`
+          }
         </span>
+        {paragraphMode && (
+          <button
+            onClick={resetParagraphMargins}
+            className="reset-paragraph-margins-btn"
+          >
+            إعادة تعيين هوامش الفقرة
+          </button>
+        )}
       </div>
     </div>
   );

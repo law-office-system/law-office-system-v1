@@ -134,19 +134,24 @@ const Toolbar = ({ editor, selectedFont, setSelectedFont, selectedFontSize, setS
                            editor.getAttributes('heading')?.lineHeight || '2.0';
 
   // ═══ FIXED: Use editorContentRef for PDF export ═══
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     const element = editorContentRef?.current?.querySelector('.legal-editor-content') || 
                     document.querySelector('.legal-editor-content');
     if (element) {
-      exportToPDF(element, title || 'وثيقة قانونية');
+      try {
+        await exportToPDF(element, title || 'وثيقة قانونية');
+      } catch (err) {
+        console.error('PDF export error:', err);
+        alert('فشل تصدير PDF: ' + err.message);
+      }
     }
   };
 
   // ═══ FIXED: Safe DOCX export ═══
-  const handleExportDOCX = () => {
+  const handleExportDOCX = async () => {
     try {
       const json = editor.getJSON();
-      exportToDOCX(json, title || 'وثيقة قانونية');
+      await exportToDOCX(json, title || 'وثيقة قانونية');
     } catch (err) {
       console.error('Export error:', err);
       alert('فشل التصدير: ' + err.message);

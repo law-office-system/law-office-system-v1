@@ -27,7 +27,6 @@ export default defineConfig({
     emptyOutDir: true,
 
     // ─── رفع الحد الأدنى للتحذير ──────────────────────────────
-    // Firestore طبيعيًا كبير (~400KB) فالـ 300KB تحذير زائف
     chunkSizeWarningLimit: 500,
 
     sourcemap: false,
@@ -60,43 +59,52 @@ export default defineConfig({
             return "react-vendor";
           }
 
-          // ================= Firebase SDKs (منفصلة) =================
-          // كل خدمة Firebase في Chunk منفصل للـ Caching الأمثل
+          // ================= TipTap Editor (المحرر) =================
+          if (
+            id.includes("@tiptap") ||
+            id.includes("prosemirror")
+          ) {
+            return "tiptap-vendor";
+          }
 
+          // ================= Export Libraries (تصدير PDF/Word) =================
+          if (
+            id.includes("docx") ||
+            id.includes("html2pdf") ||
+            id.includes("file-saver") ||
+            id.includes("html2canvas") ||
+            id.includes("jspdf")
+          ) {
+            return "export-vendor";
+          }
+
+          // ================= Firebase SDKs (منفصلة) =================
           if (id.includes("firebase/app")) {
             return "firebase-app";
           }
-
           if (id.includes("firebase/auth")) {
             return "firebase-auth";
           }
-
           if (id.includes("firebase/firestore")) {
             return "firebase-firestore";
           }
-
           if (id.includes("firebase/storage")) {
             return "firebase-storage";
           }
-
           if (id.includes("firebase/messaging")) {
             return "firebase-messaging";
           }
-
           if (id.includes("firebase/database")) {
             return "firebase-rtdb";
           }
-
           if (id.includes("firebase/functions")) {
             return "firebase-functions";
           }
-
           if (id.includes("firebase/analytics")) {
             return "firebase-analytics";
           }
 
           // ================= Firebase Internals =================
-          // @firebase/* + idb + tslib = Core مشترك
           if (
             id.includes("@firebase") ||
             id.includes("idb") ||

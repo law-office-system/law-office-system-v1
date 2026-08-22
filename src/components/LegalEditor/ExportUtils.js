@@ -1,15 +1,18 @@
-import html2pdf from 'html2pdf.js';
-import { Document, Packer, Paragraph, TextRun, AlignmentType, PageBreak as DocxPageBreak, convertInchesToTwip, Table as DocxTable, TableCell as DocxTableCell, TableRow as DocxTableRow, WidthType, BorderStyle } from 'docx';
-import { saveAs } from 'file-saver';
+/* ═══════════════════════════════════════════════════════════════
+   EXPORT UTILS — Dynamic Imports for smaller initial bundle
+   ═══════════════════════════════════════════════════════════════ */
 
 /* ═══════════════════════════════════════════════════════════════
-   EXPORT TO PDF
+   EXPORT TO PDF — Lazy loaded
    ═══════════════════════════════════════════════════════════════ */
-export const exportToPDF = (element, filename = 'document') => {
+export const exportToPDF = async (element, filename = 'document') => {
   if (!element) {
     console.error('❌ لا يوجد عنصر للتصدير');
     return;
   }
+
+  // Dynamic import — only loads html2pdf.js when user clicks "Export PDF"
+  const html2pdf = (await import('html2pdf.js')).default;
 
   const opt = {
     margin: [0, 0, 0, 0],
@@ -50,13 +53,34 @@ export const exportToPDF = (element, filename = 'document') => {
 };
 
 /* ═══════════════════════════════════════════════════════════════
-   EXPORT TO DOCX (Word) — Enhanced with Font Size, Page Breaks & Tables
+   EXPORT TO DOCX (Word) — Lazy loaded
    ═══════════════════════════════════════════════════════════════ */
 export const exportToDOCX = async (editorJSON, filename = 'document') => {
   if (!editorJSON) {
     console.error('❌ لا يوجد محتوى للتصدير');
     return;
   }
+
+  // Dynamic imports — only load docx & file-saver when user clicks "Export Word"
+  const docx = await import('docx');
+  const fileSaver = await import('file-saver');
+
+  const {
+    Document,
+    Packer,
+    Paragraph,
+    TextRun,
+    AlignmentType,
+    PageBreak,
+    convertInchesToTwip,
+    Table,
+    TableCell,
+    TableRow,
+    WidthType,
+    BorderStyle
+  } = docx;
+
+  const { saveAs } = fileSaver;
 
   const children = [];
 
@@ -135,7 +159,7 @@ export const exportToDOCX = async (editorJSON, filename = 'document') => {
 
     // ─── Page Break ───
     if (node.type === 'pageBreak') {
-      children.push(new DocxPageBreak());
+      children.push(new PageBreak());
       return;
     }
 
@@ -191,7 +215,7 @@ export const exportToDOCX = async (editorJSON, filename = 'document') => {
       }
     }
 
-    // ─── Table ─── FIXED: Proper table export
+    // ─── Table ───
     else if (node.type === 'table') {
       const tableRows = [];
 
@@ -220,7 +244,7 @@ export const exportToDOCX = async (editorJSON, filename = 'document') => {
                 }
 
                 tableCells.push(
-                  new DocxTableCell({
+                  new TableCell({
                     children: cellParagraphs.length > 0 ? cellParagraphs : [new Paragraph({ text: '' })],
                     borders: {
                       top: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
@@ -234,14 +258,14 @@ export const exportToDOCX = async (editorJSON, filename = 'document') => {
               }
             });
 
-            tableRows.push(new DocxTableRow({ children: tableCells }));
+            tableRows.push(new TableRow({ children: tableCells }));
           }
         });
       }
 
       if (tableRows.length > 0) {
         children.push(
-          new DocxTable({
+          new Table({
             rows: tableRows,
             width: { size: 100, type: WidthType.PERCENTAGE },
             bidirectional: true,
@@ -268,11 +292,11 @@ export const exportToDOCX = async (editorJSON, filename = 'document') => {
         properties: {
           rtl: true,
           page: {
-            margin: { 
-              top: convertInchesToTwip(1), 
-              right: convertInchesToTwip(1), 
-              bottom: convertInchesToTwip(1), 
-              left: convertInchesToTwip(1) 
+            margin: {
+              top: convertInchesToTwip(1),
+              right: convertInchesToTwip(1),
+              bottom: convertInchesToTwip(1),
+              left: convertInchesToTwip(1),
             },
           },
         },
