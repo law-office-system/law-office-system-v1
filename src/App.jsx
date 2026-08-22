@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useEffect, useCallback, useRef, lazy, Suspense, useState } from "react";
+import { useEffect, useCallback, useRef, lazy, Suspense, useState, memo } from "react";
 import { useAuth } from "./context/AuthContext";
 
 import Layout from "./components/Layout";
@@ -61,8 +61,8 @@ import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import "./App.css";
 
-/* ================= OPTIMIZED LOADING SCREEN ================= */
-function LoadingScreen() {
+/* ================= OPTIMIZED LOADING SCREEN (memo) ================= */
+const LoadingScreen = memo(function LoadingScreen() {
   return (
     <div style={{ 
       display: "flex", 
@@ -89,14 +89,10 @@ function LoadingScreen() {
       <div style={{ fontSize: "13px", color: "#64748b", marginTop: "8px" }}>
         Law Office Management System
       </div>
-      <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
+      <style dangerouslySetInnerHTML={{ __html: '@keyframes spin { to { transform: rotate(360deg); } }' }} />
     </div>
   );
-}
+});
 
 /* ================= OPTIMIZED NOTIFICATION SYNC ================= */
 function NotificationSync() {
@@ -168,8 +164,8 @@ function NotificationSync() {
   return null;
 }
 
-/* ================= HOME REDIRECT ================= */
-function HomeRedirect() {
+/* ================= HOME REDIRECT (memo) ================= */
+const HomeRedirect = memo(function HomeRedirect() {
   const { user, userData, loading } = useAuth();
   const location = window.location;
 
@@ -184,7 +180,7 @@ function HomeRedirect() {
   if (user && userData?.officeId) return <Navigate to="/dashboard" replace />;
   if (user && !userData?.officeId) return <Navigate to="/profile" replace />;
   return <Navigate to="/home" replace />;
-}
+});
 
 /* ================= APP EXPORT ================= */
 export default function App() {
@@ -220,11 +216,11 @@ export default function App() {
                   <Route path="admin-tasks" element={<ProtectedRoute page="cases"><AdminTasks /></ProtectedRoute>} />
                   <Route path="add-session/:id" element={<ProtectedRoute page="cases"><AddSession /></ProtectedRoute>} />
                   <Route path="add-stage/:id" element={<ProtectedRoute page="cases"><AddStage /></ProtectedRoute>} />
-                  
+
                   {/* 🆕 Documents Routes */}
                   <Route path="documents" element={<ProtectedRoute page="documents"><Documents /></ProtectedRoute>} />
                   <Route path="documents/editor/:docId?" element={<ProtectedRoute page="documents"><DocumentEditor /></ProtectedRoute>} />
-                  
+
                   <Route path="finance" element={<ProtectedRoute page="finance"><Finance /></ProtectedRoute>} />
                   <Route path="case-finance/:id" element={<ProtectedRoute page="finance"><CaseFinance /></ProtectedRoute>} />
                   <Route path="office" element={<ProtectedRoute page="dashboard"><OfficeInfo /></ProtectedRoute>} />

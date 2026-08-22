@@ -37,6 +37,15 @@ export default defineConfig({
       compress: {
         drop_console: true,
         drop_debugger: true,
+        // إزالة دوال console بالكامل (أقوى من drop_console)
+        pure_funcs: ["console.log", "console.info", "console.warn", "console.debug"],
+      },
+      mangle: {
+        // أسماء أقصر للمتغيرات
+        safari10: true,
+      },
+      format: {
+        comments: false,
       },
     },
 
@@ -155,6 +164,19 @@ export default defineConfig({
             id.includes("gsap")
           ) {
             return "animation-vendor";
+          }
+
+          // ─── دمج الملفات الصغيرة من الكود بتاعك ───
+          // ملفات Firebase wrappers + utilities + constants + UI صغيرة
+          if (
+            id.includes("/src/firebase") ||
+            id.includes("/src/utils/") ||
+            id.includes("/src/constants/") ||
+            id.includes("/src/components/ui/") ||
+            id.includes("/src/hooks/useThemeStyles") ||
+            id.includes("/src/styles/design-system")
+          ) {
+            return "app-core";
           }
 
           // ================= Other Vendors =================

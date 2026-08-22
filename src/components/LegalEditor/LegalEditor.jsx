@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -16,12 +16,15 @@ import { Color } from '@tiptap/extension-color';
 import { FontFamily } from '@tiptap/extension-font-family';
 import Shape from './ShapeExtension';
 import { FontSize, PageBreak, LineHeight, ParagraphSpacing, Indent } from './customExtensions';
-import Toolbar from './Toolbar';
 import { db } from '../../firebaseDb';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { storage } from '../../firebaseStorage';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import './EditorStyles.css';
+
+// 🚀 DYNAMIC IMPORT: Toolbar بس بيتحمل لما يظهر
+// ده بيوفر 1.35MB (export-vendor) من الـ LegalEditor bundle
+const Toolbar = lazy(() => import('./Toolbar'));
 
 const FONT_OPTIONS = [
   { label: 'الافتراضي', value: 'Segoe UI' },
@@ -678,14 +681,29 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
         </div>
       </div>
 
-      <Toolbar
-        editor={editor}
-        selectedFont={selectedFont}
-        setSelectedFont={setSelectedFont}
-        selectedFontSize={selectedFontSize}
-        setSelectedFontSize={setSelectedFontSize}
-        onImageUpload={() => fileInputRef.current?.click()}
-      />
+      {/* 🚀 Toolbar بيتحمل بشكل ديناميكي — بيوفر 1.35MB من الـ bundle الأساسي */}
+      <Suspense fallback={
+        <div className="toolbar-loading" style={{ 
+          height: '48px', 
+          background: '#1e293b', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          color: '#94a3b8',
+          fontSize: '13px'
+        }}>
+          جاري تحميل الأدوات...
+        </div>
+      }>
+        <Toolbar
+          editor={editor}
+          selectedFont={selectedFont}
+          setSelectedFont={setSelectedFont}
+          selectedFontSize={selectedFontSize}
+          setSelectedFontSize={setSelectedFontSize}
+          onImageUpload={() => fileInputRef.current?.click()}
+        />
+      </Suspense>
 
       <InteractiveRuler
         marginRight={paragraphMode ? selectedParagraphMargins.marginRight : pageMarginRight}
