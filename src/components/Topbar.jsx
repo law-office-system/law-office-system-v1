@@ -6,9 +6,6 @@ import { FaUserCircle, FaBars, FaSignOutAlt, FaBuilding } from "react-icons/fa";
 // الصفحات العامة اللي مفيش Topbar فيها
 const PUBLIC_PAGES = ["/", "/home", "/login", "/register", "/super-login"];
 
-// ✅ صفحات الدردشة اللي مفيش زر قائمة فيها
-const CHAT_PAGES = ["/chat", "/rooms", "/shared-rooms"];
-
 export default function Topbar({ open, setOpen }) {
   const { user, userData, logout } = useAuth();
   const navigate = useNavigate();
@@ -29,9 +26,6 @@ export default function Topbar({ open, setOpen }) {
   // 🚨 لا تظهر Topbar لو مفيش user
   if (!user) return null;
 
-  // ✅ تحقق هل الصفحة الحالية صفحة دردشة؟
-  const isChatPage = CHAT_PAGES.some(path => location.pathname.startsWith(path));
-
   // ✅ دالة لاستخراج اسم المستخدم
   const getUserDisplayName = () => {
     return userData?.name || 
@@ -45,12 +39,10 @@ export default function Topbar({ open, setOpen }) {
     <div style={styles.topbar}>
       {/* جهة اليمين */}
       <div style={styles.left}>
-        {/* ✅ زر القائمة يظهر فقط لو مش صفحة دردشة */}
-        {!isChatPage && (
-          <button onClick={() => setOpen(!open)} style={styles.menuBtn}>
-            <FaBars size={20} />
-          </button>
-        )}
+        {/* ✅ زر القائمة يظهر في كل الصفحات (بما فيها الدردشة) */}
+        <button onClick={() => setOpen(!open)} style={styles.menuBtn}>
+          <FaBars size={20} />
+        </button>
         {!isMobile && <h3 style={styles.brandTitle}>نظام إدارة المكتب</h3>}
       </div>
 

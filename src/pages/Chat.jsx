@@ -22,7 +22,6 @@ import { db } from "../firebaseDb";
 import { useMessages } from "../hooks/useMessages";
 import { listenToRoomMembers } from "../services/roomMembers";
 
-// ===== Color Palette - Matching Sidebar (Gold + Dark) =====
 const COLORS = {
   bg: "#0a0e1a",
   bgLight: "#111827",
@@ -34,7 +33,6 @@ const COLORS = {
   textMuted: "#6b7280",
 };
 
-// ✅ Loading Skeleton
 function ChatSkeleton() {
   return (
     <div style={{ 
@@ -77,7 +75,6 @@ export default function Chat() {
   const [canSend, setCanSend] = useState(true);
   const typingTimeoutRef = useRef(null);
 
-  // ✅ Refs للـ cleanup
   const unsubscribersRef = useRef([]);
   const isMountedRef = useRef(true);
 
@@ -85,7 +82,6 @@ export default function Chat() {
     return rooms.find((r) => r.id === roomId) || sharedRooms.find((r) => r.id === roomId) || null;
   }, [roomId, rooms, sharedRooms]);
 
-  // ✅ استخدم الـ hook مع options
   const {
     messages,
     groupedMessages,
@@ -104,7 +100,6 @@ export default function Chat() {
     paginationLimit: 30
   });
 
-  // ✅ Cleanup function
   const cleanup = useCallback(() => {
     unsubscribersRef.current.forEach(unsub => {
       try { unsub(); } catch (e) { console.error("Cleanup error:", e); }
@@ -115,7 +110,6 @@ export default function Chat() {
     }
   }, []);
 
-  // ✅ Detect mobile
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
@@ -126,10 +120,8 @@ export default function Chat() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // ✅ Load offices (optimized - single query)
   useEffect(() => {
     if (!userData?.officeId) return;
-
     const unsub = onSnapshot(collection(db, "offices"), (snap) => {
       if (!isMountedRef.current) return;
       const map = {};
@@ -140,23 +132,18 @@ export default function Chat() {
     }, (err) => {
       console.error("Error loading offices:", err);
     });
-
     unsubscribersRef.current.push(unsub);
     return () => unsub();
   }, [userData?.officeId]);
 
-  // ✅ Load internal rooms (optimized with limit)
   useEffect(() => {
     if (!userData?.uid) { setLoading(false); return; }
-
     const q = query(collection(db, "roomMembers"), where("uid", "==", userData.uid));
     const unsub = onSnapshot(q, (snap) => {
       if (!isMountedRef.current) return;
-
       const roomIds = snap.docs.map(d => d.data().roomId);
       if (roomIds.length === 0) { setRooms([]); setLoading(false); return; }
 
-      // ✅ Batch query with limit
       const batchSize = 10;
       const batches = [];
       for (let i = 0; i < roomIds.length; i += batchSize) {
@@ -194,15 +181,12 @@ export default function Chat() {
         });
       };
     });
-
     unsubscribersRef.current.push(unsub);
     return () => unsub();
   }, [userData?.uid]);
 
-  // ✅ Load shared rooms (optimized)
   useEffect(() => {
     if (!userData?.officeId) return;
-
     const qA = query(
       collection(db, "sharedRooms"), 
       where("officeA", "==", userData.officeId),
@@ -241,7 +225,6 @@ export default function Chat() {
     return () => { unsubA(); unsubB(); };
   }, [userData?.officeId]);
 
-  // ✅ Role + canSend
   useEffect(() => {
     if (!activeRoom?.id || !userData?.uid) { setMyRole(null); setCanSend(true); return; }
     const unsub = listenToRoomMembers(activeRoom.id, (members) => { 
@@ -256,10 +239,8 @@ export default function Chat() {
     };
   }, [activeRoom?.id, userData?.uid]);
 
-  // ✅ Typing indicator (optimized with debounce cleanup)
   useEffect(() => {
     if (!activeRoom?.id || !userData?.uid) return;
-
     const typingRef = collection(db, "typing");
     const q = query(
       typingRef,
@@ -267,21 +248,17 @@ export default function Chat() {
       where("userId", "!=", userData.uid),
       limit(5)
     );
-
     const unsub = onSnapshot(q, (snap) => {
       if (!isMountedRef.current) return;
       const users = snap.docs.map(d => d.data().userName);
       setTypingUsers(users);
     });
-
     unsubscribersRef.current.push(unsub);
     return () => unsub();
   }, [activeRoom?.id, userData?.uid]);
 
-  // ✅ Handle typing (with cleanup)
   const handleTyping = useCallback(() => {
     if (!activeRoom?.id || !userData?.uid) return;
-
     const typingDocRef = doc(db, "typing", `${activeRoom.id}_${userData.uid}`);
     updateDoc(typingDocRef, {
       roomId: activeRoom.id,
@@ -296,7 +273,6 @@ export default function Chat() {
         timestamp: serverTimestamp(),
       });
     });
-
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       deleteDoc(doc(db, "typing", `${activeRoom.id}_${userData.uid}`)).catch(() => {});
@@ -306,13 +282,10 @@ export default function Chat() {
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
   const handleRoomSelect = () => { if (isMobile) setSidebarOpen(false); };
 
-  // ✅ Send with notification (optimized batch)
   const handleSend = useCallback(async () => {
     if (!text.trim() || !canSend || sending) return;
-
     const messageText = text.trim();
     const success = await sendMessage();
-
     if (success && activeRoom) {
       try {
         const membersQuery = query(
@@ -321,7 +294,6 @@ export default function Chat() {
           limit(50)
         );
         const membersSnap = await getDocs(membersQuery);
-
         const batch = writeBatch(db);
         let count = 0;
         membersSnap.docs.forEach((memberDoc) => {
@@ -341,7 +313,6 @@ export default function Chat() {
             count++;
           }
         });
-
         if (count > 0) await batch.commit();
       } catch (err) {
         console.error("Error sending notification:", err);
@@ -349,7 +320,6 @@ export default function Chat() {
     }
   }, [text, canSend, sending, sendMessage, activeRoom, userData]);
 
-  // ✅ Component cleanup
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
@@ -363,6 +333,7 @@ export default function Chat() {
 
   return (
     <div style={containerStyle}>
+      {/* ✅ ChatSidebar داخل منطقة المحتوى، بجانب Sidebar المكتب */}
       <ChatSidebar 
         rooms={rooms} 
         sharedRooms={sharedRooms} 
@@ -429,7 +400,6 @@ export default function Chat() {
   );
 }
 
-/* ===== Styles ===== */
 const containerStyle = { display: "flex", height: "100%", overflow: "hidden", background: COLORS.bg };
 const contentStyle = { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 };
 const headerContainerStyle = { flexShrink: 0, background: COLORS.bgLight, borderBottom: `1px solid ${COLORS.border}` };

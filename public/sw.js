@@ -1,36 +1,23 @@
 // ═══════════════════════════════════════════════════════════════
 // SERVICE WORKER — Law Office Management System
-// Strategy: Stale-While-Revalidate for static assets
-//           Network-First for navigation (HTML pages)
 // ═══════════════════════════════════════════════════════════════
 
-const CACHE_NAME = 'law-office-v2';
-const STATIC_CACHE = 'law-office-static-v2';
+const CACHE_NAME = 'law-office-v4';
+const STATIC_CACHE = 'law-office-static-v4';
 
-// الملفات اللي هنخزنها فوراً (App Shell)
-const PRECACHE_ASSETS = [
-  '/',
-  '/index.html',
-  '/favicon.svg',
-];
+const PRECACHE_ASSETS = ['/', '/index.html', '/favicon.svg'];
+const STATIC_EXTENSIONS = ['.js', '.css', '.png', '.jpg', '.jpeg', '.svg', '.woff', '.woff2', '.ttf', '.eot'];
 
-// امتدادات الملفات الثابتة
-const STATIC_EXTENSIONS = [
-  '.js', '.css', '.png', '.jpg', '.jpeg', '.svg', '.woff', '.woff2', '.ttf', '.eot'
-];
-
-// ─── INSTALL: تخزين الـ App Shell ───────────────────────────────
+// ─── INSTALL ────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(PRECACHE_ASSETS);
-    }).then(() => {
-      return self.skipWaiting();
-    })
+    }).then(() => self.skipWaiting())
   );
 });
 
-// ─── ACTIVATE: تنظيف الـ Caches القديمة ─────────────────────────
+// ─── ACTIVATE ───────────────────────────────────────────────────
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -39,13 +26,11 @@ self.addEventListener('activate', (event) => {
           .filter((name) => name !== CACHE_NAME && name !== STATIC_CACHE)
           .map((name) => caches.delete(name))
       );
-    }).then(() => {
-      return self.clients.claim();
-    })
+    }).then(() => self.clients.claim())
   );
 });
 
-// ─── FETCH: استراتيجيات الـ Caching ─────────────────────────────
+// ─── FETCH ──────────────────────────────────────────────────────
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -53,27 +38,7 @@ self.addEventListener('fetch', (event) => {
   // تجاهل الـ requests اللي مش GET
   if (request.method !== 'GET') return;
 
-  // ─── 1. Navigation requests (HTML pages) → Network First ───
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then((networkResponse) => {
-          const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          return networkResponse;
-        })
-        .catch(() => {
-          return caches.match(request).then((cached) => {
-            if (cached) return cached;
-            // لو مفيش cache، رجع صفحة fallback
-            return caches.match('/index.html');
-          });
-        })
-    );
-    return;
-  }
-
-  // ─── 2. Firebase / Google APIs → Pass Through (مش هنخزنهم) ───
+  // تجاهل Firebase / Google APIs
   if (
     url.hostname.includes('googleapis.com') ||
     url.hostname.includes('firebase') ||
@@ -83,30 +48,33 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ─── 3. Static Assets (JS, CSS, Images, Fonts) → Stale-While-Revalidate ───
+  // ─── Navigation requests → Network First ───
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          return networkResponse;
+        })
+        .catch(() => caches.match(request).then((cached) => cached || caches.match('/index.html')))
+    );
+    return;
+  }
+
+  // ─── Static Assets → Stale-While-Revalidate ───
   const isStatic = STATIC_EXTENSIONS.some((ext) => url.pathname.endsWith(ext));
 
   if (isStatic) {
     event.respondWith(
       caches.open(STATIC_CACHE).then((cache) => {
         return cache.match(request).then((cached) => {
-          // جلب النسخة الجديدة في الخلفية
           const fetchPromise = fetch(request)
             .then((networkResponse) => {
-              if (networkResponse.ok) {
-                cache.put(request, networkResponse.clone());
-              }
+              if (networkResponse.ok) cache.put(request, networkResponse.clone());
               return networkResponse;
             })
-            .catch(() => {
-              // لو الفشل ومفيش cache، رجع error
-              if (!cached) {
-                return new Response('Offline', { status: 503 });
-              }
-              return cached;
-            });
-
-          // رجع الـ cache فوراً لو موجود، ولو مش موجود استنى الـ network
+            .catch(() => cached || new Response('Offline', { status: 503 }));
           return cached || fetchPromise;
         });
       })
@@ -114,16 +82,21 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ─── 4. باقي الـ requests → Cache First ───
+  // ─── باقي الـ requests → Network First ───
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request);
-    })
+    fetch(request)
+      .then((networkResponse) => {
+        if (networkResponse.ok) {
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+        }
+        return networkResponse;
+      })
+      .catch(() => caches.match(request).then((cached) => cached || new Response('Offline', { status: 503 })))
   );
 });
 
-// ─── MESSAGE: استقبال أوامر من الـ Main Thread ──────────────────
+// ─── MESSAGE ──────────────────────────────────────────────────
 self.addEventListener('message', (event) => {
   if (event.data === 'SKIP_WAITING') {
     self.skipWaiting();

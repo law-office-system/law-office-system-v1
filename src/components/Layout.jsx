@@ -1,17 +1,15 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { useTheme } from "../context/ThemeContext.jsx";          // ← 🆕 NEW
+import { useTheme } from "../context/ThemeContext.jsx";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 
 // الصفحات العامة اللي مفيش Sidebar/Topbar فيها
 const PUBLIC_PAGES = ["/", "/home", "/login", "/register", "/super-login"];
 
-// ✅ صفحات الدردشة اللي مفيش Sidebar عام فيها (عشان ChatSidebar يتحكم لوحده)
-const CHAT_PAGES = ["/chat", "/rooms", "/shared-rooms"];
+// ✅ REMOVED: CHAT_PAGES — لم نعد نحتاجه
 
-// ✅ Debounce function
 function debounce(func, wait) {
   let timeout;
   return function executedFunction(...args) {
@@ -25,7 +23,6 @@ function debounce(func, wait) {
 }
 
 export default function Layout() {
-  // ✅ استخدم useRef عشان مايتعملش reset لما الـ route يتغير
   const [open, setOpen] = useState(() => {
     try {
       const saved = localStorage.getItem("sidebarOpen");
@@ -38,48 +35,34 @@ export default function Layout() {
   const [isMobile, setIsMobile] = useState(false);
   const { user, userData, loading: authLoading } = useAuth();
   const location = useLocation();
-
-  // 🆕 NEW: Get theme colors
   const { theme } = useTheme();
   const { colors } = theme;
 
-  // ✅ Ref للتحكم في الـ resize (مش بيعتمد على open)
   const isMobileRef = useRef(false);
   const openRef = useRef(open);
 
-  // ✅ تحديث الـ ref لما open يتغير
   useEffect(() => {
     openRef.current = open;
   }, [open]);
 
-  // 🎯 تحقق هل الصفحة الحالية عامة؟
   const isPublicPage = useMemo(() => {
     return PUBLIC_PAGES.includes(location.pathname);
   }, [location.pathname]);
 
-  // ✅ تحقق هل الصفحة الحالية صفحة دردشة؟
-  const isChatPage = useMemo(() => {
-    return CHAT_PAGES.some(path => location.pathname.startsWith(path));
-  }, [location.pathname]);
-
-  // 🎯 Sidebar يظهر فقط لو:
-  const showSidebar = !isPublicPage && !isChatPage && user && userData?.officeId;
+  // ✅ تعديل: Sidebar يظهر في كل الصفحات الداخلية (بما فيها الدردشة)
+  const showSidebar = !isPublicPage && user && userData?.officeId;
   const showTopbar = !isPublicPage && user;
 
-  // ✅ Resize handler (مش بيعتمد على open)
   useEffect(() => {
     const handleResize = debounce(() => {
       const mobile = window.innerWidth < 1024;
       setIsMobile(mobile);
       isMobileRef.current = mobile;
-
-      // ✅ لو بقى موبايل، اقفل القائمة (بس لما الـ resize يحصل، مش لما الـ open يتغير)
       if (mobile && openRef.current) {
         setOpen(false);
       }
     }, 150);
 
-    // Check initial
     const initialMobile = window.innerWidth < 1024;
     setIsMobile(initialMobile);
     isMobileRef.current = initialMobile;
@@ -89,9 +72,8 @@ export default function Layout() {
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []); // ✅ مفيش dependencies!
+  }, []);
 
-  // ✅ Save sidebar state
   useEffect(() => {
     try {
       localStorage.setItem("sidebarOpen", JSON.stringify(open));
@@ -100,41 +82,36 @@ export default function Layout() {
     }
   }, [open]);
 
-  // ✅ Toggle function (مش بيعتمد على الـ state القديم)
   const toggleSidebar = useCallback(() => {
     setOpen(prev => !prev);
   }, []);
 
-  // ✅ Close function للموبايل
   const closeSidebar = useCallback(() => {
     if (isMobileRef.current) {
       setOpen(false);
     }
   }, []);
 
-  // ✅ Memoized styles — 🆕 using theme colors
   const containerStyle = useMemo(() => ({
     display: "flex",
     height: "100vh",
-    background: colors.bg.page,    // ← 🆕 was "#0f172a"
+    background: colors.bg.page,
     overflow: "hidden",
     direction: "rtl",
   }), [colors.bg.page]);
 
+  // ✅ تعديل: marginRight دائماً عندما يكون Sidebar ظاهر (بما فيها الدردشة)
   const contentAreaStyle = useMemo(() => ({
     display: "flex",
     flexDirection: "column",
     flex: 1,
     transition: "margin 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
-    marginRight: isChatPage 
-      ? 0 
-      : (showSidebar 
-          ? (isMobile ? 0 : (open ? "260px" : "72px"))
-          : 0),
+    marginRight: showSidebar 
+      ? (isMobile ? 0 : (open ? "260px" : "72px"))
+      : 0,
     minWidth: 0,
-  }), [isChatPage, showSidebar, isMobile, open]);
+  }), [showSidebar, isMobile, open]);
 
-  // ✅ إصلاح conflict بين padding و paddingTop
   const mainStyle = useMemo(() => {
     const basePadding = isMobile ? "12px" : "20px";
     return {
@@ -145,7 +122,7 @@ export default function Layout() {
       paddingRight: basePadding,
       paddingBottom: basePadding,
       paddingLeft: basePadding,
-      background: colors.bg.page,    // ← 🆕 was "#0f172a"
+      background: colors.bg.page,
     };
   }, [isMobile, showTopbar, colors.bg.page]);
 
