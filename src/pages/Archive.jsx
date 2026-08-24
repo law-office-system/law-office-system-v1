@@ -69,9 +69,10 @@ export default function Archive() {
 
   /* ================= FILTER ARCHIVED CASES ================= */
   const archivedCases = cases.filter((c) => {
-    // فرز الملفات المؤرشفة والمنتهية (بناءً على الصيغتين العربية والإنجليزية المستعملة سابقاً)
+    // ⚫ الأرشيف = المغلقة فقط — مستبعدة التنفيذ والنشطة
     const isFinished = c.status === "CLOSED" || c.status === "منتهية";
-    if (!isFinished) return false;
+    const isExecution = c.status === "EXECUTION" || c.status === "تنفيذ" || c.status === "execution";
+    if (!isFinished || isExecution) return false;
 
     const text = search.toLowerCase().trim();
 

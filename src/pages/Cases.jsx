@@ -116,7 +116,7 @@ export default function Cases() {
   const [clientsMap, setClientsMap] = useState({});
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ACTIVE_EXECUTION"); // default: exclude closed
   const [courtFilter, setCourtFilter] = useState("ALL");
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [isMobile, setIsMobile] = useState(false);
@@ -335,7 +335,10 @@ export default function Cases() {
         caseTypeStr.includes(text) ||
         upcomingSessionDateStr.includes(text);
 
-      const statusMatch = statusFilter === "ALL" || c.status === statusFilter;
+      const statusMatch = 
+        statusFilter === "ALL" ? true :
+        statusFilter === "ACTIVE_EXECUTION" ? (c.status === "ACTIVE" || c.status === "EXECUTION" || c.status === "نشطة" || c.status === "تنفيذ") :
+        c.status === statusFilter;
       const courtMatch = courtFilter === "ALL" || c.court === courtFilter;
       const typeMatch = typeFilter === "ALL" || c.caseType === typeFilter;
 
@@ -409,10 +412,10 @@ export default function Cases() {
 
         <div style={styles.filters}>
           <select onChange={(e) => setStatusFilter(e.target.value)} style={styles.select}>
+            <option value="ACTIVE_EXECUTION">القضايا النشطة والتنفيذ (الافتراضي)</option>
+            <option value="ACTIVE">قضايا نشطة / متداولة فقط</option>
+            <option value="EXECUTION">قضايا قيد التنفيذ فقط</option>
             <option value="ALL">كل الحالات القانونية</option>
-            <option value="ACTIVE">قضايا نشطة / متداولة</option>
-            <option value="EXECUTION">قضايا قيد التنفيذ</option>
-            <option value="CLOSED">قضايا منتهية / مؤرشفة</option>
           </select>
 
           <select onChange={(e) => setCourtFilter(e.target.value)} style={styles.select}>
@@ -463,7 +466,7 @@ export default function Cases() {
 
                     <p style={styles.mobileText}>📌 <strong>النوع:</strong> {c.caseType || "-"}</p>
                     <p style={styles.mobileText}>🏛️ <strong>المحكمة:</strong> {c.court || "-"}</p>
-                    <p style={styles.mobileText}>💼 <strong>الحالة:</strong> {c.status === "ACTIVE" ? "نشطة" : c.status === "EXECUTION" ? "تنفيذ" : "منتهية"}</p>
+                    <p style={styles.mobileText}>💼 <strong>الحالة:</strong> {c.status === "ACTIVE" || c.status === "نشطة" || c.status === "جارية" ? "نشطة" : c.status === "EXECUTION" || c.status === "تنفيذ" ? "تنفيذ" : "منتهية"}</p>
 
                     <p style={styles.mobileText}>
                       👤 <strong>الموكلين:</strong>{" "}
@@ -528,10 +531,10 @@ export default function Cases() {
                         <td style={styles.td}>
                           <span style={{
                             padding: "4px 8px", borderRadius: "6px", fontSize: "12px", fontWeight: "600",
-                            background: c.status === "CLOSED" ? "#ffe0e0" : c.status === "EXECUTION" ? "#fff7e0" : "#e0f7e9",
-                            color: c.status === "CLOSED" ? "#dc2626" : c.status === "EXECUTION" ? "#f59e0b" : "#16a34a"
+                            background: c.status === "CLOSED" || c.status === "منتهية" ? "#ffe0e0" : c.status === "EXECUTION" || c.status === "تنفيذ" ? "#fff7e0" : "#e0f7e9",
+                            color: c.status === "CLOSED" || c.status === "منتهية" ? "#dc2626" : c.status === "EXECUTION" || c.status === "تنفيذ" ? "#f59e0b" : "#16a34a"
                           }}>
-                            {c.status === "ACTIVE" ? "نشطة" : c.status === "EXECUTION" ? "تنفيذ" : "منتهية"}
+                            {c.status === "ACTIVE" || c.status === "نشطة" || c.status === "جارية" ? "نشطة" : c.status === "EXECUTION" || c.status === "تنفيذ" ? "تنفيذ" : "منتهية"}
                           </span>
                         </td>
 

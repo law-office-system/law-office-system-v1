@@ -30,11 +30,12 @@ const CASES_COL = "cases";
  * Create the initial litigation level when a case is created
  * Automatically called from AddCase.jsx
  */
-export async function createInitialLitigationLevel(caseId, levelData) {
+export async function createInitialLitigationLevel(caseId, levelData, officeId) {
   const now = Timestamp.now();
 
   const newLevel = {
     caseId,
+    officeId,
     levelType: levelData.levelType || "first_instance",
     court: levelData.court || "",
     circuit: levelData.circuit || "",
@@ -72,7 +73,7 @@ export async function createInitialLitigationLevel(caseId, levelData) {
  * Create the next litigation level (e.g., appeal, cassation, execution)
  * Called when a judgment is issued and the lawyer wants to appeal
  */
-export async function createNextLitigationLevel(caseId, currentLevelId, newLevelData) {
+export async function createNextLitigationLevel(caseId, currentLevelId, newLevelData, officeId) {
   const batch = writeBatch(db);
 
   // Get current level
@@ -100,6 +101,7 @@ export async function createNextLitigationLevel(caseId, currentLevelId, newLevel
 
   const newLevel = {
     caseId,
+    officeId,
     levelType: newLevelData.levelType,
     court: newLevelData.court || currentLevel.court || "",
     circuit: newLevelData.circuit || "",

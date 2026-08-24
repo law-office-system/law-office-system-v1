@@ -100,9 +100,10 @@ export default function ActiveCases() {
 
   /* ================= FILTER ================= */
   const activeCases = cases.filter((c) => {
-    // التحقق من الحالات النشطة (سواء كانت مكتوبة بالإنجليزية أو العربية في الداتابيز القديمة)
+    // 🟢 القضايا النشطة فقط — مستبعدة التنفيذ والمغلقة
     const isActive = c.status === "ACTIVE" || c.status === "نشطة" || c.status === "جارية";
-    if (!isActive) return false;
+    const isExecution = c.status === "EXECUTION" || c.status === "تنفيذ" || c.status === "execution" || c.currentLevel === "execution";
+    if (!isActive || isExecution) return false;
 
     const text = search.toLowerCase().trim();
 

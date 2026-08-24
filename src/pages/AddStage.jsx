@@ -128,7 +128,7 @@ export default function AddStage() {
         filingDate: createForm.filingDate,
         circuit: createForm.circuit,
         status: "new",
-      });
+      }, userData.officeId);
 
       // Refresh levels
       const updatedLevels = await getLitigationLevelsByCase(id);

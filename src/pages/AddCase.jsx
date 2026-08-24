@@ -198,6 +198,7 @@ export default function AddCase() {
               judgmentDate: prev.judgmentDate ? Timestamp.fromDate(new Date(prev.judgmentDate)) : null,
               judgmentResult: prev.judgmentResult || null,
               completionDate: serverTimestamp(), createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+              officeId: userData.officeId,
             });
             prevLevelRefs.push({ id: ref.id, formId: prev.id });
             order++;
@@ -212,6 +213,7 @@ export default function AddCase() {
         status: "new", isActive: true, isCompleted: false, order,
         sessionCount: 0, filingDate: curr.filingDate ? Timestamp.fromDate(new Date(curr.filingDate)) : null,
         createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        officeId: userData.officeId,
       });
 
       // Build map: form level.id → Firestore doc id
