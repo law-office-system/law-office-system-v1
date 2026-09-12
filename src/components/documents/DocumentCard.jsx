@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
 import { useTheme } from '../../context/ThemeContext.jsx';
-import { deleteDocument, getFileMeta, formatFileSize, getCategoryMeta } from '../../services/documents';
-import { FileText, File, Image, Table, Download, Trash2, Eye, MoreVertical, PenLine, Loader2 } from 'lucide-react';
+import { deleteDocument, updateDocument, getFileMeta, formatFileSize, getCategoryMeta } from '../../services/documents';
+import { FileText, File, Image, Table, Download, Trash2, Eye, PenLine, Loader2, Check, X, Briefcase, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-export default function DocumentCard({ doc, onDelete, onPreview }) {
+export default function DocumentCard({ doc, onDelete, onPreview, onUpdate }) {
   const { theme } = useTheme();
   const { colors } = theme;
   const navigate = useNavigate();
-  const [menuOpen, setMenuOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // حالات إعادة التسمية
+  const [isEditing, setIsEditing] = useState(false);
+  const [newName, setNewName] = useState(doc.name || doc.fileName || '');
+  const [saving, setSaving] = useState(false);
 
   const isEditorDoc = doc.source === 'editor';
   const meta = isEditorDoc
@@ -18,13 +22,33 @@ export default function DocumentCard({ doc, onDelete, onPreview }) {
   const catMeta = getCategoryMeta(doc.category);
 
   const getIcon = () => {
-    const props = { size: 28, color: meta.color };
+    const props = { size: 26, color: meta.color };
     if (isEditorDoc) return <PenLine {...props} />;
     switch (meta.icon) {
       case 'Image': return <Image {...props} />;
       case 'Table': return <Table {...props} />;
       case 'FileText': return <FileText {...props} />;
       default: return <File {...props} />;
+    }
+  };
+
+  const handleSaveRename = async () => {
+    if (!newName.trim() || newName === doc.name) {
+      setIsEditing(false);
+      setNewName(doc.name || doc.fileName || '');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await updateDocument(doc.id, { name: newName.trim() });
+      doc.name = newName.trim();
+      setIsEditing(false);
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      alert('فشل إعادة التسمية: ' + err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -62,7 +86,9 @@ export default function DocumentCard({ doc, onDelete, onPreview }) {
       borderRadius: 16,
       padding: 16,
       transition: 'all 0.2s ease',
-      position: 'relative',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 12,
     }}
     onMouseEnter={(e) => {
       e.currentTarget.style.borderColor = isEditorDoc
@@ -118,16 +144,79 @@ export default function DocumentCard({ doc, onDelete, onPreview }) {
                 ✏️ محرر
               </span>
             )}
+            
+            {/* عرض رقم القضية أو اسم القضية إن وجد في بيانات المستند */}
+            {(doc.caseNumber || doc.caseTitle) && (
+              <span style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                padding: '3px 8px', background: 'rgba(59, 130, 246, 0.1)',
+                color: colors.accent.blue.main, borderRadius: 8,
+                fontSize: 11, fontWeight: 700,
+              }}>
+                <Briefcase size={12} /> قضية: {doc.caseNumber || doc.caseTitle}
+              </span>
+            )}
+
+            {/* عرض اسم العميل إن وجد في بيانات المستند */}
+            {doc.clientName && (
+              <span style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                padding: '3px 8px', background: 'rgba(16, 185, 129, 0.1)',
+                color: colors.accent.green.main, borderRadius: 8,
+                fontSize: 11, fontWeight: 700,
+              }}>
+                <User size={12} /> موكل: {doc.clientName}
+              </span>
+            )}
           </div>
 
-          {/* Name */}
-          <h4 style={{
-            margin: '0 0 6px 0', color: colors.text.primary,
-            fontSize: 15, fontWeight: 700,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
-            {doc.name || doc.fileName || 'وثيقة بدون عنوان'}
-          </h4>
+          {/* Name / Rename Input */}
+          {isEditing ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                disabled={saving}
+                autoFocus
+                style={{
+                  flex: 1,
+                  padding: '6px 10px',
+                  background: colors.bg.input || '#fff',
+                  border: `1px solid ${colors.accent.blue.main}`,
+                  borderRadius: 8,
+                  color: colors.text.primary,
+                  fontSize: 14,
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                }}
+              />
+              <button
+                onClick={handleSaveRename}
+                disabled={saving}
+                style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer' }}
+                title="حفظ"
+              >
+                {saving ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={16} />}
+              </button>
+              <button
+                onClick={() => { setIsEditing(false); setNewName(doc.name || doc.fileName || ''); }}
+                disabled={saving}
+                style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer' }}
+                title="إلغاء"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ) : (
+            <h4 style={{
+              margin: '0 0 6px 0', color: colors.text.primary,
+              fontSize: 15, fontWeight: 700,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>
+              {doc.name || doc.fileName || 'وثيقة بدون عنوان'}
+            </h4>
+          )}
 
           {/* Meta */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 12px', marginBottom: 8 }}>
@@ -169,57 +258,69 @@ export default function DocumentCard({ doc, onDelete, onPreview }) {
             </div>
           )}
         </div>
+      </div>
 
-        {/* Actions Menu */}
-        <div style={{ position: 'relative' }}>
-          <button onClick={() => setMenuOpen(!menuOpen)}
-            style={{ background: 'none', border: 'none', color: colors.text.muted, cursor: 'pointer', padding: 6 }}>
-            <MoreVertical size={18} />
+      {/* شريط الأزرار السريعة */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 4,
+        paddingTop: 10,
+        borderTop: `1px solid ${colors.border.default}`,
+      }}>
+        {isEditorDoc ? (
+          <button onClick={handleOpenEditor} style={actionBtnStyle(colors)}>
+            <PenLine size={12} /> فتح بالمحرر
           </button>
+        ) : (
+          <>
+            <button onClick={handleDownload} style={actionBtnStyle(colors)} title="تحميل">
+              <Download size={12} /> تحميل
+            </button>
+            <button onClick={() => onPreview?.(doc)} style={actionBtnStyle(colors)} title="معاينة">
+              <Eye size={12} /> معاينة
+            </button>
+          </>
+        )}
 
-          {menuOpen && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 4px)', left: 0,
-              width: 160, background: colors.bg.card,
-              border: `1px solid ${colors.border.default}`, borderRadius: 12,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.3)', zIndex: 100, overflow: 'hidden',
-            }}>
-              {isEditorDoc ? (
-                <button onClick={() => { handleOpenEditor(); setMenuOpen(false); }}
-                  style={menuItemStyle(colors)}>
-                  <PenLine size={14} /> فتح في المحرر
-                </button>
-              ) : (
-                <>
-                  <button onClick={() => { handleDownload(); setMenuOpen(false); }}
-                    style={menuItemStyle(colors)}>
-                    <Download size={14} /> تحميل
-                  </button>
-                  <button onClick={() => { onPreview?.(doc); setMenuOpen(false); }}
-                    style={menuItemStyle(colors)}>
-                    <Eye size={14} /> معاينة
-                  </button>
-                </>
-              )}
-              <div style={{ height: 1, background: colors.border.default, margin: '4px 8px' }} />
-              <button onClick={() => { handleDelete(); setMenuOpen(false); }}
-                style={{ ...menuItemStyle(colors), color: colors.accent.red.main }}>
-                {deleting ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={14} />}
-                حذف
-              </button>
-            </div>
-          )}
-        </div>
+        <button onClick={() => setIsEditing(true)} style={actionBtnStyle(colors)} title="إعادة تسمية">
+          <PenLine size={12} /> الاسم
+        </button>
+
+        <button 
+          onClick={handleDelete} 
+          style={{ 
+            ...actionBtnStyle(colors), 
+            color: colors.accent.red.main, 
+            background: colors.accent.red.bg || 'rgba(239, 68, 68, 0.1)',
+            borderColor: colors.accent.red.main + '40'
+          }} 
+          title="حذف"
+        >
+          {deleting ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={12} />}
+          حذف
+        </button>
       </div>
     </div>
   );
 }
 
-function menuItemStyle(colors) {
+function actionBtnStyle(colors) {
   return {
-    width: '100%', padding: '10px 14px', background: 'none', border: 'none',
-    color: colors.text.secondary, fontSize: 13, fontWeight: 500,
-    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
-    fontFamily: 'inherit', textAlign: 'right', direction: 'rtl',
+    padding: '4px 8px',
+    background: colors.bg.hover || 'rgba(0,0,0,0.05)',
+    border: `1px solid ${colors.border.default}`,
+    borderRadius: 6,
+    color: colors.text.secondary,
+    fontSize: 11,
+    fontWeight: 500,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 3,
+    fontFamily: 'inherit',
+    transition: 'background 0.2s',
+    whiteSpace: 'nowrap',
   };
 }

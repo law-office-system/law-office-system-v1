@@ -10,7 +10,6 @@ export default function DocumentUploader({ caseId, clientId, onUpload, onClose }
   const { userData } = useAuth();
 
   const [files, setFiles] = useState([]);
-  const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('general');
   const [tags, setTags] = useState([]);
@@ -39,12 +38,18 @@ export default function DocumentUploader({ caseId, clientId, onUpload, onClose }
     setFiles(prev => [...prev, ...valid.map(f => ({
       file: f,
       id: Math.random().toString(36).substr(2, 9),
+      name: f.name, // تعيين الاسم الافتراضي ليطابق اسم الملف الحقيقي
       status: 'pending',
     }))]);
   };
 
   const removeFile = (id) => {
     setFiles(prev => prev.filter(f => f.id !== id));
+  };
+
+  // تحديث اسم ملف معين داخل القائمة قبل الرفع
+  const updateFileName = (id, newName) => {
+    setFiles(prev => prev.map(f => f.id === id ? { ...f, name: newName } : f));
   };
 
   const addTag = () => {
@@ -74,7 +79,7 @@ export default function DocumentUploader({ caseId, clientId, onUpload, onClose }
           category,
           tags,
           description,
-          name: name || fileObj.file.name,
+          name: fileObj.name || fileObj.file.name, // استخدام الاسم المخصص أو اسم الملف
           visibility,
         });
 
@@ -112,6 +117,9 @@ export default function DocumentUploader({ caseId, clientId, onUpload, onClose }
       padding: 24,
       maxWidth: 600,
       margin: '0 auto',
+      position: 'relative',
+      overflow: 'visible', // ضمان عدم قص أي عناصر منسدلة أو متداخلة
+      zIndex: 10,
     }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -173,9 +181,12 @@ export default function DocumentUploader({ caseId, clientId, onUpload, onClose }
         />
       </div>
 
-      {/* File List */}
+      {/* File List with Individual Name Editing */}
       {files.length > 0 && (
         <div style={{ marginBottom: 20 }}>
+          <label style={{ display: 'block', color: colors.text.secondary, fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+            الملفات المضافة (يمكنك تعديل اسم أي ملف قبل الرفع):
+          </label>
           {files.map(fileObj => (
             <div key={fileObj.id} style={{
               display: 'flex', alignItems: 'center', gap: 12,
@@ -184,17 +195,32 @@ export default function DocumentUploader({ caseId, clientId, onUpload, onClose }
               border: `1px solid ${fileObj.status === 'error' ? colors.accent.red.main + '30' : colors.border.default}`,
             }}>
               <FileText size={18} color={getFileColor(fileObj.file.name)} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{
-                  margin: 0, color: colors.text.primary, fontSize: 13,
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>
-                  {fileObj.file.name}
-                </p>
+              
+              <div style={{ flex: 1, minWidth: '0' }}>
+                <input
+                  type="text"
+                  value={fileObj.name}
+                  onChange={(e) => updateFileName(fileObj.id, e.target.value)}
+                  disabled={uploading || fileObj.status === 'completed'}
+                  style={{
+                    width: '100%',
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: `1px solid ${colors.border.default}`,
+                    color: colors.text.primary,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    outline: 'none',
+                    paddingBottom: 2,
+                    fontFamily: 'inherit',
+                  }}
+                  placeholder="اسم المستند..."
+                />
                 <p style={{ margin: '2px 0 0 0', color: colors.text.muted, fontSize: 11 }}>
-                  {formatFileSize(fileObj.file.size)}
+                  {formatFileSize(fileObj.file.size)} (الأصلي: {fileObj.file.name})
                 </p>
               </div>
+
               {fileObj.status === 'completed' && <CheckCircle2 size={18} color={colors.accent.green.main} />}
               {fileObj.status === 'error' && <AlertCircle size={18} color={colors.accent.red.main} />}
               <button onClick={() => removeFile(fileObj.id)} disabled={uploading}
@@ -206,28 +232,10 @@ export default function DocumentUploader({ caseId, clientId, onUpload, onClose }
         </div>
       )}
 
-      {/* Name */}
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ display: 'block', color: colors.text.secondary, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-          اسم المستند (اختياري)
-        </label>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="اسم عرض للمستند..."
-          style={{
-            width: '100%', padding: '10px 14px', background: colors.bg.input,
-            border: `1px solid ${colors.border.default}`, borderRadius: 12,
-            color: colors.text.primary, fontSize: 14, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box',
-          }}
-        />
-      </div>
-
       {/* Category */}
       <div style={{ marginBottom: 16 }}>
         <label style={{ display: 'block', color: colors.text.secondary, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-          التصنيف
+          التصنيف العام
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {DOC_CATEGORIES.map(cat => (
@@ -250,7 +258,7 @@ export default function DocumentUploader({ caseId, clientId, onUpload, onClose }
       </div>
 
       {/* Visibility */}
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 16, position: 'relative', overflow: 'visible' }}>
         <label style={{ display: 'block', color: colors.text.secondary, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
           صلاحية الرؤية
         </label>
@@ -273,12 +281,12 @@ export default function DocumentUploader({ caseId, clientId, onUpload, onClose }
       {/* Description */}
       <div style={{ marginBottom: 16 }}>
         <label style={{ display: 'block', color: colors.text.secondary, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-          وصف (اختياري)
+          وصف عام (اختياري)
         </label>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="أضف وصفاً للمستند..."
+          placeholder="أضف وصفاً للمستندات..."
           rows={3}
           style={{
             width: '100%', padding: '10px 14px', background: colors.bg.input,

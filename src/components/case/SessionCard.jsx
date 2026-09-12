@@ -113,7 +113,7 @@ export default function SessionCard({
       }}
     >
       {/* ═══ HEADER ═══ */}
-      <div style={{ padding: `clamp(14px, 4vw, 18px) clamp(14px, 4vw, 20px)` }}>
+      <div style={{ padding: `clamp(10px, 3vw, 14px) clamp(12px, 3vw, 16px)` }}>
         <div style={{
           display: "flex",
           justifyContent: "space-between",
@@ -126,7 +126,7 @@ export default function SessionCard({
               display: "flex",
               alignItems: "center",
               gap: `clamp(4px, 1.5vw, 8px)`,
-              marginBottom: 12,
+              marginBottom: 8,
               flexWrap: "wrap"
             }}>
               {/* Session Number */}
@@ -267,21 +267,13 @@ export default function SessionCard({
                 </div>
               )}
 
-              <span style={{
-                color: colors.text.disabled,
-                fontSize: `clamp(9px, 2.5vw, 11px)`,
-                fontFamily: "monospace",
-                flexShrink: 0,
-              }}>
-                #{String(session.id || "").slice(-6)}
-              </span>
             </div>
 
             {/* ── Title ── */}
             <h4 style={{
-              margin: "0 0 12px 0",
+              margin: "0 0 8px 0",
               color: colors.text.primary,
-              fontSize: `clamp(14px, 4.5vw, 17px)`,
+              fontSize: `clamp(13px, 4vw, 15px)`,
               fontWeight: 700,
               wordBreak: "break-word",
               lineHeight: 1.4,
@@ -345,8 +337,8 @@ export default function SessionCard({
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    minWidth: 44,
-                    minHeight: 44,
+                    minWidth: 36,
+                    minHeight: 36,
                   }}
                   title="المزيد"
                 >
@@ -391,8 +383,8 @@ export default function SessionCard({
                 alignItems: "center",
                 justifyContent: "center",
                 transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-                minWidth: 44,
-                minHeight: 44,
+                minWidth: 36,
+                minHeight: 36,
               }}
               title={expanded ? "إخفاء التفاصيل" : "عرض التفاصيل"}
             >

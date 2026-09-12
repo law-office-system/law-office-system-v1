@@ -43,13 +43,12 @@ export default function ActiveCases() {
     fetchCases();
   }, [userData]);
 
-  /* ================= LOAD CLIENTS (🔒 FIXED MULTI-TENANT SECURITY) ================= */
+  /* ================= LOAD CLIENTS ================= */
   useEffect(() => {
     if (!userData?.officeId) return;
 
     const loadClients = async () => {
       try {
-        // تم إضافة الفلترة بـ officeId لمنع تسريب بيانات العملاء بين المكاتب المختلفة
         const q = query(
           collection(db, "clientProfiles"),
           where("officeId", "==", userData.officeId)
@@ -70,7 +69,6 @@ export default function ActiveCases() {
     loadClients();
   }, [userData]);
 
-  /* =================🛡️ دالة مستقرة تقرأ المعرف النصي أو كائن الموكل المطور ================= */
   const getClientName = (clientItem) => {
     if (!clientItem) return "موكل غير معروف";
     const id = typeof clientItem === "object" ? clientItem.id : clientItem;
@@ -79,7 +77,6 @@ export default function ActiveCases() {
 
   const getOpponentName = (o) => (typeof o === "object" ? o.name : o);
 
-  /* ================= دالة استخراج وتنسيق أقرب جلسة مستقبلية فقط ================= */
   const getUpcomingSessionString = (sessions) => {
     if (!Array.isArray(sessions) || sessions.length === 0) return "";
 
@@ -98,12 +95,26 @@ export default function ActiveCases() {
     return `${yyyy}-${mm}-${dd}`;
   };
 
-  /* ================= FILTER ================= */
+  /* ================= FILTER (مع استبعاد المؤرشفة بدقة) ================= */
   const activeCases = cases.filter((c) => {
-    // 🟢 القضايا النشطة فقط — مستبعدة التنفيذ والمغلقة
-    const isActive = c.status === "ACTIVE" || c.status === "نشطة" || c.status === "جارية";
+    const isArchivedOrClosed = 
+      c.status === "ARCHIVED" || 
+      c.status === "archived" || 
+      c.status === "مؤرشفة" || 
+      c.status === "CLOSED" || 
+      c.status === "منتهية";
+
     const isExecution = c.status === "EXECUTION" || c.status === "تنفيذ" || c.status === "execution" || c.currentLevel === "execution";
-    if (!isActive || isExecution) return false;
+    
+    if (isArchivedOrClosed || isExecution) return false;
+
+    const isActive = 
+      !c.status || 
+      c.status === "ACTIVE" || 
+      c.status === "نشطة" || 
+      c.status === "جارية";
+
+    if (!isActive) return false;
 
     const text = search.toLowerCase().trim();
 
@@ -121,31 +132,27 @@ export default function ActiveCases() {
       .join(" ")
       .toLowerCase();
 
-    // استخراج الجلسة القادمة لمطابقتها في عملية البحث
     const upcomingSessionDateStr = getUpcomingSessionString(c.sessions);
 
     return (
-      // دعم البحث بالتاريخ هنا أيضاً
-      (caseNumber.includes(text) ||
+      caseNumber.includes(text) ||
       clientNames.includes(text) ||
       opponentNames.includes(text) ||
       caseTypeStr.includes(text) ||
-      courtName.includes(text) || upcomingSessionDateStr.includes(text))
+      courtName.includes(text) || 
+      upcomingSessionDateStr.includes(text)
     );
   });
 
   return (
     <div style={{ ...styles.page, direction: "rtl" }}>
-      {/* HEADER */}
       <div style={styles.header}>
         <h1 style={{ margin: 0, fontSize: "22px", color: "#16a34a" }}>🟢 جدول القضايا المتداولة والنشطة</h1>
-
         <Button variant="primary" onClick={() => navigate("/add-case")} style={styles.addBtn}>
           ➕ إضافة قضية جديدة
         </Button>
       </div>
 
-      {/* SEARCH */}
       <input
         placeholder="ابحث برقم السجل، المحكمة، اسم الموكل، الخصم، أو تاريخ الجلسة القادمة (YYYY-MM-DD)..."
         value={search}
@@ -153,10 +160,8 @@ export default function ActiveCases() {
         style={styles.search}
       />
 
-      {/* COUNT */}
       <p style={styles.countText}>📊 عدد القضايا النشطة حالياً: <strong>{activeCases.length}</strong> دعوى</p>
 
-      {/* LIST */}
       <div style={styles.grid}>
         {activeCases.length === 0 ? (
           <p style={styles.noData}>لا توجد قضايا نشطة مطابقة للبحث حالياً.</p>
@@ -184,7 +189,6 @@ export default function ActiveCases() {
                     : "-"}
                 </p>
 
-                {/* عرض التاريخ الاسترشادي المنضبط */}
                 {sessionStr && (
                   <p style={{ ...styles.textLine, color: "#b45309", fontWeight: "600", marginTop: "10px" }}>
                     📅 <strong>الجلسة المقبلة:</strong>{" "}
@@ -194,7 +198,6 @@ export default function ActiveCases() {
                   </p>
                 )}
 
-                {/* ACTIONS */}
                 <div style={styles.actions}>
                   <Button
                     variant="primary"
@@ -227,7 +230,6 @@ export default function ActiveCases() {
   );
 }
 
-/* ================= COMPREHENSIVE STYLES ================= */
 const styles = {
   page: { padding: 20, direction: "rtl", background: "#f5f7fb", minHeight: "100vh", fontFamily: "Segoe UI, Tahoma" },
   header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 15 },

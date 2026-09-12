@@ -31,7 +31,7 @@ export default function Archive() {
     return () => unsub();
   }, [userData]);
 
-  /* ================= LOAD CLIENTS (MULTI-TENANT CONTROL) ================= */
+  /* ================= LOAD CLIENTS ================= */
   useEffect(() => {
     if (!userData?.officeId) return;
 
@@ -57,22 +57,26 @@ export default function Archive() {
     loadClients();
   }, [userData]);
 
-  /* =================🛡️ دالة مستقرة تقرأ المعرف النصي القديم أو الكائن المطور ================= */
   const getClientName = (clientItem) => {
     if (!clientItem) return "موكل غير معروف";
-    // التحقق مما إذا كان العنصر كائناً مطوراً أو معرفاً نصياً قديماً
     const id = typeof clientItem === "object" ? clientItem.id : clientItem;
     return clientsMap[id]?.fullName || clientsMap[id]?.name || "موكل غير معروف";
   };
 
   const getOpponentName = (o) => (typeof o === "object" ? o.name : o);
 
-  /* ================= FILTER ARCHIVED CASES ================= */
+  /* ================= FILTER ARCHIVED CASES (دعم جميع مسميات الأرشيف) ================= */
   const archivedCases = cases.filter((c) => {
-    // ⚫ الأرشيف = المغلقة فقط — مستبعدة التنفيذ والنشطة
-    const isFinished = c.status === "CLOSED" || c.status === "منتهية";
+    const isArchived = 
+      c.status === "ARCHIVED" || 
+      c.status === "archived" || 
+      c.status === "مؤرشفة" || 
+      c.status === "CLOSED" || 
+      c.status === "منتهية";
+
     const isExecution = c.status === "EXECUTION" || c.status === "تنفيذ" || c.status === "execution";
-    if (!isFinished || isExecution) return false;
+    
+    if (!isArchived || isExecution) return false;
 
     const text = search.toLowerCase().trim();
 
@@ -101,13 +105,11 @@ export default function Archive() {
 
   return (
     <div style={{ ...styles.page, direction: "rtl" }}>
-      {/* HEADER */}
       <div style={styles.headerCard}>
         <h1 style={styles.pageTitle}>📁 أرشيف القضايا والملفات المغلقة</h1>
         <p style={styles.pageSubtitle}>هنا تظهر الدعاوى الصادر فيها أحكام نهائية أو المقيدة كملفات منتهية ومؤرشفة.</p>
       </div>
 
-      {/* SEARCH */}
       <input
         placeholder="ابحث في الأرشيف برقم القضية، اسم الموكل، الخصم، أو المحكمة..."
         value={search}
@@ -115,10 +117,8 @@ export default function Archive() {
         style={styles.search}
       />
 
-      {/* COUNT */}
       <p style={styles.countText}>📊 إجمالي عدد الملفات المؤرشفة: <strong>{archivedCases.length}</strong> ملف قانوني</p>
 
-      {/* LIST */}
       <div style={styles.grid}>
         {archivedCases.length > 0 ? (
           archivedCases.map((c) => (
@@ -165,7 +165,6 @@ export default function Archive() {
   );
 }
 
-/* ================= MODERNIZED STYLES ================= */
 const styles = {
   page: { padding: 20, direction: "rtl", background: "#f5f7fb", minHeight: "100vh", fontFamily: "Segoe UI, Tahoma" },
   headerCard: { background: "#ffffff", padding: "16px", borderRadius: "12px", border: "1px solid #e2e8f0", marginBottom: "15px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" },

@@ -1,254 +1,31 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
-import { useParams, Link, useSearchParams } from "react-router-dom";
-import {
-  Landmark, Edit3, Calendar, Users, Shield, FileText,
-  Clock, MapPin, ChevronDown, Gavel, Briefcase,
-  DollarSign, ArrowLeft, Sparkles, Scale, AlertTriangle,
-  RotateCcw, FileArchive, X, Upload
-} from "lucide-react";
+import { useParams, useSearchParams } from "react-router-dom";
+import { Shield, RotateCcw, LayoutGrid, Calendar, Gavel, Briefcase, FileArchive } from "lucide-react";
 import {
   doc, onSnapshot, getDoc, updateDoc, collection,
   query, where, addDoc
 } from "firebase/firestore";
-import AdminTaskForm from "../components/case/AdminTaskForm";
-import AdminTasksSection from "../components/case/AdminTasksSection";
-import DecisionForm from "../components/case/DecisionForm";
-import JudgmentForm from "../components/case/JudgmentForm";
-import JudgmentsSection from "../components/case/JudgmentsSection";
-import SessionForm from "../components/case/SessionForm";
-import SessionsTimeline from "../components/case/SessionsTimeline";
-import CreateNextLevelButton from "../components/case/CreateNextLevelButton";
-import DocumentUploader from "../components/documents/DocumentUploader";
-import DocumentCard from "../components/documents/DocumentCard";
+import CaseHeader from "../components/case/details/CaseHeader";
+import CaseOverviewTab from "../components/case/details/CaseOverviewTab";
+import LevelSection from "../components/case/details/LevelSection";
+import CaseTabs from "../components/case/details/CaseTabs";
+import CaseModals from "../components/case/details/CaseModals";
 import { getDocuments } from "../services/documents";
-import { CASE_STATUS_LIST } from "../constants/caseStatus";
-import {
-  getLitigationLevelLabel,
-  getLitigationLevelColor,
-  getWorkflowStatusLabel,
-  getWorkflowStatusColor,
-} from "../constants/caseStatusLabels";
 import { useLitigationLevels } from "../hooks/useLitigationLevels";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebaseDb";
-import { Modal, Section } from "../components/ui";
 import { useTheme } from "../context/ThemeContext.jsx";
+import { isAdminRole, normalizeDate, sortSessionsByDate, validateTenant } from "../utils/caseHelpers";
 
 // ============================================================
-// ✅ خرائط الترجمة — من إنجليزي لعربي
+// صفحة تفاصيل القضية — نسخة مُعاد هيكلتها
+// البنية الجديدة:
+//   CaseHeader (ترويسة مركّزة + أزرار أساسية)
+//   LevelSection (شريط زمني للدرجات + شريط معلومات مضغوط)
+//   CaseTabs (نظرة عامة | سير الدعوى | الأحكام | الأعمال | المستندات)
+//   CaseModals (كل النوافذ المنبثقة)
+// هذه الصفحة الآن مسؤولة عن البيانات والمنطق فقط (Data/Orchestration).
 // ============================================================
-
-// أنواع القضايا
-const CASE_TYPE_MAP = {
-  criminal: "جنائي",
-  civil: "مدني",
-  commercial: "تجاري",
-  administrative: "إداري",
-  labor: "عمالي",
-  personal: "أحوال شخصية",
-  military: "عسكري",
-  constitutional: "دستوري",
-  tax: "ضريبي",
-  insurance: "تأمينات",
-  family: "أسري",
-  real_estate: "عقاري",
-  intellectual: "ملكية فكرية",
-  maritime: "بحري",
-  banking: "مصرفي",
-  investment: "استثماري",
-  competition: "منافسة",
-  environment: "بيئي",
-  consumer: "حماية المستهلك",
-  cyber: "إلكتروني",
-  medical: "طبيب",
-  engineering: "هندسي",
-  other: "أخرى",
-};
-
-// درجات التقاضي
-const LEVEL_TYPE_MAP = {
-  first_instance: "أول درجة",
-  partial: "جزئية",
-  appeal: "استئناف",
-  cassation: "نقض",
-  execution: "تنفيذ",
-  new: "جديدة",
-  first: "أولى",
-  second: "ثانية",
-  third: "ثالثة",
-  supreme: "عليا",
-  administrative_court: "مجلس الدولة",
-  disciplinary: "تأديبي",
-  constitutional_court: "الدستورية العليا",
-  military_appeal: "استئناف عسكري",
-  military_cassation: "نقض عسكري",
-  urgent: "عاجلة",
-  summary: "موجزة",
-  plenary: "الأحكام الكلية",
-};
-
-// حالات سير العمل (workflow)
-const WORKFLOW_STATUS_MAP = {
-  new: "جديدة",
-  active: "نشطة",
-  pending: "معلقة",
-  adjourned: "مؤجلة",
-  judgment: "حُكمت",
-  appealed: "مستأنفة",
-  cassation: "منقوضة",
-  execution: "تنفيذ",
-  closed: "مغلقة",
-  archived: "مؤرشفة",
-  settled: "مسواة",
-  withdrawn: "مسحوبة",
-  rejected: "مرفوضة",
-  reopened: "معاد فتحها",
-};
-
-// دوال الترجمة المساعدة
-const translateCaseType = (type) => {
-  if (!type) return "غير محدد";
-  const normalized = String(type).toLowerCase().trim();
-  return CASE_TYPE_MAP[normalized] || type;
-};
-const translateLevelType = (type) => {
-  if (!type) return "غير محدد";
-  const normalized = String(type).toLowerCase().trim();
-  return LEVEL_TYPE_MAP[normalized] || type;
-};
-const translateWorkflowStatus = (status) => {
-  if (!status) return "غير محدد";
-  const normalized = String(status).toLowerCase().trim();
-  return WORKFLOW_STATUS_MAP[normalized] || status;
-};
-
-
-const getStatusLabel = (status) => {
-  const found = CASE_STATUS_LIST.find(s => s.value === status);
-  return found ? found.label : (status || "غير محدد");
-};
-
-const ADMIN_ROLES = ["admin", "superadmin"];
-const isAdminRole = (role) => ADMIN_ROLES.includes(role);
-
-const normalizeDate = (dateValue) => {
-  if (!dateValue) return null;
-  if (typeof dateValue === 'object' && dateValue?.toDate) {
-    return dateValue.toDate();
-  }
-  if (dateValue instanceof Date) return dateValue;
-  const parsed = new Date(dateValue);
-  return isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const formatDate = (dateValue) => {
-  const date = normalizeDate(dateValue);
-  return date ? date.toLocaleDateString('ar-EG') : '-';
-};
-
-const sortSessionsByDate = (sessions) => {
-  return [...sessions].sort((a, b) => {
-    const dateA = normalizeDate(a.date);
-    const dateB = normalizeDate(b.date);
-    if (!dateA && !dateB) return 0;
-    if (!dateA) return 1;
-    if (!dateB) return -1;
-    return dateB - dateA;
-  });
-};
-
-const validateTenant = (caseTenantId, userTenantId) => {
-  if (!caseTenantId) return true;
-  if (caseTenantId !== userTenantId) {
-    throw new Error("Unauthorized: Tenant mismatch. Access denied.");
-  }
-  return true;
-};
-
-
-function InfoBox({ icon: Icon, title, value, color, badge = null }) {
-  const { theme } = useTheme();
-  const { colors, infoBox, iconBox, radius } = theme;
-  const displayValue = value != null && value !== '' ? value : "-";
-  const boxColor = color || colors.accent.blue.light;
-  return (
-    <div style={{
-      ...infoBox,
-      background: colors.bg.card,
-      padding: "clamp(10px, 3vw, 14px)",
-    }}>
-      <div style={iconBox(boxColor)}>
-        <Icon size={18} color={boxColor} strokeWidth={2} />
-      </div>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ color: colors.text.muted, fontSize: 11, marginBottom: 3 }}>{title}</div>
-        <div style={{ fontWeight: 700, color: colors.text.primary, fontSize: "clamp(12px, 3.5vw, 14px)", wordBreak: "break-word" }}>
-          {displayValue}
-        </div>
-        {badge && (
-          <div style={{
-            marginTop: 4, display: "inline-flex", alignItems: "center", gap: 4,
-            padding: "2px 8px", background: badge.bg, color: badge.color,
-            borderRadius: radius.full, fontSize: 10, fontWeight: 700, border: `1px solid ${badge.border}`,
-          }}>
-            <Sparkles size={9} /> {badge.text}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function WorkflowBanner({ lastSession }) {
-  const { theme } = useTheme();
-  const { colors, spacing, radius } = theme;
-
-  const DECISION_STAGE_MAP = {
-    adjourned:       { stageLabel: 'مؤجلة',        color: colors.accent.amber.main },
-    adjourned_notice:{ stageLabel: 'مؤجلة لإعلان', color: colors.accent.amber.dark },
-    judgment:        { stageLabel: 'حُكمت',        color: colors.accent.green.main },
-    referred:        { stageLabel: 'محالة',        color: colors.accent.blue.main },
-    absence:         { stageLabel: 'غياب',         color: colors.accent.red.main },
-    expert:          { stageLabel: 'معينة خبير',   color: colors.accent.purple.main },
-    settlement:      { stageLabel: 'مسوّاة',       color: colors.accent.cyan.main },
-  };
-
-  if (!lastSession?.suggestedStage) return null;
-  const meta = DECISION_STAGE_MAP[lastSession.suggestedStage];
-  if (!meta) return null;
-  return (
-    <div style={{
-      background: `${meta.color}10`, border: `1px solid ${meta.color}25`,
-      borderRadius: radius.md, padding: `${spacing.md} ${spacing.lg}`, marginBottom: spacing.lg,
-      display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
-    }}>
-      <div style={{
-        width: 36, height: 36, borderRadius: radius.md, background: `${meta.color}18`,
-        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-      }}>
-        <Scale size={18} color={meta.color} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: meta.color, marginBottom: 2 }}>
-          المرحلة الحالية: {meta.stageLabel}
-        </div>
-        <div style={{ fontSize: 12, color: colors.text.secondary }}>
-          بناءً على قرار الجلسة الأخيرة ({lastSession.decisionLabel || lastSession.decisionType})
-          {lastSession.suggestedTask ? ` — المهمة: ${lastSession.suggestedTask}` : ''}
-        </div>
-      </div>
-      {lastSession.suggestedTask && (
-        <div style={{
-          padding: "4px 12px", background: `${meta.color}12`, color: meta.color,
-          borderRadius: radius.full, fontSize: 11, fontWeight: 600, border: `1px solid ${meta.color}20`,
-          whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 5,
-        }}>
-          <Briefcase size={11} /> {lastSession.suggestedTask}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function LoadingState() {
   const { theme } = useTheme();
@@ -307,7 +84,7 @@ function ErrorState({ message, onRetry }) {
 
 export default function CaseDetails() {
   const { theme } = useTheme();
-  const { colors, spacing, radius, shadows, transitions, card, page, infoBox, iconBox } = theme;
+  const { colors, spacing, radius, shadows, page } = theme;
   const { id } = useParams();
   const { userData } = useAuth();
   const [searchParams] = useSearchParams();
@@ -336,11 +113,9 @@ export default function CaseDetails() {
   const [editingSession, setEditingSession] = useState(null);
   const [linkedSessionForJudgment, setLinkedSessionForJudgment] = useState(null);
   const [linkedSessionForDecision, setLinkedSessionForDecision] = useState(null);
-  const [activeTab, setActiveTab] = useState("sessions");
+  const [activeTab, setActiveTab] = useState("overview");
 
-  // ═══════════════════════════════════════════════════════════════
   // 📁 DOCUMENTS STATE
-  // ═══════════════════════════════════════════════════════════════
   const [caseDocs, setCaseDocs] = useState([]);
   const [docsLoading, setDocsLoading] = useState(false);
   const [showDocUploader, setShowDocUploader] = useState(false);
@@ -348,18 +123,8 @@ export default function CaseDetails() {
 
   const isAdmin = useMemo(() => isAdminRole(userData?.role), [userData?.role]);
 
-  useEffect(() => {
-    console.log("🔍 CaseDetails Debug:", {
-      isAdmin,
-      activeLevel: activeLevel ? { id: activeLevel.id, levelType: activeLevel.levelType } : null,
-      levelsLoading,
-      userRole: userData?.role,
-      levelsCount: levels.length,
-    });
-  }, [isAdmin, activeLevel, levelsLoading, userData?.role, levels.length]);
-
-  const canViewFinance = useMemo(() => 
-    ["admin", "staff", "superadmin"].includes(userData?.role), 
+  const canViewFinance = useMemo(() =>
+    ["admin", "staff", "superadmin"].includes(userData?.role),
     [userData?.role]
   );
 
@@ -524,9 +289,7 @@ export default function CaseDetails() {
     };
   }, [id]);
 
-  // ═══════════════════════════════════════════════════════════════
   // 📁 LOAD DOCUMENTS FOR THIS CASE
-  // ═══════════════════════════════════════════════════════════════
   const loadCaseDocuments = useCallback(async () => {
     if (!userData?.officeId || !id) return;
     setDocsLoading(true);
@@ -685,8 +448,8 @@ export default function CaseDetails() {
       const now = new Date().toISOString();
       const baseSession = editingSession || {};
 
-      const originalDate = editingSession 
-        ? (baseSession.date || '') 
+      const originalDate = editingSession
+        ? (baseSession.date || '')
         : null;
 
       const sessionData = {
@@ -694,8 +457,8 @@ export default function CaseDetails() {
         id: baseSession.id || crypto.randomUUID(),
         title: formData.title,
         date: originalDate || formData.date,
-        nextSessionDate: editingSession 
-          ? baseSession.nextSessionDate 
+        nextSessionDate: editingSession
+          ? baseSession.nextSessionDate
           : (formData.nextSessionDate || null),
         time: formData.time,
         location: formData.location,
@@ -730,13 +493,13 @@ export default function CaseDetails() {
         updatedSessions = [...safeSessions, sessionData];
       }
 
-      const shouldCreateNext = formData.nextSessionDate && 
+      const shouldCreateNext = formData.nextSessionDate &&
         formData.nextSessionDate !== (originalDate || formData.date) &&
         ['adjourned', 'adjourned_notice', 'referred', 'expert', 'absence'].includes(formData.decisionType);
 
       if (shouldCreateNext) {
-        const alreadyExists = updatedSessions.some(s => 
-          (s.date === formData.nextSessionDate || s.nextSessionDate === formData.nextSessionDate) 
+        const alreadyExists = updatedSessions.some(s =>
+          (s.date === formData.nextSessionDate || s.nextSessionDate === formData.nextSessionDate)
           && s.id !== sessionData.id
         );
         if (!alreadyExists) {
@@ -882,14 +645,14 @@ export default function CaseDetails() {
         updatedAt: now,
       };
 
-      let updatedSessions = safeSessions.map(s => 
+      let updatedSessions = safeSessions.map(s =>
         s.id === linkedSessionForDecision.id ? updatedCurrentSession : s
       );
 
       if (decisionData.nextSessionDate) {
         const isDifferentDate = decisionData.nextSessionDate !== originalDate;
-        const alreadyExists = updatedSessions.some(s => 
-          (s.date === decisionData.nextSessionDate || s.nextSessionDate === decisionData.nextSessionDate) 
+        const alreadyExists = updatedSessions.some(s =>
+          (s.date === decisionData.nextSessionDate || s.nextSessionDate === decisionData.nextSessionDate)
           && s.id !== linkedSessionForDecision.id
         );
 
@@ -1012,27 +775,17 @@ export default function CaseDetails() {
     );
   }
 
-  const selectedLevelLabel = selectedLevel ? translateLevelType(selectedLevel.levelType) : "غير محدد";
-  const selectedLevelColor = selectedLevel ? getLitigationLevelColor(selectedLevel.levelType) : colors.accent.blue.main;
-  const selectedStatusLabel = selectedLevel ? translateWorkflowStatus(selectedLevel.status) : "غير محدد";
-  const selectedStatusColor = selectedLevel ? getWorkflowStatusColor(selectedLevel.status) : colors.text.disabled;
-
   const tabs = [
+    { key: "overview", label: "نظرة عامة", count: 0, icon: LayoutGrid },
     { key: "sessions", label: "سير الدعوى", count: levelSessions.length, icon: Calendar },
     { key: "judgments", label: "الأحكام", count: levelJudgments.length, icon: Gavel },
     { key: "admin", label: "الأعمال الإدارية", count: levelTasks.length, icon: Briefcase },
     { key: "documents", label: "المستندات", count: caseDocs.length, icon: FileArchive },
   ];
 
-  const getStatusStyle = (status) => {
-    const statusStyles = {
-      ACTIVE: { bg: colors.accent.green.bg, color: colors.accent.green.main, border: colors.accent.green.main + '30', dot: colors.accent.green.main },
-      CLOSED: { bg: colors.text.disabled + '15', color: colors.text.disabled, border: colors.text.disabled + '30', dot: colors.text.disabled },
-    };
-    return statusStyles[status] || { bg: colors.accent.amber.bg, color: colors.accent.amber.main, border: colors.accent.amber.main + '30', dot: colors.accent.amber.main };
-  };
-
-  const statusStyle = getStatusStyle(caseData.status);
+  const closeSessionForm = () => { setShowSessionForm(false); setEditingSession(null); };
+  const closeDecisionForm = () => { setShowDecisionForm(false); setLinkedSessionForDecision(null); };
+  const closeJudgmentForm = () => { setShowJudgmentForm(false); setLinkedSessionForJudgment(null); };
 
   return (
     <div style={{
@@ -1052,750 +805,85 @@ export default function CaseDetails() {
         </div>
       )}
 
-      {/* ========== HEADER ========== */}
-      <div style={{
-        background: `linear-gradient(135deg, ${colors.bg.card} 0%, ${colors.bg.page} 100%)`,
-        border: `1px solid ${colors.border.default}`,
-        borderRadius: radius.xl,
-        padding: "clamp(16px, 4vw, 28px)",
-        marginBottom: 24,
-        position: "relative",
-        overflow: "hidden",
-      }}>
-        <div style={{
-          position: "absolute", top: -50, right: -50,
-          width: 200, height: 200,
-          background: `radial-gradient(circle, ${colors.accent.blue.main}15 0%, transparent 70%)`,
-          borderRadius: "50%", pointerEvents: "none",
-        }} />
-        <div style={{
-          display: "flex", alignItems: "flex-start", gap: "clamp(12px, 3vw, 20px)",
-          position: "relative", zIndex: 1,
-        }}>
-          <div style={{
-            width: "clamp(48px, 10vw, 64px)",
-            height: "clamp(48px, 10vw, 64px)",
-            background: `linear-gradient(135deg, ${colors.accent.blue.dark}, ${colors.accent.blue.main})`,
-            borderRadius: 18,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: shadows.glow(colors.accent.blue.main),
-            flexShrink: 0,
-            border: `1px solid ${colors.accent.blue.main}20`,
-          }}>
-            <Landmark color={colors.accent.amber.light} size={28} strokeWidth={2.5} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
-              display: "flex", alignItems: "center", gap: 12,
-              flexWrap: "wrap", marginBottom: 8,
-            }}>
-              <h1 style={{
-                margin: 0, fontSize: "clamp(18px, 5vw, 26px)",
-                color: colors.text.primary, fontWeight: 800,
-                letterSpacing: "-0.5px",
-              }}>
-                {caseData.caseName || `ملف القضية رقم ${caseData.caseSerial}`}
-              </h1>
-              <span style={{
-                background: colors.accent.blue.bg,
-                color: colors.accent.blue.light,
-                border: `1px solid ${colors.accent.blue.main}25`,
-                padding: "4px 12px", borderRadius: radius.full,
-                fontSize: "clamp(11px, 3vw, 13px)", fontWeight: 600,
-              }}>
-                {translateCaseType(caseData.caseType)}
-              </span>
-            </div>
-            <div style={{
-              display: "flex", alignItems: "center", gap: "clamp(8px, 2vw, 16px)",
-              flexWrap: "wrap",
-            }}>
-              <span style={{
-                background: statusStyle.bg, color: statusStyle.color,
-                border: `1px solid ${statusStyle.border}`,
-                padding: "5px 14px", borderRadius: radius.full,
-                fontSize: "clamp(11px, 3vw, 13px)", fontWeight: 700,
-                display: "flex", alignItems: "center", gap: 6,
-              }}>
-                <div style={{
-                  width: 7, height: 7, borderRadius: "50%",
-                  background: statusStyle.dot,
-                  boxShadow: `0 0 8px ${statusStyle.dot}`,
-                }} />
-                {getStatusLabel(caseData.status)}
-              </span>
-              <span style={{ color: colors.text.muted, fontSize: "clamp(12px, 3.5vw, 14px)" }}>
-                سنة {caseData.caseYear || "-"}
-              </span>
-              <span style={{ color: colors.text.disabled }}>|</span>
-              <span style={{ color: colors.text.muted, fontSize: "clamp(12px, 3.5vw, 14px)", display: "flex", alignItems: "center", gap: 5 }}>
-                <Users size={14} /> {safeClients.length} موكل
-              </span>
-              <span style={{ color: colors.text.muted, fontSize: "clamp(12px, 3.5vw, 14px)", display: "flex", alignItems: "center", gap: 5 }}>
-                <Shield size={14} /> {safeOpponents.length} خصم
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <CaseHeader
+        caseData={caseData}
+        clientsCount={safeClients.length}
+        opponentsCount={safeOpponents.length}
+        canViewFinance={canViewFinance}
+      />
 
-      {/* ========== PARTIES (موكلين + خصوم) ========== */}
-      <Section title="أطراف الدعوى" icon={Users} iconColor={colors.accent.blue.light} defaultOpen={true}>
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, clamp(280px, 45vw, 400px)), 1fr))",
-          gap: 16,
-        }}>
-          {/* الموكلون */}
-          <div>
-            <h4 style={{
-              margin: "0 0 10px 0",
-              color: colors.accent.green.main,
-              fontSize: "clamp(12px, 3.5vw, 14px)",
-              fontWeight: 700,
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}>
-              <Users size={16} />
-              الموكلون ({safeClients.length})
-            </h4>
-            {safeClients.length === 0 ? (
-              <p style={{ color: colors.text.muted, fontSize: "clamp(11px, 3vw, 13px)", margin: 0 }}>لا يوجد موكلون مسجلون</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {clients.map(c => (
-                  <div key={c.id} style={{
-                    padding: "clamp(10px, 3vw, 12px)",
-                    background: colors.bg.hover,
-                    borderRadius: radius.md,
-                    border: `1px solid ${colors.border.default}`,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                  }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: "50%",
-                      background: colors.accent.green.main + "20",
-                      color: colors.accent.green.main,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 16, flexShrink: 0,
-                    }}>
-                      {c.fullName?.charAt(0) || "👤"}
-                    </div>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: "clamp(12px, 3.5vw, 14px)", color: colors.text.primary, wordBreak: "break-word" }}>
-                        {c.fullName || "موكل"}
-                      </div>
-                      {c.phone && (
-                        <div style={{ fontSize: "clamp(10px, 3vw, 12px)", color: colors.text.muted, marginTop: 2 }}>
-                          📞 {c.phone}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+      <LevelSection
+        levels={levels}
+        selectedLevel={selectedLevel}
+        setSelectedLevelId={setSelectedLevelId}
+        isAdmin={isAdmin}
+        activeLevel={activeLevel}
+        levelsLoading={levelsLoading}
+        onCreateLevel={handleCreateNextLevel}
+        lastSession={lastSession}
+      />
 
-          {/* الخصوم */}
-          <div>
-            <h4 style={{
-              margin: "0 0 10px 0",
-              color: colors.accent.red.main,
-              fontSize: "clamp(12px, 3.5vw, 14px)",
-              fontWeight: 700,
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}>
-              <Shield size={16} />
-              أطراف الخصوم ({safeOpponents.length})
-            </h4>
-            {safeOpponents.length === 0 ? (
-              <p style={{ color: colors.text.muted, fontSize: "clamp(11px, 3vw, 13px)", margin: 0 }}>لا يوجد خصوم مسجلون</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {safeOpponents.map((opp, idx) => (
-                  <div key={idx} style={{
-                    padding: "clamp(10px, 3vw, 12px)",
-                    background: colors.bg.hover,
-                    borderRadius: radius.md,
-                    border: `1px solid ${colors.border.default}`,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                  }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: "50%",
-                      background: colors.accent.red.main + "20",
-                      color: colors.accent.red.main,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 16, flexShrink: 0,
-                    }}>
-                      {typeof opp === "object" ? (opp.name?.charAt(0) || "🛡️") : "🛡️"}
-                    </div>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: "clamp(12px, 3.5vw, 14px)", color: colors.text.primary, wordBreak: "break-word" }}>
-                        {typeof opp === "object" ? opp.name || opp.fullName || "خصم" : opp}
-                      </div>
-                      {typeof opp === "object" && opp.phone && (
-                        <div style={{ fontSize: "clamp(10px, 3vw, 12px)", color: colors.text.muted, marginTop: 2 }}>
-                          📞 {opp.phone}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </Section>
-
-      {/* ========== CASE SUBJECT ========== */}
-      <Section title="موضوع الدعوى" icon={FileText} iconColor={colors.accent.purple.light} defaultOpen={true}>
-        <div style={{
-          padding: "clamp(12px, 3vw, 16px)",
-          background: colors.bg.hover,
-          borderRadius: radius.md,
-          border: `1px solid ${colors.border.default}`,
-          color: colors.text.primary,
-          fontSize: "clamp(13px, 3.5vw, 14px)",
-          lineHeight: 1.7,
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-        }}>
-          {caseData?.caseSubject || caseData?.notes || "لم يتم تحديد موضوع الدعوى"}
-        </div>
-      </Section>
-
-      <div style={{ height: 2, background: colors.border.default, margin: "24px 0", borderRadius: 1 }} />
-
-      {/* ========== LEVEL SELECTOR ========== */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{
-          display: "flex", justifyContent: "space-between",
-          alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 12,
-        }}>
-          <h2 style={{
-            color: colors.text.primary, fontSize: "clamp(14px, 4vw, 18px)",
-            fontWeight: 700, margin: 0, display: "flex", alignItems: "center", gap: 8,
-          }}>
-            <Landmark size={20} color={colors.accent.amber.light} />
-            اختر درجة التقاضي
-          </h2>
-          {isAdmin && activeLevel && (
-            <CreateNextLevelButton
-              currentLevel={activeLevel}
-              onCreateLevel={handleCreateNextLevel}
-              loading={levelsLoading}
-            />
-          )}
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {levels.map(level => {
-            const isSelected = selectedLevel?.id === level.id;
-            const lvlColor = getLitigationLevelColor(level.levelType);
-            const lvlLabel = translateLevelType(level.levelType);
-            const wfLabel = translateWorkflowStatus(level.status);
-            return (
-              <button
-                key={level.id}
-                onClick={() => setSelectedLevelId(level.id)}
-                style={{
-                  padding: "10px 18px", borderRadius: radius.md, cursor: "pointer",
-                  border: isSelected ? `2px solid ${lvlColor}` : `1px solid ${colors.border.default}`,
-                  background: isSelected ? `${lvlColor}15` : colors.bg.card,
-                  color: isSelected ? lvlColor : colors.text.secondary,
-                  fontFamily: "inherit", fontWeight: isSelected ? 700 : 500,
-                  fontSize: "clamp(12px, 3.5vw, 14px)",
-                  display: "flex", alignItems: "center", gap: 8,
-                  transition: transitions.default, whiteSpace: "nowrap",
-                }}
-              >
-                <div style={{
-                  width: 8, height: 8, borderRadius: "50%",
-                  background: level.isActive ? colors.accent.green.main : colors.text.disabled,
-                }} />
-                {lvlLabel}
-                <span style={{
-                  background: isSelected ? `${lvlColor}25` : colors.bg.hover,
-                  color: isSelected ? lvlColor : colors.text.muted,
-                  padding: "2px 8px", borderRadius: radius.sm, fontSize: 11,
-                }}>
-                  {wfLabel}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ========== LEVEL INFO ========== */}
-      {selectedLevel && (
-        <>
-          <WorkflowBanner lastSession={lastSession} />
-
-          <div style={{
-            ...card,
-            marginBottom: 20,
-          }}>
-            <div style={{
-              display: "flex", justifyContent: "space-between",
-              alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 16,
-            }}>
-              <div>
-                <h3 style={{
-                  margin: 0, color: colors.text.primary,
-                  fontSize: "clamp(15px, 4.5vw, 20px)", fontWeight: 700,
-                }}>
-                  {translateLevelType(selectedLevel?.levelType) || "غير محدد"} — القضية رقم {selectedLevel.caseNumber}
-                </h3>
-                <p style={{ margin: "6px 0 0 0", color: colors.text.secondary, fontSize: "clamp(12px, 3.5vw, 14px)" }}>
-                  سنة {selectedLevel.caseYear} — {selectedLevel.court}
-                  {selectedLevel.circuit ? ` — ${selectedLevel.circuit}` : ""}
-                </p>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span style={{
-                  background: `${selectedStatusColor}12`, color: selectedStatusColor,
-                  border: `1px solid ${selectedStatusColor}25`,
-                  padding: "4px 14px", borderRadius: radius.full, fontWeight: 700,
-                  fontSize: "clamp(11px, 3vw, 13px)", whiteSpace: "nowrap",
-                }}>
-                  {translateWorkflowStatus(selectedLevel?.status) || "غير محدد"}
-                </span>
-                {selectedLevel.isActive && (
-                  <span style={{
-                    background: colors.accent.green.bg, color: colors.accent.green.main,
-                    border: `1px solid ${colors.accent.green.main}30`,
-                    padding: "4px 14px", borderRadius: radius.full, fontWeight: 700,
-                    fontSize: "clamp(11px, 3vw, 13px)", whiteSpace: "nowrap",
-                  }}>
-                    الدرجة النشطة
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(clamp(120px, 30vw, 160px), 1fr))",
-              gap: "clamp(8px, 2vw, 12px)",
-            }}>
-              <InfoBox icon={Landmark} title="المحكمة" value={selectedLevel.court} color={colors.accent.blue.light} />
-              <InfoBox icon={Gavel} title="الدائرة" value={selectedLevel.circuit} color={colors.accent.purple.light} />
-              <InfoBox icon={Calendar} title="الجلسات" value={levelSessions.length} color={colors.accent.amber.main} />
-              <InfoBox icon={Gavel} title="الأحكام" value={levelJudgments.length} color={colors.accent.blue.dark} />
-              <InfoBox icon={Briefcase} title="الأعمال" value={levelTasks.length} color={colors.accent.amber.main} />
-              <InfoBox icon={FileText} title="رقم القضية" value={`${selectedLevel.caseNumber} لسنة ${selectedLevel.caseYear}`} color={colors.accent.green.main} />
-              {selectedLevel.filingDate && (
-                <InfoBox icon={Clock} title="تاريخ الإيداع" value={formatDate(selectedLevel.filingDate)} color={colors.accent.cyan.main} />
-              )}
-              {selectedLevel.judgmentDate && (
-                <InfoBox icon={AlertTriangle} title="تاريخ الحكم" value={formatDate(selectedLevel.judgmentDate)} color={colors.accent.red.main} />
-              )}
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* ========== TABS ========== */}
-      <div style={{
-        ...card,
-        marginBottom: 20,
-      }}>
-        <div style={{
-          display: "flex", gap: 4, borderBottom: `1px solid ${colors.border.default}`,
-          marginBottom: 20, flexWrap: "wrap", overflowX: "auto", paddingBottom: 4,
-        }}>
-          {tabs.map(tab => {
-            const TabIcon = tab.icon;
-            const isActive = activeTab === tab.key;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                style={{
-                  padding: "clamp(8px, 2.5vw, 12px) clamp(12px, 3vw, 20px)",
-                  border: "none",
-                  borderBottom: isActive ? `3px solid ${colors.accent.blue.dark}` : "3px solid transparent",
-                  background: "transparent", color: isActive ? colors.accent.blue.light : colors.text.muted,
-                  fontWeight: isActive ? 700 : 500, fontSize: "clamp(12px, 3.5vw, 14px)",
-                  cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
-                  fontFamily: "inherit", transition: transitions.default,
-                  whiteSpace: "nowrap", flexShrink: 0,
-                }}
-              >
-                <TabIcon size={16} /> {tab.label}
-                {tab.count > 0 && (
-                  <span style={{
-                    background: isActive ? colors.accent.blue.dark : colors.bg.hover,
-                    color: isActive ? "#fff" : colors.text.muted,
-                    padding: "2px 8px", borderRadius: radius.full, fontSize: 11, fontWeight: 700,
-                  }}>{tab.count}</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {activeTab === "sessions" && (
-          levelSessions.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "40px 20px", color: colors.text.muted }}>
-              <Calendar size={48} style={{ margin: "0 auto 16px", opacity: 0.3 }} />
-              <p style={{ fontSize: 16, margin: 0 }}>لا توجد جلسات مسجلة في هذه الدرجة</p>
-              {isAdmin && (
-                <button onClick={handleAddSession} style={{
-                  marginTop: 16, padding: "10px 20px", background: colors.accent.blue.dark, color: "#fff",
-                  border: "none", borderRadius: radius.md, cursor: "pointer", fontFamily: "inherit",
-                  fontWeight: 600, fontSize: 14,
-                }}>
-                  + إضافة أول جلسة
-                </button>
-              )}
-            </div>
-          ) : (
-            <SessionsTimeline
-              caseId={id}
-              sessions={sortedLevelSessions}
-              canEdit={isAdmin}
-              canDelete={isAdmin}
-              onEdit={handleEditSession}
-              onDelete={handleDeleteSession}
-              onAddClick={isAdmin ? handleAddSession : null}
-              onAddDecision={isAdmin ? handleAddDecision : null}
-              onAddJudgment={isAdmin ? handleAddJudgmentFromSession : null}
-              onAddTask={isAdmin ? handleAddTaskFromSession : null}
-              getLinkedJudgment={(sessionId) => judgmentsBySession[sessionId]?.[0] || null}
-              getLinkedTasks={(sessionId) => tasksBySession[sessionId] || []}
-            />
-          )
-        )}
-
-        {activeTab === "judgments" && (
-          <JudgmentsSection
-            caseId={id}
-            judgments={levelJudgments}
-            sessions={sortedLevelSessions}
-            onAddJudgment={isAdmin ? handleSaveJudgment : null}
+      <CaseTabs
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        tabs={tabs}
+        isAdmin={isAdmin}
+        id={id}
+        levelSessions={levelSessions}
+        sortedLevelSessions={sortedLevelSessions}
+        levelJudgments={levelJudgments}
+        levelTasks={levelTasks}
+        caseDocs={caseDocs}
+        docsLoading={docsLoading}
+        showDocUploader={showDocUploader}
+        setShowDocUploader={setShowDocUploader}
+        onUploadComplete={handleDocUploadComplete}
+        onDocDelete={handleDocDelete}
+        setSelectedDoc={setSelectedDoc}
+        onAddSession={handleAddSession}
+        onEditSession={handleEditSession}
+        onDeleteSession={handleDeleteSession}
+        onAddDecision={handleAddDecision}
+        onAddJudgmentFromSession={handleAddJudgmentFromSession}
+        onAddTaskFromSession={handleAddTaskFromSession}
+        onAddTask={handleAddTask}
+        onSaveJudgment={handleSaveJudgment}
+        overviewContent={
+          <CaseOverviewTab
+            clients={clients}
+            safeClients={safeClients}
+            safeOpponents={safeOpponents}
+            caseData={caseData}
           />
-        )}
+        }
+        getLinkedJudgment={(sessionId) => judgmentsBySession[sessionId]?.[0] || null}
+        getLinkedTasks={(sessionId) => tasksBySession[sessionId] || []}
+      />
 
-        {activeTab === "admin" && (
-          <AdminTasksSection
-            caseId={id}
-            sessions={sortedLevelSessions}
-            tasks={levelTasks}
-            onAddTask={isAdmin ? handleAddTask : null}
-          />
-        )}
-
-        {/* ═══════════════════════════════════════════════════════════════
-            📁 DOCUMENTS TAB
-            ═══════════════════════════════════════════════════════════════ */}
-        {activeTab === "documents" && (
-          <div>
-            {/* Upload Button */}
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              marginBottom: 20, flexWrap: "wrap", gap: 12,
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{
-                  width: 44, height: 44,
-                  background: `linear-gradient(135deg, ${colors.accent.blue.dark}, ${colors.accent.blue.main})`,
-                  borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center",
-                  boxShadow: `0 8px 24px ${colors.accent.blue.main}30`,
-                }}>
-                  <FileArchive size={22} color="white" />
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, color: colors.text.primary, fontSize: 18, fontWeight: 700 }}>
-                    مستندات القضية
-                  </h3>
-                  <p style={{ margin: '4px 0 0 0', color: colors.text.muted, fontSize: 13 }}>
-                    {caseDocs.length} مستند{caseDocs.length !== 1 ? 'ات' : ''}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowDocUploader(true)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 8,
-                  padding: '10px 20px', background: colors.accent.blue.dark,
-                  color: 'white', border: 'none', borderRadius: 14,
-                  fontSize: 14, fontWeight: 700, cursor: 'pointer',
-                  fontFamily: 'inherit', boxShadow: `0 4px 16px ${colors.accent.blue.main}30`,
-                }}
-              >
-                <Upload size={16} />
-                رفع مستند
-              </button>
-            </div>
-
-            {/* Document Uploader */}
-            {showDocUploader && (
-              <div style={{ marginBottom: 24 }}>
-                <DocumentUploader
-                  caseId={id}
-                  onUpload={handleDocUploadComplete}
-                  onClose={() => setShowDocUploader(false)}
-                />
-              </div>
-            )}
-
-            {/* Documents List */}
-            {docsLoading ? (
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                height: 200, color: colors.text.muted,
-              }}>
-                <div style={{
-                  width: 32, height: 32,
-                  border: `3px solid ${colors.accent.blue.bg}`,
-                  borderTopColor: colors.accent.blue.dark,
-                  borderRadius: "50%",
-                  animation: "spin 1s linear infinite",
-                }} />
-              </div>
-            ) : caseDocs.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "50px 20px", color: colors.text.muted }}>
-                <FileArchive size={48} style={{ marginBottom: 16, opacity: 0.4 }} />
-                <p style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0' }}>لا توجد مستندات</p>
-                <p style={{ fontSize: 14, margin: 0 }}>ابدأ برفع أول مستند لهذه القضية</p>
-              </div>
-            ) : (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-                gap: 16,
-              }}>
-                {caseDocs.map(doc => (
-                  <DocumentCard
-                    key={doc.id}
-                    doc={doc}
-                    onDelete={handleDocDelete}
-                    onPreview={setSelectedDoc}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* ========== QUICK ACTIONS ========== */}
-      <div style={{
-        ...card,
-        marginBottom: 20,
-      }}>
-        <h2 style={{
-          fontSize: "clamp(14px, 4vw, 18px)", fontWeight: 700, color: colors.text.primary,
-          margin: "0 0 16px 0", display: "flex", alignItems: "center", gap: 10,
-        }}>
-          <Briefcase size={20} color={colors.accent.amber.main} />
-          إجراءات {translateLevelType(selectedLevel?.levelType) || "غير محدد"}
-        </h2>
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, clamp(140px, 40vw, 180px)), 1fr))",
-          gap: "clamp(8px, 2vw, 12px)",
-        }}>
-          <ActionButton icon={Calendar} color={colors.accent.green.main} onClick={handleAddSession}>
-            جلسة جديدة
-          </ActionButton>
-
-          {isAdmin && (
-            <ActionButton icon={Gavel} color={colors.accent.blue.light} onClick={() => { setLinkedSessionForJudgment(null); setShowJudgmentForm(true); }}>
-              حكم جديد
-            </ActionButton>
-          )}
-
-          {isAdmin && (
-            <ActionButton icon={Briefcase} color={colors.accent.amber.main} onClick={handleAddTask}>
-              عمل إداري جديد
-            </ActionButton>
-          )}
-
-          <Link to={`/edit/${id}`} style={{ textDecoration: "none" }}>
-            <ActionButton icon={Edit3} color={colors.accent.blue.light}>
-              تعديل القضية
-            </ActionButton>
-          </Link>
-
-          <Link to={`/add-stage/${id}`} style={{ textDecoration: "none" }}>
-            <ActionButton icon={Landmark} color={colors.accent.purple.light}>
-              إدارة المراحل
-            </ActionButton>
-          </Link>
-
-          {canViewFinance && (
-            <Link to={`/case-finance/${id}`} style={{ textDecoration: "none" }}>
-              <ActionButton icon={DollarSign} color={colors.accent.purple.light}>
-                الحسابات
-              </ActionButton>
-            </Link>
-          )}
-
-          {/* 📁 NEW: Upload Document Quick Action */}
-          <ActionButton 
-            icon={FileArchive} 
-            color={colors.accent.cyan.main} 
-            onClick={() => {
-              setActiveTab("documents");
-              setShowDocUploader(true);
-            }}
-          >
-            إضافة مستند
-          </ActionButton>
-        </div>
-      </div>
-
-      {/* ========== MODALS ========== */}
-      {showSessionForm && (
-        <SessionForm
-          session={editingSession}
-          caseId={id}
-          caseData={caseData}
-          onClose={() => { setShowSessionForm(false); setEditingSession(null); }}
-          onSave={handleSaveSession}
-        />
-      )}
-
-      {showDecisionForm && (
-        <Modal
-          isOpen={true}
-          onClose={() => { setShowDecisionForm(false); setLinkedSessionForDecision(null); }}
-          title="إضافة قرار للجلسة"
-          subtitle={linkedSessionForDecision ? `الجلسة: ${linkedSessionForDecision.title || linkedSessionForDecision.date}` : ''}
-          icon={Scale}
-          iconColor={colors.accent.amber.light}
-          maxWidth="600px"
-        >
-          <DecisionForm
-            session={linkedSessionForDecision}
-            onClose={() => { setShowDecisionForm(false); setLinkedSessionForDecision(null); }}
-            onSave={handleSaveDecision}
-          />
-        </Modal>
-      )}
-
-      {showJudgmentForm && (
-        <Modal
-          isOpen={true}
-          onClose={() => { setShowJudgmentForm(false); setLinkedSessionForJudgment(null); }}
-          title={linkedSessionForJudgment ? 'إضافة حكم مرتبط بالجلسة' : 'إضافة حكم جديد'}
-          subtitle={linkedSessionForJudgment ? `الجلسة: ${linkedSessionForJudgment.title || linkedSessionForJudgment.date}` : ''}
-          icon={Gavel}
-          iconColor={colors.accent.amber.light}
-          maxWidth="600px"
-        >
-          <JudgmentForm
-            caseId={id}
-            sessions={sortedLevelSessions}
-            preSelectedSession={linkedSessionForJudgment}
-            onClose={() => { setShowJudgmentForm(false); setLinkedSessionForJudgment(null); }}
-            onSave={handleSaveJudgment}
-          />
-        </Modal>
-      )}
-
-      {showTaskForm && (
-        <AdminTaskForm
-          caseId={id}
-          sessions={sortedLevelSessions}
-          task={null}
-          preSelectedSession={taskFormSession}
-          onClose={handleCloseTaskForm}
-          onSave={handleSaveTask}
-        />
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════
-          📁 DOCUMENT PREVIEW MODAL
-          ═══════════════════════════════════════════════════════════════ */}
-      {selectedDoc && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 1000, padding: 20,
-        }} onClick={() => setSelectedDoc(null)}>
-          <div
-            style={{
-              background: colors.bg.card, borderRadius: 20,
-              maxWidth: '90vw', maxHeight: '90vh', width: '100%',
-              overflow: 'hidden', display: 'flex', flexDirection: 'column',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{
-              padding: '16px 20px', borderBottom: `1px solid ${colors.border.default}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
-              <h3 style={{ margin: 0, color: colors.text.primary, fontSize: 16 }}>
-                {selectedDoc.name || selectedDoc.fileName}
-              </h3>
-              <button onClick={() => setSelectedDoc(null)}
-                style={{ background: 'none', border: 'none', color: colors.text.muted, cursor: 'pointer', padding: 4 }}>
-                <X size={20} />
-              </button>
-            </div>
-            <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
-              {selectedDoc.fileType?.startsWith('image/') ? (
-                <img src={selectedDoc.downloadURL} alt={selectedDoc.fileName}
-                  style={{ maxWidth: '100%', borderRadius: 12 }} />
-              ) : selectedDoc.fileType === 'application/pdf' ? (
-                <iframe src={selectedDoc.downloadURL}
-                  style={{ width: '100%', height: '70vh', border: 'none', borderRadius: 12 }}
-                  title={selectedDoc.fileName} />
-              ) : (
-                <div style={{ textAlign: 'center', padding: 40 }}>
-                  <FileText size={64} color={colors.text.muted} />
-                  <p style={{ color: colors.text.muted, marginTop: 16 }}>
-                    لا يمكن معاينة هذا النوع من الملفات
-                  </p>
-                  <a href={selectedDoc.downloadURL} target="_blank" rel="noopener noreferrer"
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 8,
-                      marginTop: 16, padding: '10px 20px',
-                      background: colors.accent.blue.dark, color: 'white',
-                      borderRadius: 12, textDecoration: 'none', fontWeight: 600,
-                    }}>
-                    تحميل الملف
-                  </a>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <CaseModals
+        id={id}
+        caseData={caseData}
+        sortedLevelSessions={sortedLevelSessions}
+        colors={colors}
+        showSessionForm={showSessionForm}
+        editingSession={editingSession}
+        onCloseSessionForm={closeSessionForm}
+        onSaveSession={handleSaveSession}
+        showDecisionForm={showDecisionForm}
+        linkedSessionForDecision={linkedSessionForDecision}
+        onCloseDecisionForm={closeDecisionForm}
+        onSaveDecision={handleSaveDecision}
+        showJudgmentForm={showJudgmentForm}
+        linkedSessionForJudgment={linkedSessionForJudgment}
+        onCloseJudgmentForm={closeJudgmentForm}
+        onSaveJudgment={handleSaveJudgment}
+        showTaskForm={showTaskForm}
+        taskFormSession={taskFormSession}
+        onCloseTaskForm={handleCloseTaskForm}
+        onSaveTask={handleSaveTask}
+        selectedDoc={selectedDoc}
+        onCloseDocPreview={() => setSelectedDoc(null)}
+      />
     </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// ACTION BUTTON HELPER
-// ═══════════════════════════════════════════════════════════════════
-function ActionButton({ icon: Icon, color, children, onClick }) {
-  const { theme } = useTheme();
-  const { radius, transitions } = theme;
-  const btnProps = onClick ? { onClick } : {};
-  return (
-    <button
-      {...btnProps}
-      style={{
-        width: "100%", padding: "clamp(8px, 2.5vw, 14px)",
-        background: `${color}15`, color: color,
-        border: `1px solid ${color}30`, borderRadius: radius.md,
-        cursor: "pointer", fontSize: "clamp(12px, 3.5vw, 14px)", fontWeight: 600,
-        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-        transition: transitions.default, fontFamily: "inherit", whiteSpace: "nowrap",
-      }}
-    >
-      <Icon size={16} /> {children}
-    </button>
   );
 }

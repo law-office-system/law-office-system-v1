@@ -93,6 +93,8 @@ export default function Documents() {
       minHeight: '100vh',
       background: colors.bg.page,
       direction: 'rtl',
+      position: 'relative', // تم التحديث: لضبط عناصر التموضع العائم
+      overflow: 'visible',  // تم التحديث: لمنع قص القوائم العائمة
     }}>
       {/* Header */}
       <div style={{
@@ -315,7 +317,7 @@ export default function Documents() {
         </div>
       )}
 
-      {/* List */}
+      {/* List / Grid */}
       {loading ? (
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -337,6 +339,9 @@ export default function Documents() {
           gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
           flexDirection: viewMode === 'list' ? 'column' : undefined,
           gap: 16,
+          overflow: 'visible', // تم التحديث: لمنع قص القوائم داخل الشبكة
+          position: 'relative', // تم التحديث: لتثبيت نطاق العناصر
+          zIndex: 1,            // تم التحديث: لتنظيم طبقات العرض
         }}>
           {documents.map(doc => (
             <DocumentCard
