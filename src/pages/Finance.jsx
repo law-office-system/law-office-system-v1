@@ -12,6 +12,11 @@ import Button from "../components/ui/Button";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebaseDb";
 
+const MONTH_NAMES = [
+  "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+  "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر",
+];
+
 export default function Finance() {
   const { userData } = useAuth();
 
@@ -294,6 +299,63 @@ export default function Finance() {
     }
   };
 
+  // ================= بداية الفترة المعروضة (لحساب الرصيد المفتوح) =================
+  const periodStart = useMemo(() => {
+    switch (dateFilterMode) {
+      case "day": {
+        const [y, m, d] = selectedDate.split("-").map(Number);
+        return new Date(y, m - 1, d, 0, 0, 0, 0);
+      }
+      case "week": {
+        const [y, m, d] = selectedDate.split("-").map(Number);
+        const selected = new Date(y, m - 1, d);
+        const startOfWeek = new Date(selected);
+        startOfWeek.setDate(selected.getDate() - selected.getDay());
+        startOfWeek.setHours(0, 0, 0, 0);
+        return startOfWeek;
+      }
+      case "month": {
+        const [y, m] = selectedMonth.split("-").map(Number);
+        return new Date(y, m - 1, 1, 0, 0, 0, 0);
+      }
+      case "year": {
+        return new Date(Number(selectedYear), 0, 1, 0, 0, 0, 0);
+      }
+      default:
+        return null; // وضع "الكل" → الرصيد التراكمي هو مجموع كل المعاملات
+    }
+  }, [dateFilterMode, selectedDate, selectedMonth, selectedYear]);
+
+  // ================= الرصيد المفتوح: تسوية كل ما قبل الفترة الحالية =================
+  const { openingBalance, hasPriorActivity } = useMemo(() => {
+    if (!periodStart) return { openingBalance: 0, hasPriorActivity: false };
+    let bal = 0;
+    let found = false;
+    transactions.forEach((t) => {
+      const d = getTransactionDate(t);
+      if (d.getTime() < periodStart.getTime()) {
+        found = true;
+        const amt = Number(t.amount || 0);
+        if (t.type === "income") bal += amt;
+        if (t.type === "expense") bal -= amt;
+      }
+    });
+    return { openingBalance: bal, hasPriorActivity: found };
+  }, [transactions, periodStart]);
+
+  // ================= بيانات شهري التسوية والعرض (وضع "شهر محدد" فقط) =================
+  const settlementInfo = useMemo(() => {
+    if (dateFilterMode !== "month") return null;
+    const [y, m] = selectedMonth.split("-").map(Number);
+    const prev = new Date(y, m - 2, 1);
+    const cur = new Date(y, m - 1, 1);
+    return {
+      prevName: MONTH_NAMES[prev.getMonth()],
+      prevYear: prev.getFullYear(),
+      curName: MONTH_NAMES[cur.getMonth()],
+    };
+  }, [dateFilterMode, selectedMonth]);
+
   // ================= FILTER & SORT TRANSACTIONS =================
   const filteredTransactions = useMemo(() => {
     const result = transactions.filter((t) => {
@@ -321,11 +383,16 @@ export default function Finance() {
     });
   }, [transactions, filterType, filterScope, search, dateFilterMode, selectedDate, selectedMonth, selectedYear]);
 
+  // ================= معاملات الفترة فقط (للإحصائيات — بدون فلاتر البحث/النوع) =================
+  const periodTransactions = useMemo(() => {
+    return transactions.filter((t) => isDateInFilter(getTransactionDate(t)));
+  }, [transactions, dateFilterMode, selectedDate, selectedMonth, selectedYear]);
+
   // ================= CALCULATIONS =================
   const { totalIncome, totalExpenses, profit, transactionCount } = useMemo(() => {
     let inc = 0;
     let exp = 0;
-    filteredTransactions.forEach((t) => {
+    periodTransactions.forEach((t) => {
       const amt = Number(t.amount || 0);
       if (t.type === "income") inc += amt;
       if (t.type === "expense") exp += amt;
@@ -334,9 +401,20 @@ export default function Finance() {
       totalIncome: inc,
       totalExpenses: exp,
       profit: inc - exp,
-      transactionCount: filteredTransactions.length,
+      transactionCount: periodTransactions.length,
     };
-  }, [filteredTransactions]);
+  }, [periodTransactions]);
+
+  // ================= الرصيد الحالي بعد التسوية (فائض أو عجز مرحّل) =================
+  const currentBalance = openingBalance + profit;
+
+  const openingBalanceText = openingBalance >= 0
+    ? `${openingBalance.toLocaleString()} ج.م`
+    : `عجز ${Math.abs(openingBalance).toLocaleString()} ج.م`;
+
+  const balanceValueText = currentBalance >= 0
+    ? `${currentBalance.toLocaleString()} ج.م`
+    : `عجز ${Math.abs(currentBalance).toLocaleString()} ج.م`;
 
   // ================= NAVIGATE MONTHS =================
   const goToPrevMonth = () => {
@@ -428,6 +506,36 @@ export default function Finance() {
         <p style={styles.pageSubtitle}>عرض مالي شامل لجميع التحصيلات، الرسوم، ومصروفات القضايا الجارية والموكلين.</p>
       </div>
 
+      {/* ======== تنبيه تسوية الشهر السابق (فائض / عجز / رصيد متوازن) ======== */}
+      {dateFilterMode === "month" && hasPriorActivity && settlementInfo && (
+        <div style={styles.settlementBanner(openingBalance)}>
+          <div style={styles.settlementIcon}>
+            {openingBalance > 0 ? "✔️" : openingBalance < 0 ? "⚠️" : "➖"}
+          </div>
+          <div style={styles.settlementBody}>
+            <strong style={styles.settlementTitle(openingBalance)}>
+              {openingBalance > 0 &&
+                `تسوية شهر ${settlementInfo.prevName} ${settlementInfo.prevYear} — أُقفل الشهر بفائض`}
+              {openingBalance < 0 &&
+                `تسوية شهر ${settlementInfo.prevName} ${settlementInfo.prevYear} — أُقفل الشهر بعجز`}
+              {openingBalance === 0 &&
+                `تسوية شهر ${settlementInfo.prevName} ${settlementInfo.prevYear} — أُقفل الشهر برصيد متوازن`}
+            </strong>
+            <p style={styles.settlementText}>
+              {openingBalance > 0 &&
+                `أُقفل شهر ${settlementInfo.prevName} بفائض قدره ${openingBalance.toLocaleString()} ج.م، وتم ترحيله كرصيد افتتاحي لشهر ${settlementInfo.curName}. سجّل معاملاتك المالية باستمرار لمتابعة ميزانية مكتبك بدقة.`}
+              {openingBalance < 0 &&
+                `أُقفل شهر ${settlementInfo.prevName} بعجز قدره ${Math.abs(openingBalance).toLocaleString()} ج.م، ويستهل شهر ${settlementInfo.curName} بهذا العجز كرصيد افتتاحي. سجّل معاملاتك المالية باستمرار لمتابعة ميزانية مكتبك بدقة.`}
+              {openingBalance === 0 &&
+                `أُقفل شهر ${settlementInfo.prevName} برصيد متوازن، ويستهل شهر ${settlementInfo.curName} برصيد افتتاحي قدره 0 ج.م.`}
+            </p>
+          </div>
+          <div style={styles.settlementAmount(openingBalance)}>
+            {openingBalance === 0 ? "0" : Math.abs(openingBalance).toLocaleString()} ج.م
+          </div>
+        </div>
+      )}
+
       {/* SUMMARY */}
       <div style={styles.summary}>
         <div style={styles.card("#ecfdf5", "#10b981")}>
@@ -440,13 +548,18 @@ export default function Finance() {
           <b style={styles.cardValue}>{totalExpenses.toLocaleString()} ج.م</b>
         </div>
 
-        <div style={styles.card(profit >= 0 ? "#f0fdf4" : "#fff5f5", profit >= 0 ? "#22c55e" : "#f43f5e")}>
-          <span style={styles.cardLabel}>📊 صافي الدخل الحالي</span>
-          <b style={styles.cardValue}>{profit.toLocaleString()} ج.م</b>
+        <div style={styles.card(currentBalance >= 0 ? "#f0fdf4" : "#fff5f5", currentBalance >= 0 ? "#22c55e" : "#f43f5e")}>
+          <span style={styles.cardLabel}>📊 الرصيد الحالي (بعد التسوية)</span>
+          <b style={styles.cardValue}>{balanceValueText}</b>
+          {dateFilterMode !== "all" && hasPriorActivity && (
+            <span style={styles.cardSubNote}>
+              رصيد مفتوح: {openingBalanceText} — صافي الفترة: {profit.toLocaleString()} ج.م
+            </span>
+          )}
         </div>
 
         <div style={styles.card("#eff6ff", "#3b82f6")}>
-          <span style={styles.cardLabel}>📋 عدد المعاملات</span>
+          <span style={styles.cardLabel}>📋 عدد معاملات الفترة</span>
           <b style={styles.cardValue}>{transactionCount.toLocaleString()}</b>
         </div>
       </div>
@@ -729,6 +842,42 @@ const styles = {
 
   cardLabel: { fontSize: "13px", color: "#1e293b", fontWeight: "700" },
   cardValue: { fontSize: "18px", fontFamily: "sans-serif", fontWeight: "bold", color: "#0f172a" },
+  cardSubNote: { fontSize: "11px", color: "#475569", fontWeight: 600, background: "rgba(255,255,255,0.65)", padding: "3px 8px", borderRadius: "6px", marginTop: "2px" },
+
+  // ======== تنبيه تسوية الشهر السابق ========
+  settlementBanner: (balance) => ({
+    display: "flex",
+    alignItems: "center",
+    gap: "14px",
+    padding: "14px 18px",
+    borderRadius: "12px",
+    marginBottom: "15px",
+    border: `1px solid ${balance > 0 ? "#86efac" : balance < 0 ? "#fecaca" : "#cbd5e1"}`,
+    background: balance > 0 ? "#f0fdf4" : balance < 0 ? "#fff5f5" : "#f8fafc",
+    borderRight: `5px solid ${balance > 0 ? "#16a34a" : balance < 0 ? "#dc2626" : "#94a3b8"}`,
+    boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+    flexWrap: "wrap",
+  }),
+  settlementIcon: { fontSize: "22px", lineHeight: 1 },
+  settlementBody: { flex: 1, minWidth: "220px" },
+  settlementTitle: (balance) => ({
+    fontSize: "14px",
+    color: balance > 0 ? "#15803d" : balance < 0 ? "#b91c1c" : "#334155",
+    display: "block",
+    marginBottom: "4px",
+  }),
+  settlementText: { margin: 0, fontSize: "13px", color: "#334155", fontWeight: 500, lineHeight: 1.8 },
+  settlementAmount: (balance) => ({
+    fontSize: "17px",
+    fontWeight: "bold",
+    fontFamily: "sans-serif",
+    color: balance > 0 ? "#15803d" : balance < 0 ? "#b91c1c" : "#334155",
+    background: "#ffffff",
+    padding: "6px 14px",
+    borderRadius: "8px",
+    border: `1px solid ${balance > 0 ? "#bbf7d0" : balance < 0 ? "#fecaca" : "#e2e8f0"}`,
+    whiteSpace: "nowrap",
+  }),
 
   filterBar: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 },
   input: { padding: "10px", borderRadius: "8px", border: "1px solid #94a3b8", outline: "none", fontSize: "13px", boxSizing: "border-box", color: "#1e293b", fontWeight: 500 },

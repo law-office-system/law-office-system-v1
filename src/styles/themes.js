@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
 //  THEMES — Multi-Theme System for Law Office Management
-//  يدعم 6 ثيمات + 8 ألوان تمييز قابلة للتخصيص
+//  يدعم 7 ثيمات + 9 ألوان تمييز قابلة للتخصيص
 // ═══════════════════════════════════════════════════════════════
 
 // ── Shared tokens (same across all themes) ──
@@ -51,9 +51,10 @@ export const accentColors = {
   cyan:   { main: '#06b6d4', light: '#22d3ee', dark: '#0891b2', bg: 'rgba(6, 182, 212, 0.15)' },
   rose:   { main: '#f43f5e', light: '#fb7185', dark: '#e11d48', bg: 'rgba(244, 63, 94, 0.15)' },
   gold:   { main: '#f59e0b', light: '#fbbf24', dark: '#d97706', bg: 'rgba(245, 158, 11, 0.15)' },
+  brass:  { main: '#b8860b', light: '#d4a843', dark: '#8b6914', bg: 'rgba(184, 134, 11, 0.15)' }, // ← جديد: نفس ذهب الداشبورد العريق
 };
 
-// ── Status colors (shared) ──
+// ── Status colors (shared defaults — يمكن لأي ثيم تجاوزها عبر palette.status) ──
 export const statusColors = {
   scheduled:     { bg: 'rgba(30, 64, 175, 0.15)',   text: '#60a5fa', border: 'rgba(96, 165, 250, 0.3)' },
   completed:     { bg: 'rgba(16, 185, 129, 0.15)',  text: '#10b981', border: 'rgba(16, 185, 129, 0.3)' },
@@ -149,15 +150,53 @@ const palettes = {
       primary: '#fef3c7', secondary: '#fde68a', muted: '#fcd34d', disabled: '#fbbf24',
     },
   },
+  // ── الجديد: ثيم الداشبورد العريق (فاتح — مستخرج من Dashboard.jsx القديم) ──
+  heritage: {
+    bg: {
+      page: '#f5f0e8',   // خلفية الصفحة الكريمية
+      card: '#faf8f3',   // خلفية البطاقات العاجية
+      input: 'rgba(245, 240, 232, 0.6)',
+      hover: '#f5f0e6',
+      active: 'rgba(184, 134, 11, 0.15)',
+      overlay: 'rgba(44, 24, 16, 0.75)',
+    },
+    border: {
+      default: '#d4c5b0',
+      focus: 'rgba(184, 134, 11, 0.5)',
+      error: 'rgba(139, 37, 0, 0.4)',
+      success: 'rgba(45, 90, 39, 0.3)',
+    },
+    text: {
+      primary: '#3d2817',   // بني داكن — العناوين
+      secondary: '#6b5344', // بني متوسط — نصوص
+      muted: '#9c8b7a',     // بيج رمادي — نصوص ثانوية
+      disabled: '#c4b5a0',
+    },
+    // حالات مخصصة للثيم الفاتح (تتجاوز الافتراضيات الداكنة) + ألوان الداشبورد الخاصة
+    status: {
+      scheduled:     { bg: '#fdf6e3', text: '#8b6914', border: 'rgba(139, 105, 20, 0.3)' },
+      completed:     { bg: '#e8f5e6', text: '#2d5a27', border: 'rgba(45, 90, 39, 0.3)' },
+      postponed:     { bg: '#fdf6e3', text: '#8b6914', border: 'rgba(139, 105, 20, 0.3)' },
+      cancelled:     { bg: '#f0e6e6', text: '#6b5344', border: 'rgba(107, 83, 68, 0.3)' },
+      pending:       { bg: '#f0ebe3', text: '#9c8b7a', border: 'rgba(156, 139, 122, 0.3)' },
+      'in-progress': { bg: '#e8f0f5', text: '#1e3a5f', border: 'rgba(30, 58, 95, 0.3)' },
+      // ألوان خاصة بالداشبورد
+      urgent:        { bg: '#fef2f2', text: '#8b2500', border: 'rgba(139, 37, 0, 0.25)' },
+      active:        { bg: '#e8f5e6', text: '#2d5a27', border: 'rgba(45, 90, 39, 0.3)' },
+      execution:     { bg: '#fdf6e3', text: '#8b6914', border: 'rgba(139, 105, 20, 0.3)' },
+      closed:        { bg: '#f0e6e6', text: '#6b5344', border: 'rgba(107, 83, 68, 0.3)' },
+    },
+  },
 };
 
 const themeMeta = {
-  dark:     { name: 'الوضع الداكن', description: 'الثيم الافتراضي — أزرق وعنبر' },
-  midnight: { name: 'منتصف الليل',   description: 'بنفسجي غامق — أنيق وهادئ' },
-  emerald:  { name: 'الزمرد',        description: 'أخضر غامق — طاقة وتركيز' },
-  rose:     { name: 'الوردي',        description: 'أحمر دافئ — جريء ومميز' },
-  ocean:    { name: 'المحيط',        description: 'أزرق سماوي — هدوء وثقة' },
-  gold:     { name: 'الذهبي',        description: 'عنبر كلاسيكي — رسمي وفاخر' },
+  dark:     { name: 'الوضع الداكن',   description: 'الثيم الافتراضي — أزرق وعنبر' },
+  midnight: { name: 'منتصف الليل',     description: 'بنفسجي غامق — أنيق وهادئ' },
+  emerald:  { name: 'الزمرد',          description: 'أخضر غامق — طاقة وتركيز' },
+  rose:     { name: 'الوردي',          description: 'أحمر دافئ — جريء ومميز' },
+  ocean:    { name: 'المحيط',          description: 'أزرق سماوي — هدوء وثقة' },
+  gold:     { name: 'الذهبي',          description: 'عنبر كلاسيكي — رسمي وفاخر' },
+  heritage: { name: 'المنصة العريقة',  description: 'مظهر الداشبورد الكلاسيكي — خشبي وذهبي فاتح' },
 };
 
 export const THEMES = Object.fromEntries(
@@ -170,7 +209,7 @@ export const THEMES = Object.fromEntries(
       colors: {
         ...palette,
         accent: accentColors,
-        status: statusColors,
+        status: { ...statusColors, ...(palette.status || {}) }, // ← يسمح لأي ثيم بتجاوز حالاته
       },
       ...sharedTokens,
     },
@@ -186,6 +225,7 @@ export const ACCENT_OPTIONS = [
   { id: 'cyan',   name: 'سماوي',  color: '#06b6d4' },
   { id: 'rose',   name: 'وردي',   color: '#f43f5e' },
   { id: 'gold',   name: 'ذهبي',   color: '#f59e0b' },
+  { id: 'brass',  name: 'نحاسي',  color: '#b8860b' }, // ← جديد
 ];
 
 export const DEFAULT_THEME  = 'dark';
@@ -256,9 +296,10 @@ export function getTheme(themeId = DEFAULT_THEME, accentId = DEFAULT_ACCENT) {
     fontWeight: typography.weight.bold,
   };
 
+  // ✅ إصلاح: خلفية مشتقة من الثيم بدل الأزرق المثبت — ضروري للثيمات الفاتحة
   const infoBox = {
-    background: 'rgba(15, 23, 42, 0.5)',
-    border: `1px solid rgba(55, 65, 81, 0.3)`,
+    background: colors.bg.input,
+    border: `1px solid ${colors.border.default}`,
     borderRadius: radius.md,
     padding: spacing.md,
     display: 'flex', alignItems: 'center', gap: spacing.md,
@@ -331,8 +372,9 @@ export function getTheme(themeId = DEFAULT_THEME, accentId = DEFAULT_ACCENT) {
       fontSize: typography.sizes.base,
       color: colors.text.secondary,
     },
+    // ✅ إصلاح: خلفية الرأس مشتقة من الثيم — ضروري للثيمات الفاتحة
     th: {
-      background: 'rgba(15, 23, 42, 0.8)',
+      background: colors.bg.input,
       padding: `${spacing.lg} ${spacing.xl}`,
       textAlign: 'center', fontWeight: typography.weight.bold,
       borderBottom: `1px solid ${colors.border.default}`,
@@ -491,16 +533,17 @@ export function getTheme(themeId = DEFAULT_THEME, accentId = DEFAULT_ACCENT) {
     }),
   };
 
+  // ✅ إصلاح: خلفيات الأقسام مشتقة من الثيم — ضروري للثيمات الفاتحة
   const formSection = {
     card: {
-      background: 'rgba(15, 23, 42, 0.4)',
+      background: colors.bg.input,
       border: `1px solid ${colors.border.default}`,
       borderRadius: radius.lg,
       overflow: 'hidden',
       transition: transitions.default,
     },
     cardAccent: (c) => ({
-      background: 'rgba(15, 23, 42, 0.4)',
+      background: colors.bg.input,
       border: `1px solid ${c}30`,
       borderRadius: radius.lg,
       overflow: 'hidden',

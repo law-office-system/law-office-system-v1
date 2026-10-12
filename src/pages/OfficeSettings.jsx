@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext.jsx';
 import { THEMES, ACCENT_OPTIONS } from '../styles/themes.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { usePermissions } from '../hooks/usePermissions';
 import { db } from '../firebaseDb.js';
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { Button, Card, Page, Section, Input } from '../components/ui';
@@ -13,6 +14,7 @@ import {
 export default function OfficeSettings() {
   const { themeId, accentId, setThemeId, setAccentId, saveTheme, theme } = useTheme();
   const { userData, user } = useAuth();
+  const { can } = usePermissions();
   const { colors } = theme;
 
   const [activeTab, setActiveTab] = useState('appearance');
@@ -145,6 +147,17 @@ export default function OfficeSettings() {
       setSaving(false);
     }
   };
+
+  // 🔐 الحماية: الصفحة لمدير المكتب فقط
+  if (!can("officeSettings", "view")) {
+    return (
+      <Page>
+        <div style={{ padding: 40, textAlign: "center", color: colors.text.muted }}>
+          🚫 هذه الصفحة متاحة لمدير المكتب فقط
+        </div>
+      </Page>
+    );
+  }
 
   const tabs = [
     { id: 'appearance',    label: 'المظهر',     icon: Palette },

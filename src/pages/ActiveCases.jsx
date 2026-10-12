@@ -5,6 +5,7 @@ import Button from "../components/ui/Button";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebaseDb";
 import { parseDate } from "../utils/date";
+import { isActiveCase } from "../utils/archiveStatus";
 
 export default function ActiveCases() {
   const [cases, setCases] = useState([]);
@@ -95,26 +96,10 @@ export default function ActiveCases() {
     return `${yyyy}-${mm}-${dd}`;
   };
 
-  /* ================= FILTER (مع استبعاد المؤرشفة بدقة) ================= */
+  /* ================= FILTER (الاستبعاد من مصدر واحد) ================= */
   const activeCases = cases.filter((c) => {
-    const isArchivedOrClosed = 
-      c.status === "ARCHIVED" || 
-      c.status === "archived" || 
-      c.status === "مؤرشفة" || 
-      c.status === "CLOSED" || 
-      c.status === "منتهية";
-
-    const isExecution = c.status === "EXECUTION" || c.status === "تنفيذ" || c.status === "execution" || c.currentLevel === "execution";
-    
-    if (isArchivedOrClosed || isExecution) return false;
-
-    const isActive = 
-      !c.status || 
-      c.status === "ACTIVE" || 
-      c.status === "نشطة" || 
-      c.status === "جارية";
-
-    if (!isActive) return false;
+    // أي قضية غير مؤرشفة وغير تنفيذ = نشطة
+    if (!isActiveCase(c)) return false;
 
     const text = search.toLowerCase().trim();
 
@@ -139,7 +124,7 @@ export default function ActiveCases() {
       clientNames.includes(text) ||
       opponentNames.includes(text) ||
       caseTypeStr.includes(text) ||
-      courtName.includes(text) || 
+      courtName.includes(text) ||
       upcomingSessionDateStr.includes(text)
     );
   });

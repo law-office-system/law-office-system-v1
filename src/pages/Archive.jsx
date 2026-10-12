@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { collection, onSnapshot, getDocs, query, where } from "firebase/firestore";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebaseDb";
+import { isArchivedCase, isExecutionCase } from "../utils/archiveStatus";
 
 export default function Archive() {
   const [cases, setCases] = useState([]);
@@ -65,18 +66,9 @@ export default function Archive() {
 
   const getOpponentName = (o) => (typeof o === "object" ? o.name : o);
 
-  /* ================= FILTER ARCHIVED CASES (دعم جميع مسميات الأرشيف) ================= */
+  /* ================= FILTER ARCHIVED CASES (نفس مصدر الحقيقة) ================= */
   const archivedCases = cases.filter((c) => {
-    const isArchived = 
-      c.status === "ARCHIVED" || 
-      c.status === "archived" || 
-      c.status === "مؤرشفة" || 
-      c.status === "CLOSED" || 
-      c.status === "منتهية";
-
-    const isExecution = c.status === "EXECUTION" || c.status === "تنفيذ" || c.status === "execution";
-    
-    if (!isArchived || isExecution) return false;
+    if (!isArchivedCase(c) || isExecutionCase(c)) return false;
 
     const text = search.toLowerCase().trim();
 

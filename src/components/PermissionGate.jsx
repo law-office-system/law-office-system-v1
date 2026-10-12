@@ -1,16 +1,31 @@
-import { useAuth } from "../context/AuthContext";
-import { canAccess } from "../utils/auth";
+import { usePermissions } from "../hooks/usePermissions";
+import { canAccess } from "../utils/permissions";
 
 /**
- * 🔐 بوابة الصلاحيات الموحدة
- * تستخدم لأي عنصر UI (Sidebar, Buttons, Sections)
+ * 🔐 بوابة الصلاحيات الموحدة — تخفي أي عنصر UI
+ *
+ * الاستخدام الجديد:
+ *   <PermissionGate resource="cases" action="delete">
+ *     <button>حذف القضية</button>
+ *   </PermissionGate>
+ *
+ * الاستخدام القديم (مازال شغال):
+ *   <PermissionGate permission="cases">...</PermissionGate>
  */
-export default function PermissionGate({ permission, children }) {
-  const { userData } = useAuth();
+export default function PermissionGate({ resource, action, permission, children }) {
+  const { can, role } = usePermissions();
 
-  const role = userData?.role;
+  let allowed = false;
 
-  if (!canAccess(permission, role)) return null;
+  if (resource && action) {
+    // ✅ الطريقة الجديدة: فحص دقيق (مورد + إجراء)
+    allowed = can(resource, action);
+  } else if (permission) {
+    // ⚠️ الطريقة القديمة: فحص الصفحة (للتوافقية)
+    allowed = canAccess(permission, role);
+  }
+
+  if (!allowed) return null;
 
   return children;
 }

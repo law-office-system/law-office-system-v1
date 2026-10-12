@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import {
   collection,
   getDocs,
+  getDoc,
   doc,
   updateDoc,
   deleteDoc,
@@ -9,111 +10,146 @@ import {
   where,
 } from "firebase/firestore";
 import { useAuth } from "../context/AuthContext";
-
+import { usePermissions } from "../hooks/usePermissions";
 import { db } from "../firebaseDb";
 
 export default function Users() {
   const { userData } = useAuth();
+  const { can } = usePermissions();
 
   const [users, setUsers] = useState([]);
+  const [office, setOffice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  // =====================
-  // حماية الصفحة (FIXED)
-  // =====================
+  const allowed = can("users", "view");
+
+  // ✅ كل الـ hooks فوق — مفيش early returns قبلهم أبداً
+  useEffect(() => {
+    if (!userData?.officeId || !allowed) return;
+
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        // ✅ جلب المستخدمين + بيانات المكتب (ownerId) في نفس الوقت
+        const [usersSnap, officeSnap] = await Promise.all([
+          getDocs(
+            query(
+              collection(db, "users"),
+              where("officeId", "==", userData.officeId)
+            )
+          ),
+          getDoc(doc(db, "offices", userData.officeId)),
+        ]);
+
+        if (cancelled) return;
+
+        setUsers(usersSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setOffice(officeSnap.exists() ? officeSnap.data() : null);
+      } catch (error) {
+        console.error("Fetch Users Error:", error);
+        alert("حدث خطأ أثناء تحميل المستخدمين");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [userData?.officeId, allowed]);
+
+  // ═══════ الحماية والـ Guards (بعد كل الـ hooks) ═══════
+
   if (!userData) {
     return <p style={{ padding: 20 }}>جاري التحقق...</p>;
   }
 
-  // 🔥 FIX: بدل role === admin فقط
-  if (!userData.isOfficeAdmin) {
+  if (!allowed) {
     return (
       <p style={{ padding: 20, color: "red", fontWeight: "bold" }}>
-        🚫 غير مسموح بالدخول
+        🚫 غير مسموح بالدخول — هذه الصفحة لمدير المكتب فقط
       </p>
     );
   }
 
-  // =====================
-  // تحميل المستخدمين (MULTI-TENANT)
-  // =====================
-  useEffect(() => {
-    fetchUsers();
-  }, [userData]);
+  if (loading) {
+    return <p style={{ padding: 20 }}>جاري التحميل...</p>;
+  }
 
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
+  // ═══════ Helpers ═══════
 
-      const q = query(
-        collection(db, "users"),
-        where("officeId", "==", userData.officeId)
-      );
+  /** 👑 هل المستخدم ده هو صاحب المكتب الفعلي؟ */
+  const isOfficeOwner = (u) => office?.ownerId && u.id === office.ownerId;
+  /** هل ده أنا؟ */
+  const isSelf = (u) => u.id === userData.uid;
 
-      const snap = await getDocs(q);
+  // ═══════ Actions ═══════
 
-      const data = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
+  const changeRole = async (id, newRole) => {
+    const target = users.find((u) => u.id === id);
 
-      setUsers(data);
-    } catch (error) {
-      console.error("Fetch Users Error:", error);
-      alert("حدث خطأ أثناء تحميل المستخدمين");
-    } finally {
-      setLoading(false);
+    // 🚫 ممنوع تغيير دور صاحب المكتب
+    if (isOfficeOwner(target)) {
+      alert("⚠️ لا يمكن تغيير صلاحية صاحب المكتب");
+      return;
     }
-  };
 
-  // =====================
-  // تغيير الصلاحية
-  // =====================
-  const changeRole = async (id, role) => {
+    // 🚫 ممنوع تغيير دورك بنفسك (حماية من قفل الحساب بالغلط)
+    if (isSelf(target)) {
+      alert("⚠️ لا يمكنك تغيير صلاحيتك بنفسك — اطلب من مدير آخر");
+      return;
+    }
+
     try {
-      const ref = doc(db, "users", id);
+      await updateDoc(doc(db, "users", id), { role: newRole });
 
-      await updateDoc(ref, { role });
-
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === id ? { ...u, role } : u
-        )
-      );
+      setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, role: newRole } : u)));
     } catch (error) {
       console.error(error);
       alert("خطأ في تغيير الصلاحية");
     }
   };
 
-  // =====================
-  // حذف مستخدم
-  // =====================
   const deleteUser = async (id) => {
-    if (!window.confirm("هل تريد حذف هذا المستخدم؟")) return;
+    const target = users.find((u) => u.id === id);
+
+    // 🚫 ممنوع حذف صاحب المكتب
+    if (isOfficeOwner(target)) {
+      alert("⚠️ لا يمكن حذف صاحب المكتب");
+      return;
+    }
+
+    // 🚫 ممنوع حذف نفسك
+    if (isSelf(target)) {
+      alert("⚠️ لا يمكنك حذف حسابك من هنا — استخدم صفحة الملف الشخصي");
+      return;
+    }
+
+    if (!window.confirm(`هل تريد حذف المستخدم "${target?.name}"؟`)) return;
 
     try {
       await deleteDoc(doc(db, "users", id));
-
-      setUsers((prev) =>
-        prev.filter((u) => u.id !== id)
-      );
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+      // ⚠️ ملاحظة: حساب Firebase Auth بيفضل موجود — بننظفه في المرحلة 4
     } catch (error) {
       console.error(error);
       alert("خطأ أثناء حذف المستخدم");
     }
   };
 
-  // =====================
-  // عرض الأدوار
-  // =====================
+  // ═══════ عرض الأدوار ═══════
+
   const roleLabel = (role) => {
     switch (role) {
       case "admin":
-        return "مدير النظام";
+        return "مدير المكتب";
       case "lawyer":
-        return "مسئول";
+        return "محامٍ";
+      case "secretary":
+        return "سكرتير";
       case "client":
         return "موكل";
       default:
@@ -124,41 +160,30 @@ export default function Users() {
   const roleColor = (role) => {
     switch (role) {
       case "admin":
-        return "red";
+        return "#c0392b";
       case "lawyer":
-        return "blue";
+        return "#2980b9";
+      case "secretary":
+        return "#8e44ad";
       case "client":
-        return "green";
+        return "#27ae60";
       default:
         return "#777";
     }
   };
 
-  // =====================
-  // البحث
-  // =====================
   const filteredUsers = users.filter(
     (u) =>
-      (u.name || "")
-        .toLowerCase()
-        .includes(search.toLowerCase()) ||
-      (u.email || "")
-        .toLowerCase()
-        .includes(search.toLowerCase())
+      (u.name || "").toLowerCase().includes(search.toLowerCase()) ||
+      (u.email || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  // =====================
-  // Loading
-  // =====================
-  if (loading) {
-    return <p style={{ padding: 20 }}>جاري التحميل...</p>;
-  }
+  // ═══════ Render ═══════
 
   return (
     <div style={{ padding: 20 }}>
       <h2>👥 إدارة المستخدمين</h2>
 
-      {/* البحث */}
       <input
         placeholder="بحث باسم المستخدم أو البريد..."
         value={search}
@@ -176,15 +201,10 @@ export default function Users() {
         إجمالي المستخدمين: <b>{users.length}</b>
       </p>
 
-      {/* الجدول */}
       <table
         border="1"
         cellPadding="10"
-        style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          marginTop: 10,
-        }}
+        style={{ width: "100%", borderCollapse: "collapse", marginTop: 10 }}
       >
         <thead>
           <tr>
@@ -197,48 +217,54 @@ export default function Users() {
         </thead>
 
         <tbody>
-          {filteredUsers.map((u) => (
-            <tr key={u.id}>
-              <td>{u.name || "-"}</td>
-              <td>{u.email || "-"}</td>
+          {filteredUsers.map((u) => {
+            const owner = isOfficeOwner(u);
+            return (
+              <tr key={u.id}>
+                <td>
+                  {u.name || "-"}
+                  {owner && (
+                    <span style={{ color: "#c0392b", fontWeight: "bold" }}> 👑</span>
+                  )}
+                </td>
+                <td>{u.email || "-"}</td>
 
-              <td
-                style={{
-                  color: roleColor(u.role),
-                  fontWeight: "bold",
-                }}
-              >
-                {roleLabel(u.role)}
-              </td>
+                <td style={{ color: roleColor(u.role), fontWeight: "bold" }}>
+                  {roleLabel(u.role)}
+                  {owner && " (صاحب المكتب)"}
+                </td>
 
-              <td>
-                <select
-                  value={u.role || "client"}
-                  onChange={(e) =>
-                    changeRole(u.id, e.target.value)
-                  }
-                >
-                  <option value="client">موكل</option>
-                  <option value="lawyer">مسئول</option>
-                  <option value="admin">مدير النظام</option>
-                </select>
-              </td>
+                <td>
+                  <select
+                    value={u.role || "client"}
+                    disabled={owner || isSelf(u)}
+                    onChange={(e) => changeRole(u.id, e.target.value)}
+                    style={owner || isSelf(u) ? { opacity: 0.5, cursor: "not-allowed" } : {}}
+                  >
+                    <option value="client">موكل</option>
+                    <option value="secretary">سكرتير</option>
+                    <option value="lawyer">محامٍ</option>
+                    <option value="admin">مدير مكتب</option>
+                  </select>
+                </td>
 
-              <td>
-                <button
-                  onClick={() => deleteUser(u.id)}
-                  style={{
-                    color: "red",
-                    border: "none",
-                    background: "transparent",
-                    cursor: "pointer",
-                  }}
-                >
-                  حذف
-                </button>
-              </td>
-            </tr>
-          ))}
+                <td>
+                  <button
+                    onClick={() => deleteUser(u.id)}
+                    disabled={owner || isSelf(u)}
+                    style={{
+                      color: owner || isSelf(u) ? "#ccc" : "red",
+                      border: "none",
+                      background: "transparent",
+                      cursor: owner || isSelf(u) ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    حذف
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

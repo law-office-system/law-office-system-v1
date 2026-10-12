@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { nanoid } from "nanoid";
 import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from "firebase/auth";
-import { doc, setDoc, Timestamp } from "firebase/firestore";
+import { doc, setDoc, Timestamp, collection, query, where, getDocs } from "firebase/firestore";
 import { auth } from "../firebaseAuth";
 import { db } from "../firebaseDb";
 
@@ -101,32 +101,28 @@ export default function Register() {
       }
 
       if (mode === "join") {
-        const { collection, getDocs } = await import("firebase/firestore");
+        // ✅ FIX: query مباشرة بالكود بدل جلب كل المكاتب
+        const q = query(
+          collection(db, "offices"),
+          where("inviteCode", "==", inviteCode.trim())
+        );
 
-        const snap = await getDocs(collection(db, "offices"));
+        const snap = await getDocs(q);
 
-        let found = null;
-
-        snap.forEach((d) => {
-          if (d.data().inviteCode === inviteCode.trim()) {
-            found = d;
-          }
-        });
-
-        if (!found) {
+        if (snap.empty) {
           setError("كود المكتب غير صحيح");
           setLoading(false);
           return;
         }
 
+        const found = snap.docs[0];
         officeId = found.id;
 
-        // Store user with retry logic
         const userData = {
           uid: user.uid,
           name,
           email,
-          role: "client",
+          role: "client", // مدير المكتب يغيّره بعدين من صفحة المستخدمين
           officeId,
           emailVerified: false,
           createdAt: Timestamp.now(),
