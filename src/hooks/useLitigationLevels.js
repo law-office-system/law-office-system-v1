@@ -15,8 +15,12 @@ import {
 } from "../services/litigationLevels";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebaseDb";
+import { useAuth } from "../context/AuthContext";
 
 export function useLitigationLevels(caseId) {
+  const { userData } = useAuth();
+  const officeId = userData?.officeId || null;
+
   const [levels, setLevels] = useState([]);
   const [activeLevel, setActiveLevel] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -24,7 +28,7 @@ export function useLitigationLevels(caseId) {
 
   // Load levels
   useEffect(() => {
-    if (!caseId) {
+    if (!caseId || !officeId) {
       setLevels([]);
       setActiveLevel(null);
       setLoading(false);
@@ -33,103 +37,125 @@ export function useLitigationLevels(caseId) {
 
     setLoading(true);
 
-    // Subscribe to real-time updates
-    const unsubscribe = subscribeToLitigationLevels(caseId, async (updatedLevels) => {
-      // ═══════════════════════════════════════════════════════════════
-      // FIX: If no levels exist (legacy case), create a virtual level
-      // from the case data so old cases still work
-      // ═══════════════════════════════════════════════════════════════
-      if (updatedLevels.length === 0) {
-        try {
+    // Subscribe to real-time updates — ✅ التوقيع الجديد: (caseId, officeId, callback, onError)
+    const unsubscribe = subscribeToLitigationLevels(
+      caseId,
+      officeId,
+      async (updatedLevels) => {
+        // ═══════════════════════════════════════════════════════════════
+        // FIX: If no levels exist (legacy case), create a virtual level
+        // from the case data so old cases still work
+        // ═══════════════════════════════════════════════════════════════
+        if (updatedLevels.length === 0) {
+          try {
+            const caseRef = doc(db, "cases", caseId);
+            const caseSnap = await getDoc(caseRef);
+
+            if (caseSnap.exists()) {
+              const caseData = caseSnap.data();
+              const legacyLevel = {
+                id: `legacy_${caseId}`,
+                caseId,
+                officeId,
+                levelType: "first_instance",
+                court: caseData.court || "",
+                circuit: caseData.department || "",
+                caseNumber: caseData.caseSerial || "",
+                caseYear: parseInt(caseData.caseYear) || new Date().getFullYear(),
+                status: "ongoing",
+                isActive: true,
+                isCompleted: false,
+                order: 1,
+                sessionCount: (caseData.sessions || []).length,
+                filingDate: caseData.createdAt || null,
+                judgmentDate: null,
+                judgmentAnnouncementDate: null,
+                completionDate: null,
+                judgmentResult: null,
+                judgmentSummary: "",
+                // Flag to identify legacy virtual levels
+                _isLegacy: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              };
+
+              setLevels([legacyLevel]);
+              setActiveLevel(legacyLevel);
+            } else {
+              setLevels([]);
+              setActiveLevel(null);
+            }
+          } catch (err) {
+            console.error("Error creating legacy level:", err);
+            setLevels([]);
+            setActiveLevel(null);
+          }
+        } else {
+          setLevels(updatedLevels);
+          const active = updatedLevels.find((l) => l.isActive);
+          setActiveLevel(active || null);
+        }
+        setLoading(false);
+      },
+      (err) => {
+        console.error("Error subscribing to litigation levels:", err);
+        setError(err?.message || "خطأ في تحميل مستويات التقاضي");
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [caseId, officeId]);
+
+  // Create next level (appeal, cassation, etc.)
+  const createNextLevel = useCallback(
+    async (currentLevelId, newLevelData) => {
+      if (!officeId) {
+        const err = new Error("مكتب المستخدم غير معروف");
+        setError(err.message);
+        throw err;
+      }
+      try {
+        setLoading(true);
+
+        // If current level is legacy, we need to create a real one first
+        if (currentLevelId.startsWith("legacy_")) {
+          // Create the initial real level first — ✅ التوقيع: (caseId, levelData, officeId)
+          const { createInitialLitigationLevel } = await import("../services/litigationLevels");
           const caseRef = doc(db, "cases", caseId);
           const caseSnap = await getDoc(caseRef);
+          const caseData = caseSnap.exists() ? caseSnap.data() : {};
 
-          if (caseSnap.exists()) {
-            const caseData = caseSnap.data();
-            const legacyLevel = {
-              id: `legacy_${caseId}`,
-              caseId,
+          const initialLevel = await createInitialLitigationLevel(
+            caseId,
+            {
               levelType: "first_instance",
               court: caseData.court || "",
               circuit: caseData.department || "",
               caseNumber: caseData.caseSerial || "",
               caseYear: parseInt(caseData.caseYear) || new Date().getFullYear(),
               status: "ongoing",
-              isActive: true,
-              isCompleted: false,
-              order: 1,
-              sessionCount: (caseData.sessions || []).length,
               filingDate: caseData.createdAt || null,
-              judgmentDate: null,
-              judgmentAnnouncementDate: null,
-              completionDate: null,
-              judgmentResult: null,
-              judgmentSummary: "",
-              // Flag to identify legacy virtual levels
-              _isLegacy: true,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            };
+            },
+            officeId
+          );
 
-            setLevels([legacyLevel]);
-            setActiveLevel(legacyLevel);
-          } else {
-            setLevels([]);
-            setActiveLevel(null);
-          }
-        } catch (err) {
-          console.error("Error creating legacy level:", err);
-          setLevels([]);
-          setActiveLevel(null);
-        }
-      } else {
-        setLevels(updatedLevels);
-        const active = updatedLevels.find((l) => l.isActive);
-        setActiveLevel(active || null);
-      }
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [caseId]);
-
-  // Create next level (appeal, cassation, etc.)
-  const createNextLevel = useCallback(
-    async (currentLevelId, newLevelData) => {
-      try {
-        setLoading(true);
-
-        // If current level is legacy, we need to create a real one first
-        if (currentLevelId.startsWith("legacy_")) {
-          // Create the initial real level first
-          const { createInitialLitigationLevel } = await import("../services/litigationLevels");
-          const caseRef = doc(db, "cases", caseId);
-          const caseSnap = await getDoc(caseRef);
-          const caseData = caseSnap.exists() ? caseSnap.data() : {};
-
-          const initialLevel = await createInitialLitigationLevel(caseId, {
-            levelType: "first_instance",
-            court: caseData.court || "",
-            circuit: caseData.department || "",
-            caseNumber: caseData.caseSerial || "",
-            caseYear: parseInt(caseData.caseYear) || new Date().getFullYear(),
-            status: "ongoing",
-            filingDate: caseData.createdAt || null,
-          });
-
-          // Now create the next level from the real initial level
+          // Now create the next level from the real initial level — ✅ التوقيع: (caseId, currentLevelId, newLevelData, officeId)
           const result = await createNextLitigationLevel(
             caseId,
             initialLevel.id,
-            newLevelData
+            newLevelData,
+            officeId
           );
           return result;
         }
 
+        // ✅ التوقيع: (caseId, currentLevelId, newLevelData, officeId)
         const result = await createNextLitigationLevel(
           caseId,
           currentLevelId,
-          newLevelData
+          newLevelData,
+          officeId
         );
         return result;
       } catch (err) {
@@ -139,42 +165,54 @@ export function useLitigationLevels(caseId) {
         setLoading(false);
       }
     },
-    [caseId]
+    [caseId, officeId]
   );
 
   // Update level status
   const updateLevel = useCallback(
     async (levelId, updates) => {
+      if (!officeId) {
+        const err = new Error("مكتب المستخدم غير معروف");
+        setError(err.message);
+        throw err;
+      }
       try {
         // Skip if legacy level (not in Firebase)
         if (levelId.startsWith("legacy_")) {
           console.warn("Cannot update legacy level directly. Run migration first.");
           return;
         }
-        await updateLitigationLevel(levelId, updates);
+        // ✅ التوقيع: (levelId, updates, officeId)
+        await updateLitigationLevel(levelId, updates, officeId);
       } catch (err) {
         setError(err.message);
         throw err;
       }
     },
-    []
+    [officeId]
   );
 
   // Mark judgment
   const markJudgment = useCallback(
     async (levelId, judgmentData) => {
+      if (!officeId) {
+        const err = new Error("مكتب المستخدم غير معروف");
+        setError(err.message);
+        throw err;
+      }
       try {
         if (levelId.startsWith("legacy_")) {
           console.warn("Cannot mark judgment on legacy level directly. Run migration first.");
           return;
         }
-        await markJudgmentIssued(levelId, judgmentData);
+        // ✅ التوقيع: (levelId, officeId, judgmentData)
+        await markJudgmentIssued(levelId, officeId, judgmentData);
       } catch (err) {
         setError(err.message);
         throw err;
       }
     },
-    []
+    [officeId]
   );
 
   // Get next possible levels based on current level

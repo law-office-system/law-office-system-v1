@@ -11,6 +11,58 @@ import {
   Phone, Mail, MapPin, User, Shield, Trash2, Plus, X
 } from 'lucide-react';
 
+// ═══════════════════════════════════════════════════════════════
+// إعدادات الصلاحيات — مخزنة في offices/{officeId}.permissions
+// ⚠️ مدير المكتب (admin) يملك كل شيء تلقائياً ولا يظهر في المصفوفة
+// ⚠️ لو المكتب لم يضبط الإعدادات → تُستخدم الافتراضيات (= النظام الحالي)
+// ═══════════════════════════════════════════════════════════════
+const STAFF_ROLES = [
+  { value: 'lawyer',     label: 'محامٍ' },
+  { value: 'assistant',  label: 'مساعد' },
+  { value: 'secretary',  label: 'سكرتير' },
+  { value: 'accountant', label: 'محاسب' },
+];
+
+const PERMISSION_RESOURCES = [
+  { key: 'cases',      label: 'القضايا',            actions: [{ key: 'view', label: 'عرض' }, { key: 'create', label: 'إضافة' }, { key: 'edit', label: 'تعديل' }, { key: 'delete', label: 'حذف' }] },
+  { key: 'sessions',   label: 'الجلسات',            actions: [{ key: 'view', label: 'عرض' }, { key: 'manage', label: 'إدارة' }] },
+  { key: 'judgments',  label: 'الأحكام',            actions: [{ key: 'view', label: 'عرض' }, { key: 'manage', label: 'إدارة' }, { key: 'delete', label: 'حذف' }] },
+  { key: 'clients',    label: 'العملاء (الموكلين)', actions: [{ key: 'view', label: 'عرض' }, { key: 'create', label: 'إضافة' }, { key: 'edit', label: 'تعديل' }, { key: 'delete', label: 'حذف' }] },
+  { key: 'documents',  label: 'المستندات',          actions: [{ key: 'view', label: 'عرض' }, { key: 'upload', label: 'رفع' }, { key: 'delete', label: 'حذف' }] },
+  { key: 'finance',    label: 'المالية',            actions: [{ key: 'view', label: 'عرض' }, { key: 'add', label: 'إضافة' }, { key: 'edit', label: 'تعديل' }, { key: 'delete', label: 'حذف' }] },
+  { key: 'archive',    label: 'الأرشيف',            actions: [{ key: 'view', label: 'عرض' }, { key: 'delete', label: 'حذف' }] },
+  { key: 'adminTasks', label: 'المهام الإدارية',     actions: [{ key: 'view', label: 'عرض' }, { key: 'create', label: 'إنشاء' }] },
+  { key: 'officeRooms', label: 'القاعات والمحادثات', actions: [{ key: 'view', label: 'عرض' }, { key: 'manage', label: 'إدارة' }] },
+  { key: 'members',    label: 'إدارة الأعضاء',       actions: [{ key: 'view', label: 'عرض' }, { key: 'changeRole', label: 'تغيير الأدوار' }, { key: 'remove', label: 'إزالة' }] },
+];
+
+// الافتراضيات = نفس سلوك النظام الحالي (زي permissions.js)
+const DEFAULT_PERMISSIONS = {
+  cases:      { view: ['lawyer', 'assistant', 'secretary'], create: ['lawyer'], edit: ['lawyer'], delete: [] },
+  sessions:   { view: ['lawyer', 'assistant', 'secretary'], manage: ['lawyer'] },
+  judgments:  { view: ['lawyer', 'assistant', 'secretary'], manage: ['lawyer'], delete: [] },
+  clients:    { view: ['lawyer', 'assistant', 'secretary'], create: ['lawyer'], edit: ['lawyer'], delete: [] },
+  documents:  { view: ['lawyer', 'assistant', 'secretary'], upload: ['lawyer', 'secretary'], delete: ['lawyer'] },
+  finance:    { view: ['lawyer', 'accountant'], add: ['accountant'], edit: [], delete: [] },
+  archive:    { view: ['lawyer', 'assistant', 'secretary'], delete: [] },
+  adminTasks: { view: ['lawyer', 'assistant', 'secretary'], create: ['lawyer'] },
+  officeRooms: { view: ['lawyer', 'assistant', 'secretary'], manage: [] },
+  members:    { view: [], changeRole: [], remove: [] },
+};
+
+// دمج الإعدادات المحفوظة مع الافتراضيات (أي مفتاح ناقص ياخد الافتراضي)
+function mergePermissions(saved) {
+  const merged = {};
+  for (const res of PERMISSION_RESOURCES) {
+    merged[res.key] = {};
+    for (const act of res.actions) {
+      const savedList = saved?.[res.key]?.[act.key];
+      merged[res.key][act.key] = Array.isArray(savedList) ? savedList : (DEFAULT_PERMISSIONS[res.key]?.[act.key] || []);
+    }
+  }
+  return merged;
+}
+
 export default function OfficeSettings() {
   const { themeId, accentId, setThemeId, setAccentId, saveTheme, theme } = useTheme();
   const { userData, user } = useAuth();
@@ -40,6 +92,9 @@ export default function OfficeSettings() {
   const [users, setUsers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(true);
 
+  // ── Permissions tab state ──
+  const [permissions, setPermissions] = useState(DEFAULT_PERMISSIONS);
+
   // ── Load office info ──
   useEffect(() => {
     if (!userData?.officeId) return;
@@ -58,6 +113,9 @@ export default function OfficeSettings() {
           });
           if (data.notifications) {
             setNotifSettings(prev => ({ ...prev, ...data.notifications }));
+          }
+          if (data.permissions) {
+            setPermissions(mergePermissions(data.permissions));
           }
         }
       } catch (e) {
@@ -148,6 +206,25 @@ export default function OfficeSettings() {
     }
   };
 
+  // ── Save permissions ──
+  const handleSavePermissions = async () => {
+    if (!userData?.officeId) return;
+    setSaving(true);
+    try {
+      await setDoc(
+        doc(db, 'offices', userData.officeId),
+        { permissions, updatedAt: new Date().toISOString() },
+        { merge: true }
+      );
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      console.error('Save permissions failed:', e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // 🔐 الحماية: الصفحة لمدير المكتب فقط
   if (!can("officeSettings", "view")) {
     return (
@@ -164,6 +241,7 @@ export default function OfficeSettings() {
     { id: 'general',       label: 'عام',      icon: Building2 },
     { id: 'notifications', label: 'الإشعارات', icon: Bell },
     { id: 'users',         label: 'المستخدمين', icon: Users },
+    { id: 'permissions',   label: 'الصلاحيات', icon: Shield },
   ];
 
   return (
@@ -197,6 +275,7 @@ export default function OfficeSettings() {
                 activeTab === 'appearance' ? handleSaveTheme :
                 activeTab === 'general' ? handleSaveOfficeInfo :
                 activeTab === 'notifications' ? handleSaveNotifications :
+                activeTab === 'permissions' ? handleSavePermissions :
                 () => {}
               }
               disabled={saving}
@@ -269,6 +348,14 @@ export default function OfficeSettings() {
           <UsersTab 
             users={users}
             loading={usersLoading}
+          />
+        )}
+
+        {/* ── Permissions Tab ── */}
+        {activeTab === 'permissions' && (
+          <PermissionsTab
+            permissions={permissions}
+            setPermissions={setPermissions}
           />
         )}
 
@@ -655,6 +742,135 @@ function UsersTab({ users, loading }) {
         </div>
       )}
     </Card>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PERMISSIONS TAB — مصفوفة الصلاحيات (تُحفظ في مستند المكتب)
+   ═══════════════════════════════════════════════════════════════ */
+function PermissionsTab({ permissions, setPermissions }) {
+  const { theme } = useTheme();
+  const { colors, radius } = theme;
+
+  const toggleRole = (resKey, actKey, role) => {
+    setPermissions(prev => {
+      const current = prev[resKey]?.[actKey] || [];
+      const next = current.includes(role)
+        ? current.filter(r => r !== role)
+        : [...current, role];
+      return { ...prev, [resKey]: { ...prev[resKey], [actKey]: next } };
+    });
+  };
+
+  return (
+    <div>
+      {/* تنبيه */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '12px 16px', marginBottom: 16,
+        background: `${colors.accent.blue.main}12`,
+        border: `1px solid ${colors.accent.blue.main}30`,
+        borderRadius: radius.md,
+        fontSize: 13, color: colors.text.secondary,
+      }}>
+        <Shield size={16} color={colors.accent.blue.main} />
+        <span>
+          <b style={{ color: colors.text.primary }}>مدير المكتب</b> يملك كل الصلاحيات تلقائياً ولا يحتاج ضبطاً.
+          الإعدادات تُطبَّق على أدوار فريق العمل (محامٍ / مساعد / سكرتير / محاسب).
+        </span>
+      </div>
+
+      {/* المصفوفة */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {PERMISSION_RESOURCES.map(res => (
+          <div
+            key={res.key}
+            style={{
+              background: colors.bg.card,
+              border: `1px solid ${colors.border.default}`,
+              borderRadius: radius.lg,
+              overflow: 'hidden',
+            }}
+          >
+            {/* اسم المورد */}
+            <div style={{
+              padding: '12px 16px',
+              background: colors.bg.hover,
+              borderBottom: `1px solid ${colors.border.default}`,
+              fontWeight: 600, fontSize: 14,
+              color: colors.text.primary,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              {res.label}
+              <span style={{ fontSize: 11, color: colors.text.muted, fontWeight: 400 }}>
+                اضغط على الدور لتفعيله / إلغائه
+              </span>
+            </div>
+
+            {/* الأفعال */}
+            <div style={{ padding: '8px 16px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {res.actions.map(act => {
+                const allowed = permissions[res.key]?.[act.key] || [];
+                return (
+                  <div key={act.key} style={{
+                    display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+                  }}>
+                    <span style={{
+                      minWidth: 70, fontSize: 13, fontWeight: 500,
+                      color: colors.text.secondary,
+                    }}>
+                      {act.label}
+                    </span>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {STAFF_ROLES.map(role => {
+                        const active = allowed.includes(role.value);
+                        return (
+                          <button
+                            key={role.value}
+                            onClick={() => toggleRole(res.key, act.key, role.value)}
+                            style={{
+                              padding: '5px 12px',
+                              borderRadius: 999,
+                              fontSize: 12, fontWeight: 600,
+                              fontFamily: 'inherit',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              border: active
+                                ? `1px solid ${colors.accent.blue.main}`
+                                : `1px solid ${colors.border.default}`,
+                              background: active
+                                ? colors.accent.blue.main
+                                : 'transparent',
+                              color: active
+                                ? '#fff'
+                                : colors.text.muted,
+                            }}
+                          >
+                            {role.label}
+                          </button>
+                        );
+                      })}
+                      {/* شارة admin الثابتة */}
+                      <span style={{
+                        padding: '5px 12px',
+                        borderRadius: 999,
+                        fontSize: 12, fontWeight: 600,
+                        background: `${colors.accent.gold?.main || '#c9a227'}18`,
+                        color: colors.accent.gold?.main || '#c9a227',
+                        border: `1px dashed ${colors.accent.gold?.main || '#c9a227'}50`,
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                      }}>
+                        <Shield size={11} /> مدير المكتب ✓
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

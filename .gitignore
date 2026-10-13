@@ -24,3 +24,7 @@ dist-ssr
 *.sw?
 
 .firebase/
+
+# Firebase Service Account Key (سرّي — ميترفعش Git أبداً)
+serviceAccountKey.json
+scripts/serviceAccountKey.json

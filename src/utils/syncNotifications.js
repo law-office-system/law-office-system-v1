@@ -9,20 +9,42 @@ import {
   documentId,
   getDoc,
 } from "firebase/firestore";
+
 import { db } from "../firebaseDb";
 import { generateNotifications } from "./generateNotifications";
 
-// ✅ Cache للـ client names — يدوم 10 دقايق
+// ============================================================
+// Cache لأسماء الموكلين — 10 دقائق، مع فصل البيانات حسب المكتب
+// ============================================================
 const clientNamesCache = new Map();
 const CACHE_TTL = 10 * 60 * 1000;
 
-const getCachedClientNames = async (clientIds) => {
+// ============================================================
+// جلب أسماء الموكلين مفلتراً بالمكتب على مستوى الاستعلام
+// ============================================================
+const getCachedClientNames = async (clientIds, officeId) => {
   const now = Date.now();
   const uncachedIds = [];
   const result = {};
 
-  clientIds.forEach((id) => {
-    const cached = clientNamesCache.get(id);
+  if (!officeId || !Array.isArray(clientIds)) {
+    return result;
+  }
+
+  // إزالة المعرفات المكررة وغير الصالحة
+  const uniqueIds = [
+    ...new Set(
+      clientIds.filter(
+        (id) => typeof id === "string" && id.trim() !== ""
+      )
+    ),
+  ];
+
+  // قراءة الأسماء من الـ cache
+  uniqueIds.forEach((id) => {
+    const cacheKey = `${officeId}_${id}`;
+    const cached = clientNamesCache.get(cacheKey);
+
     if (cached && now - cached.timestamp < CACHE_TTL) {
       result[id] = cached.name;
     } else {
@@ -30,24 +52,29 @@ const getCachedClientNames = async (clientIds) => {
     }
   });
 
-  if (uncachedIds.length > 0) {
-    for (let i = 0; i < uncachedIds.length; i += 10) {
-      const chunk = uncachedIds.slice(i, i + 10);
-      try {
-        const q = query(
-          collection(db, "clientProfiles"),
-          where(documentId(), "in", chunk)
-        );
-        const snap = await getDocs(q);
-        snap.forEach((doc) => {
-          const data = doc.data();
-          const name = data.fullName || data.name || "موكل";
-          result[doc.id] = name;
-          clientNamesCache.set(doc.id, { name, timestamp: now });
-        });
-      } catch (err) {
-        console.error("❌ Error fetching chunk:", err);
-      }
+  // ✅ جلب فردي: كل مستند بيتقيّم لوحده — المرفوض أو المكتب الآخر يتخطى بدون إيقاف الباقي
+  for (const id of uncachedIds) {
+    try {
+      const snap = await getDoc(doc(db, "clientProfiles", id));
+      if (!snap.exists()) continue;
+
+      const data = snap.data();
+      if (data.officeId !== officeId) continue;
+
+      const name = data.fullName || data.name || "موكل";
+      const cacheKey = `${officeId}_${id}`;
+
+      result[id] = name;
+
+      clientNamesCache.set(cacheKey, {
+        name,
+        timestamp: now,
+      });
+    } catch (error) {
+      console.error(
+        "❌ Error fetching client names:",
+        error
+      );
     }
   }
 
@@ -55,183 +82,316 @@ const getCachedClientNames = async (clientIds) => {
 };
 
 // ============================================================
-// 🆕 NEW: Load notification settings from office document
+// جلب إعدادات الإشعارات من مستند المكتب
 // ============================================================
 async function loadNotificationSettings(officeId) {
   if (!officeId) return {};
+
   try {
-    const snap = await getDoc(doc(db, "offices", officeId));
-    if (snap.exists()) {
-      const data = snap.data();
+    const officeRef = doc(db, "offices", officeId);
+    const snapshot = await getDoc(officeRef);
+
+    if (snapshot.exists()) {
+      const data = snapshot.data();
       return data.notifications || {};
     }
-  } catch (e) {
-    console.warn("Failed to load notification settings:", e.message);
+  } catch (error) {
+    console.warn(
+      "⚠️ Failed to load notification settings:",
+      error.message
+    );
   }
+
   return {};
 }
 
 // ============================================================
-// ✅ دالة مساعدة: حذف الإشعارات المرتبطة بجلسة معينة
+// حذف إشعارات جلسة محددة داخل المكتب فقط
 // ============================================================
-export const deleteNotificationsForSession = async (caseId, sessionDate) => {
+export const deleteNotificationsForSession = async (
+  caseId,
+  sessionDate,
+  officeId
+) => {
+  if (!caseId || !sessionDate || !officeId) {
+    console.warn(
+      "⚠️ Cannot delete session notifications: missing caseId, sessionDate, or officeId"
+    );
+    return;
+  }
+
   try {
     const notificationsRef = collection(db, "notifications");
-    const q = query(
+
+    const notificationsQuery = query(
       notificationsRef,
+      where("officeId", "==", officeId),
       where("caseId", "==", caseId),
       where("sessionDate", "==", sessionDate)
     );
 
-    const snapshot = await getDocs(q);
+    const snapshot = await getDocs(notificationsQuery);
     const batch = writeBatch(db);
 
-    snapshot.docs.forEach((docSnap) => {
-      batch.delete(doc(db, "notifications", docSnap.id));
+    snapshot.docs.forEach((notificationDoc) => {
+      batch.delete(
+        doc(db, "notifications", notificationDoc.id)
+      );
     });
 
-    await batch.commit();
-    console.log(`✅ تم حذف ${snapshot.docs.length} إشعار للجلسة ${sessionDate}`);
+    if (!snapshot.empty) {
+      await batch.commit();
+    }
+
+    console.log(
+      `✅ تم حذف ${snapshot.size} إشعار للجلسة ${sessionDate}`
+    );
   } catch (error) {
-    console.error("❌ خطأ في حذف الإشعارات:", error);
+    console.error(
+      "❌ خطأ في حذف إشعارات الجلسة:",
+      error
+    );
   }
 };
 
 // ============================================================
-// دالة المزامنة الرئيسية — محسّنة + مع إعدادات الإشعارات
+// المزامنة الرئيسية للإشعارات
 // ============================================================
-export const syncNotifications = async (cases, adminTasks = [], judgments = [], officeId) => {
-  if (!officeId) return;
+export const syncNotifications = async (
+  cases,
+  adminTasks = [],
+  judgments = [],
+  officeId
+) => {
+  if (!officeId) {
+    console.warn(
+      "⚠️ Notification sync skipped: officeId is missing"
+    );
+    return;
+  }
 
   try {
-    // 🆕 NEW: Load notification settings first
+    // 1. جلب إعدادات الإشعارات
     const settings = await loadNotificationSettings(officeId);
-    console.log("📋 Notification settings:", settings);
 
-    // 1. جمع معرفات الموكلين
+    console.log("📋 Notification settings loaded");
+
+    // 2. جمع معرفات الموكلين من القضايا
     const clientIds = new Set();
-    cases.forEach((c) => {
-      (c.clients || []).forEach((client) => {
-        const id = typeof client === "object" ? client.id : client;
-        if (id && typeof id === "string") clientIds.add(id);
+
+    (cases || []).forEach((caseItem) => {
+      (caseItem.clients || []).forEach((client) => {
+        const id =
+          typeof client === "object" && client !== null
+            ? client.id
+            : client;
+
+        if (typeof id === "string" && id.trim() !== "") {
+          clientIds.add(id);
+        }
       });
     });
 
-    // 2. جلب أسماء الموكلين (مع cache)
-    const idsArray = Array.from(clientIds).filter((id) => id && typeof id === "string");
-    const clientNamesMap = await getCachedClientNames(idsArray);
+    // 3. جلب أسماء الموكلين داخل المكتب المحدد
+    const idsArray = Array.from(clientIds);
 
-    // 3. إضافة أسماء الموكلين للقضايا
-    const casesWithNames = cases.map((c) => {
-      const clientNames = (c.clients || [])
+    const clientNamesMap = await getCachedClientNames(
+      idsArray,
+      officeId
+    );
+
+    // 4. تجهيز القضايا بأسماء الموكلين والخصوم
+    const casesWithNames = (cases || []).map((caseItem) => {
+      const clientNames = (caseItem.clients || [])
         .map((client) => {
-          const id = typeof client === "object" ? client.id : client;
+          const id =
+            typeof client === "object" && client !== null
+              ? client.id
+              : client;
+
           return clientNamesMap[id] || "";
         })
         .filter(Boolean);
 
-      const opponentNames = (c.opponents || [])
-        .map((opp) => (typeof opp === "object" ? opp.name || "" : opp || ""))
+      const opponentNames = (caseItem.opponents || [])
+        .map((opponent) =>
+          typeof opponent === "object" && opponent !== null
+            ? opponent.name || ""
+            : opponent || ""
+        )
         .filter(Boolean);
 
       return {
-        ...c,
+        ...caseItem,
         clientNames,
         opponentNames,
       };
     });
 
-    // 4. توليد الإشعارات الجديدة — مع الإعدادات
-    const generatedNotifications = generateNotifications(casesWithNames, adminTasks, judgments, settings);
-    const generatedIds = new Set(generatedNotifications.map((n) => n.id));
+    // 5. توليد الإشعارات
+    const generatedNotifications = generateNotifications(
+      casesWithNames,
+      adminTasks,
+      judgments,
+      settings
+    );
 
-    // 5. جلب الإشعارات الحالية
-    const notifRef = collection(db, "notifications");
-    const q = query(notifRef, where("officeId", "==", officeId));
-    const existingSnap = await getDocs(q);
+    // حماية إضافية: لا نزامن إشعارًا مرتبطًا بمكتب آخر
+    const generatedForOffice = generatedNotifications.map(
+      (notification) => ({
+        ...notification,
+        officeId,
+      })
+    );
+
+    const generatedIds = new Set(
+      generatedForOffice.map((notification) => notification.id)
+    );
+
+    // 6. جلب إشعارات المكتب الحالي فقط
+    const notificationsRef = collection(db, "notifications");
+
+    const existingQuery = query(
+      notificationsRef,
+      where("officeId", "==", officeId)
+    );
+
+    const existingSnapshot = await getDocs(existingQuery);
 
     const existingMap = new Map();
-    existingSnap.docs.forEach((d) => {
-      const data = d.data();
+
+    existingSnapshot.docs.forEach((notificationDoc) => {
+      const data = notificationDoc.data();
+
       existingMap.set(data.id, {
-        firestoreId: d.id,
+        firestoreId: notificationDoc.id,
         ...data,
       });
     });
 
     const batch = writeBatch(db);
-    let opsCount = 0;
-    const MAX_BATCH = 450; // Firestore limit = 500, leave margin
 
-    // 6. حذف الإشعارات الزائدة
+    let opsCount = 0;
+    const MAX_BATCH = 450;
+
+    // 7. حذف الإشعارات القديمة غير الموجودة في الناتج الجديد
     for (const [id, existing] of existingMap) {
       if (!generatedIds.has(id)) {
-        batch.delete(doc(db, "notifications", existing.firestoreId));
+        if (opsCount >= MAX_BATCH) {
+          console.warn(
+            "⚠️ Batch limit reached while deleting notifications"
+          );
+          break;
+        }
+
+        batch.delete(
+          doc(db, "notifications", existing.firestoreId)
+        );
+
         opsCount++;
       }
     }
 
-    // 7. إضافة/تحديث الإشعارات (فقط لو فيه تغيير فعلي)
-    for (const newNotif of generatedNotifications) {
+    // 8. إضافة الإشعارات الجديدة وتحديث المتغير منها
+    for (const newNotification of generatedForOffice) {
       if (opsCount >= MAX_BATCH) {
-        console.warn("⚠️ Batch limit reached, remaining notifications skipped");
+        console.warn(
+          "⚠️ Batch limit reached; remaining notifications skipped"
+        );
         break;
       }
 
-      if (existingMap.has(newNotif.id)) {
-        const existing = existingMap.get(newNotif.id);
+      if (!newNotification.id) {
+        console.warn(
+          "⚠️ Skipping notification without an ID"
+        );
+        continue;
+      }
 
-        // ✅ فقط update لو البيانات اتغيرت
+      if (existingMap.has(newNotification.id)) {
+        const existing = existingMap.get(newNotification.id);
+
         const needsUpdate =
-          existing.message !== newNotif.message ||
-          existing.type !== newNotif.type ||
-          existing.sessionDate !== (newNotif.sessionDate || null) ||
-          existing.dueDate !== (newNotif.dueDate || null) ||
-          existing.judgmentDate !== (newNotif.judgmentDate || null) ||
-          existing.caseNumber !== newNotif.caseNumber ||
-          existing.caseCourt !== newNotif.court ||
-          JSON.stringify(existing.clientNames || []) !== JSON.stringify(newNotif.clientNames || []) ||
-          JSON.stringify(existing.opponentNames || []) !== JSON.stringify(newNotif.opponentNames || []);
+          existing.message !== newNotification.message ||
+          existing.type !== newNotification.type ||
+          existing.sessionDate !==
+            (newNotification.sessionDate || null) ||
+          existing.dueDate !==
+            (newNotification.dueDate || null) ||
+          existing.judgmentDate !==
+            (newNotification.judgmentDate || null) ||
+          existing.caseNumber !== newNotification.caseNumber ||
+          existing.caseCourt !== newNotification.court ||
+          JSON.stringify(existing.clientNames || []) !==
+            JSON.stringify(newNotification.clientNames || []) ||
+          JSON.stringify(existing.opponentNames || []) !==
+            JSON.stringify(newNotification.opponentNames || []) ||
+          existing.daysLate !==
+            (newNotification.daysLate || null) ||
+          existing.taskTitle !==
+            (newNotification.taskTitle || null) ||
+          existing.judgmentTitle !==
+            (newNotification.judgmentTitle || null) ||
+          existing.judgmentCategory !==
+            (newNotification.judgmentCategory || null);
 
         if (needsUpdate) {
-          batch.update(doc(db, "notifications", existing.firestoreId), {
-            message: newNotif.message,
-            type: newNotif.type,
-            sessionDate: newNotif.sessionDate || null,
-            dueDate: newNotif.dueDate || null,
-            judgmentDate: newNotif.judgmentDate || null,
-            caseNumber: newNotif.caseNumber,
-            caseCourt: newNotif.court,
-            clientNames: newNotif.clientNames,
-            opponentNames: newNotif.opponentNames,
-            daysLate: newNotif.daysLate || null,
-            taskTitle: newNotif.taskTitle || null,
-            judgmentTitle: newNotif.judgmentTitle || null,
-            judgmentCategory: newNotif.judgmentCategory || null,
-            updatedAt: serverTimestamp(),
-          });
+          batch.update(
+            doc(db, "notifications", existing.firestoreId),
+            {
+              message: newNotification.message,
+              type: newNotification.type,
+              sessionDate: newNotification.sessionDate || null,
+              dueDate: newNotification.dueDate || null,
+              judgmentDate: newNotification.judgmentDate || null,
+              caseNumber: newNotification.caseNumber,
+              caseCourt: newNotification.court,
+              clientNames: newNotification.clientNames || [],
+              opponentNames: newNotification.opponentNames || [],
+              daysLate: newNotification.daysLate || null,
+              taskTitle: newNotification.taskTitle || null,
+              judgmentTitle: newNotification.judgmentTitle || null,
+              judgmentCategory:
+                newNotification.judgmentCategory || null,
+              updatedAt: serverTimestamp(),
+            }
+          );
+
           opsCount++;
         }
       } else {
-        const newDocRef = doc(collection(db, "notifications"));
+        const newDocRef = doc(
+          collection(db, "notifications")
+        );
+
         batch.set(newDocRef, {
-          ...newNotif,
+          ...newNotification,
           officeId,
           isReadBy: {},
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
+
         opsCount++;
       }
     }
 
+    // 9. تنفيذ التغييرات عند وجود عمليات
     if (opsCount > 0) {
       await batch.commit();
-      console.log(`✅ Notifications synced! ${opsCount} operations`);
+
+      console.log(
+        `✅ Notifications synced successfully: ${opsCount} operations`
+      );
     } else {
-      console.log("✅ Notifications already up to date — no changes needed");
+      console.log(
+        "✅ Notifications already up to date — no changes needed"
+      );
     }
   } catch (error) {
-    console.error("❌ Error syncing notifications:", error);
+    console.error(
+      "❌ Error syncing notifications:",
+      error
+    );
   }
 };

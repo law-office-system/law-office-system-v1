@@ -7,7 +7,6 @@ import { getLitigationLevelLabel } from "../constants/caseStatusLabels";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebaseDb";
 import { parseDate } from "../utils/date";
-// ✅ مصدر الحقيقة الموحد لحالات الأرشيف/التنفيذ
 import { isArchivedCase, isExecutionCase } from "../utils/archiveStatus";
 
 // ── تذكر إغلاق تنبيه العاجل ──
@@ -30,12 +29,11 @@ const formatDate = (d) => {
   return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
 };
 
-// ── ستايلات مشتقة من النظام الموحد (theme) — تركيب خفيف فقط ──
+// ── ستايلات مشتقة من النظام الموحد (theme) ──
 function useDashboardStyles(theme) {
   return useMemo(() => {
     const { colors: c, currentAccent: A, shadows, radius, transitions } = theme;
     const st = c.status;
-    // حالات القضايا: heritage يملك ألوانه الخاصة، وباقي الثيمات تسقط على الحالات المشتركة
     const cs = {
       active:    st.active    || st.completed,
       execution: st.execution || st.postponed,
@@ -113,19 +111,12 @@ function DashboardSkeleton({ theme }) {
             <div style={b({ width: 150, height: 16 })} />
           </div>
         </div>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          {[...Array(5)].map((_, i) => <div key={i} style={b({ width: 100, height: 50, borderRadius: 10, animationDelay: `${i * 0.1}s` })} />)}
-        </div>
       </div>
       <div style={b({ height: 50, borderRadius: 12, marginBottom: 12 })} />
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-        {[...Array(4)].map((_, i) => <div key={i} style={b({ width: 80, height: 40, borderRadius: 10, animationDelay: `${i * 0.1}s` })} />)}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16, marginTop: 20 }}>
         {[...Array(6)].map((_, i) => (
-          <div key={i} style={b({ borderRadius: 14, padding: 20, height: 200, animationDelay: `${i * 0.1}s` })}>
+          <div key={i} style={b({ borderRadius: 14, padding: 20, height: 200 })}>
             <div style={b({ width: "60%", height: 20, marginBottom: 12 })} />
-            {[...Array(4)].map((_, j) => <div key={j} style={b({ width: `${70 + j * 10}%`, height: 16, marginBottom: 8 })} />)}
           </div>
         ))}
       </div>
@@ -156,10 +147,17 @@ export default function Dashboard() {
   const unsubRef = useRef(null);
   const isMountedRef = useRef(true);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const tomorrow = useMemo(() => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + 1);
+    return d;
+  }, [today]);
 
   // ── دوال مساعدة ──
   const isUrgent = useCallback((d) => !!d && d >= today && d <= tomorrow, [today, tomorrow]);
@@ -223,79 +221,189 @@ export default function Dashboard() {
     return () => clearTimeout(searchTimeoutRef.current);
   }, [search]);
 
+  // تشخيص الصلاحيات
+  useEffect(() => {
+    if (authLoading || userDataLoading) return;
+    console.log("[Dashboard Permission Debug]", {
+      officeId: userData?.officeId ?? null,
+      role: userData?.role ?? null,
+      hasOfficeId: Boolean(userData?.officeId),
+    });
+  }, [authLoading, userDataLoading, userData?.officeId, userData?.role]);
+
+  // تحميل القضايا الخاصة بالمكتب
   useEffect(() => {
     if (authLoading || userDataLoading) return;
     if (!userData?.officeId) { setLoading(false); setCases([]); return; }
+
     setLoading(true);
     setError(null);
     const q = query(collection(db, "cases"), where("officeId", "==", userData.officeId), orderBy("createdAt", "desc"), limit(CASES_LIMIT));
+
     const unsub = onSnapshot(q, (snap) => {
       if (!isMountedRef.current) return;
       setCases(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
     }, (err) => {
-      console.error("Cases:", err);
+      console.error("Cases Load Error:", err);
       if (isMountedRef.current) { setError("حدث خطأ في تحميل القضايا"); setLoading(false); }
     });
+
     unsubRef.current = unsub;
     return () => unsub();
   }, [userData?.officeId, authLoading, userDataLoading]);
 
+  // 3. تحميل مستويات التقاضي
   useEffect(() => {
-    if (!cases.length) return;
-    (async () => {
-      const newCache = { ...levelDataCache };
-      let changed = false;
-      for (const c of cases) {
-        if ((c.caseNumber && c.court) || newCache[c.id]) continue;
-        try {
-          let data = null;
-          if (c.activeLevelId) {
-            const snap = await getDoc(doc(db, "litigation_levels", c.activeLevelId));
-            if (snap.exists()) data = snap.data();
-          }
-          if (!data) {
-            const snap = await getDocs(query(
-              collection(db, "litigation_levels"),
-              where("caseId", "==", c.id),
-              where("officeId", "==", userData.officeId),
-              limit(1)
-            ));
-            if (!snap.empty) data = snap.docs[0].data();
-          }
-          if (data) { newCache[c.id] = data; changed = true; }
-        } catch (e) { console.warn(`Level ${c.id}:`, e); }
-      }
-      if (changed && isMountedRef.current) setLevelDataCache(newCache);
-    })();
-  }, [cases, levelDataCache, userData?.officeId]);
+    const officeId = userData?.officeId;
 
-  useEffect(() => {
-    if (!cases.length || !userData?.officeId) return;
-    (async () => {
-      const ids = new Set();
-      cases.forEach(c => Array.isArray(c.clients) && c.clients.forEach(ci => {
-        const id = typeof ci === "object" ? ci.id : ci;
-        if (id) ids.add(id);
-      }));
-      const missing = [...ids].filter(id => id && !clientNamesCache[id]);
-      if (!missing.length) return;
-      const newCache = { ...clientNamesCache };
-      let changed = false;
-      for (let i = 0; i < missing.length; i += CLIENT_BATCH_SIZE) {
+    if (!cases.length || !officeId) {
+      setLevelDataCache({});
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadLevels = async () => {
+      const newCache = {};
+
+      for (const c of cases) {
+        if (cancelled) return;
+
+        if (c.caseNumber && c.court) continue;
+
         try {
-          const snap = await getDocs(query(
-            collection(db, "clientProfiles"),
-            where(documentId(), "in", missing.slice(i, i + CLIENT_BATCH_SIZE)),
-            where("officeId", "==", userData.officeId)
-          ));
-          snap.forEach(d => { newCache[d.id] = d.data().fullName || "موكل"; changed = true; });
-        } catch (e) { console.error("Clients:", e); }
+          let levelData = null;
+
+          if (c.activeLevelId) {
+            const activeLevelQuery = query(
+              collection(db, "litigation_levels"),
+              where("officeId", "==", officeId),
+              where(documentId(), "==", c.activeLevelId),
+              limit(1)
+            );
+
+            const activeLevelSnap = await getDocs(activeLevelQuery);
+
+            if (!activeLevelSnap.empty) {
+              const docData = activeLevelSnap.docs[0].data();
+              if (docData.officeId === officeId) {
+                levelData = docData;
+              }
+            }
+          }
+
+          if (!levelData) {
+            const levelsQuery = query(
+              collection(db, "litigation_levels"),
+              where("officeId", "==", officeId),
+              where("caseId", "==", c.id),
+              limit(1)
+            );
+
+            const levelsSnap = await getDocs(levelsQuery);
+
+            if (!levelsSnap.empty) {
+              const docData = levelsSnap.docs[0].data();
+              if (docData.officeId === officeId) {
+                levelData = docData;
+              }
+            }
+          }
+
+          if (levelData && !cancelled) {
+            newCache[c.id] = levelData;
+          }
+        } catch (e) {
+          console.error("[Dashboard] Failed to load litigation level:", {
+            caseId: c.id,
+            officeId,
+            errorCode: e?.code,
+            errorMessage: e?.message,
+          });
+        }
       }
-      // ✅ حارس: منع الحلقة اللانهائية — لا تحديث للـ state لو مفيش بيانات اتجابت
-      if (changed && isMountedRef.current) setClientNamesCache(newCache);
-    })();
-  }, [cases, clientNamesCache, userData?.officeId]);
+
+      if (!cancelled) {
+        setLevelDataCache(newCache);
+      }
+    };
+
+    loadLevels();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cases, userData?.officeId]);
+
+  // 4. تحميل أسماء الموكلين — جلب فردي: أي مستند مرفوض أو تابع لمكتب آخر يتخطى بدون إيقاف الباقي
+  useEffect(() => {
+    const officeId = userData?.officeId;
+
+    if (!cases.length || !officeId) {
+      setClientNamesCache({});
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadClientNames = async () => {
+      const clientIds = new Set();
+
+      cases.forEach((c) => {
+        if (!Array.isArray(c.clients)) return;
+
+        c.clients.forEach((client) => {
+          const id =
+            typeof client === "object" && client !== null
+              ? client.id
+              : client;
+
+          if (typeof id === "string" && id.trim()) {
+            clientIds.add(id);
+          }
+        });
+      });
+
+      const missingIds = [...clientIds].filter(
+        (id) => !clientNamesCache[id]
+      );
+
+      if (!missingIds.length) return;
+
+      const newNames = {};
+
+      await Promise.all(
+        missingIds.map(async (id) => {
+          if (cancelled) return;
+          try {
+            const snap = await getDoc(doc(db, "clientProfiles", id));
+            if (!snap.exists()) return;
+
+            const data = snap.data();
+            if (data.officeId !== officeId) return;
+
+            newNames[id] = data.fullName || data.name || "موكل";
+          } catch {
+            // مستند مرفوض أو غير موجود — نتخطاه بهدوء
+          }
+        })
+      );
+
+      if (cancelled || !Object.keys(newNames).length) return;
+
+      setClientNamesCache((previous) => ({
+        ...previous,
+        ...newNames,
+      }));
+    };
+
+    loadClientNames();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cases, userData?.officeId]);
 
   useEffect(() => {
     if (isDismissedToday()) return;
@@ -525,7 +633,7 @@ function DateRow({ s, icon, label, date, urgent, past }) {
   );
 }
 
-// ✅ Responsive adjustments
+// ✅ التنسيق التجاوُبي
 const responsiveStyles = `
   @media (max-width: 768px) {
     .dashboard-stats-bar { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }

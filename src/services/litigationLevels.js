@@ -1,8 +1,3 @@
-// ============================================================
-// 📁 FILE: src/services/litigationLevels.js
-// Description: CRUD for Litigation Levels (درجات التقاضي)
-// ============================================================
-
 import {
   collection,
   doc,
@@ -18,333 +13,388 @@ import {
   writeBatch,
   serverTimestamp,
   increment,
+  onSnapshot,
 } from "firebase/firestore";
+
 import { db } from "../firebaseDb";
 
 const LEVELS_COL = "litigation_levels";
 const CASES_COL = "cases";
 
-// ==================== CREATE ====================
-
 /**
- * Create the initial litigation level when a case is created
- * Automatically called from AddCase.jsx
+ * التحقق من وجود المستند وانتمائه للمكتب الحالي.
  */
-export async function createInitialLitigationLevel(caseId, levelData, officeId) {
-  const now = Timestamp.now();
+async function getOfficeDocument(collectionName, documentId, officeId) {
+  if (!documentId || !officeId) {
+    throw new Error("documentId و officeId مطلوبان");
+  }
 
-  const newLevel = {
-    caseId,
-    officeId,
-    levelType: levelData.levelType || "first_instance",
-    court: levelData.court || "",
-    circuit: levelData.circuit || "",
-    caseNumber: levelData.caseNumber || "",
-    caseYear: levelData.caseYear || new Date().getFullYear(),
-    status: levelData.status || "new",
-    isActive: true,
-    isCompleted: false,
-    order: 1,
-    sessionCount: 0,
-    filingDate: levelData.filingDate ? Timestamp.fromDate(new Date(levelData.filingDate)) : null,
-    judgmentDate: null,
-    judgmentAnnouncementDate: null,
-    completionDate: null,
-    judgmentResult: null,
-    judgmentSummary: "",
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  };
+  const ref = doc(db, collectionName, documentId);
+  const snapshot = await getDoc(ref);
 
-  const docRef = await addDoc(collection(db, LEVELS_COL), newLevel);
+  if (!snapshot.exists()) {
+    throw new Error("المستند غير موجود");
+  }
 
-  // Update case with activeLevelId
-  await updateDoc(doc(db, CASES_COL, caseId), {
-    activeLevelId: docRef.id,
-    currentLevel: newLevel.levelType,
-    currentStatus: newLevel.status,
-    updatedAt: serverTimestamp(),
-  });
+  const data = snapshot.data();
 
-  return { id: docRef.id, ...newLevel };
+  if (data.officeId !== officeId) {
+    throw new Error("لا يمكن الوصول إلى بيانات مكتب آخر");
+  }
+
+  return { ref, data, snapshot };
 }
 
 /**
- * Create the next litigation level (e.g., appeal, cassation, execution)
- * Called when a judgment is issued and the lawyer wants to appeal
+ * إنشاء أول مستوى تقاضي للقضية.
  */
-export async function createNextLitigationLevel(caseId, currentLevelId, newLevelData, officeId) {
-  const batch = writeBatch(db);
-
-  // Get current level
-  const currentLevelRef = doc(db, LEVELS_COL, currentLevelId);
-  const currentLevelSnap = await getDoc(currentLevelRef);
-
-  if (!currentLevelSnap.exists()) {
-    throw new Error("Current litigation level not found");
+export async function createInitialLitigationLevel(
+  caseId,
+  levelData,
+  officeId
+) {
+  if (!caseId || !officeId) {
+    throw new Error("caseId و officeId مطلوبان");
   }
 
-  const currentLevel = currentLevelSnap.data();
-  const currentOrder = currentLevel.order || 1;
+  const caseResult = await getOfficeDocument(
+    CASES_COL,
+    caseId,
+    officeId
+  );
 
-  // Mark current level as completed
-  batch.update(currentLevelRef, {
-    isActive: false,
-    isCompleted: true,
-    completionDate: serverTimestamp(),
+  const existingLevelsSnap = await getDocs(
+    query(
+      collection(db, LEVELS_COL),
+      where("officeId", "==", officeId),
+      where("caseId", "==", caseId)
+    )
+  );
+
+  const batch = writeBatch(db);
+  const levelRef = doc(collection(db, LEVELS_COL));
+
+  batch.set(levelRef, {
+    ...levelData,
+    caseId,
+    officeId,
+    order: levelData.order ?? 1,
+    isActive: true,
+    createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
 
-  // Create new level
-  const newLevelRef = doc(collection(db, LEVELS_COL));
-  const now = Timestamp.now();
+  // إيقاف أي مستوى سابق للقضية (كلهم بنفس المكتب بفعل الفلترة)
+  existingLevelsSnap.docs.forEach((levelDoc) => {
+    batch.update(levelDoc.ref, {
+      isActive: false,
+      updatedAt: serverTimestamp(),
+    });
+  });
 
-  const newLevel = {
-    caseId,
-    officeId,
-    levelType: newLevelData.levelType,
-    court: newLevelData.court || currentLevel.court || "",
-    circuit: newLevelData.circuit || "",
-    caseNumber: newLevelData.caseNumber || "",
-    caseYear: newLevelData.caseYear || new Date().getFullYear(),
-    status: newLevelData.status || "new",
-    isActive: true,
-    isCompleted: false,
-    order: currentOrder + 1,
-    sessionCount: 0,
-    filingDate: newLevelData.filingDate ? Timestamp.fromDate(new Date(newLevelData.filingDate)) : null,
-    judgmentDate: null,
-    judgmentAnnouncementDate: null,
-    completionDate: null,
-    judgmentResult: null,
-    judgmentSummary: "",
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  };
-
-  batch.set(newLevelRef, newLevel);
-
-  // Update case
-  const caseRef = doc(db, CASES_COL, caseId);
-  batch.update(caseRef, {
-    activeLevelId: newLevelRef.id,
-    currentLevel: newLevelData.levelType,
-    currentStatus: newLevelData.status || "new",
-    status: "active",
+  batch.update(caseResult.ref, {
+    activeLevelId: levelRef.id,
+    currentLevel: levelData.levelName ?? levelData.name ?? "",
+    currentStatus: levelData.status ?? "active",
     updatedAt: serverTimestamp(),
   });
 
   await batch.commit();
 
-  return { id: newLevelRef.id, ...newLevel };
-}
-
-// ==================== READ ====================
-
-/**
- * Get all litigation levels for a case, ordered by order
- */
-export async function getLitigationLevelsByCase(caseId) {
-  const q = query(
-    collection(db, LEVELS_COL),
-    where("caseId", "==", caseId),
-    orderBy("order", "asc")
-  );
-
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map((docSnap) => {
-    const data = docSnap.data();
-    return {
-      id: docSnap.id,
-      ...data,
-      filingDate: data.filingDate?.toDate?.() || data.filingDate,
-      judgmentDate: data.judgmentDate?.toDate?.() || data.judgmentDate,
-      judgmentAnnouncementDate: data.judgmentAnnouncementDate?.toDate?.() || data.judgmentAnnouncementDate,
-      completionDate: data.completionDate?.toDate?.() || data.completionDate,
-      createdAt: data.createdAt?.toDate?.() || data.createdAt,
-      updatedAt: data.updatedAt?.toDate?.() || data.updatedAt,
-    };
-  });
-}
-
-/**
- * Get the active litigation level for a case
- */
-export async function getActiveLitigationLevel(caseId) {
-  const q = query(
-    collection(db, LEVELS_COL),
-    where("caseId", "==", caseId),
-    where("isActive", "==", true)
-  );
-
-  const snapshot = await getDocs(q);
-  if (snapshot.empty) return null;
-
-  const docSnap = snapshot.docs[0];
-  const data = docSnap.data();
   return {
-    id: docSnap.id,
-    ...data,
-    filingDate: data.filingDate?.toDate?.() || data.filingDate,
-    judgmentDate: data.judgmentDate?.toDate?.() || data.judgmentDate,
-    judgmentAnnouncementDate: data.judgmentAnnouncementDate?.toDate?.() || data.judgmentAnnouncementDate,
-    completionDate: data.completionDate?.toDate?.() || data.completionDate,
-    createdAt: data.createdAt?.toDate?.() || data.createdAt,
-    updatedAt: data.updatedAt?.toDate?.() || data.updatedAt,
+    id: levelRef.id,
+    caseId,
+    officeId,
+    ...levelData,
+    order: levelData.order ?? 1,
+    isActive: true,
   };
 }
 
 /**
- * Get a single litigation level by ID
+ * إنشاء مستوى تقاضٍ جديد وإيقاف المستوى السابق.
  */
-export async function getLitigationLevelById(levelId) {
-  const docRef = doc(db, LEVELS_COL, levelId);
-  const docSnap = await getDoc(docRef);
+export async function createNextLitigationLevel(
+  caseId,
+  currentLevelId,
+  newLevelData,
+  officeId
+) {
+  if (!caseId || !currentLevelId || !officeId) {
+    throw new Error(
+      "caseId و currentLevelId و officeId مطلوبة"
+    );
+  }
 
-  if (!docSnap.exists()) return null;
+  const caseResult = await getOfficeDocument(
+    CASES_COL,
+    caseId,
+    officeId
+  );
 
-  const data = docSnap.data();
-  return {
-    id: docSnap.id,
-    ...data,
-    filingDate: data.filingDate?.toDate?.() || data.filingDate,
-    judgmentDate: data.judgmentDate?.toDate?.() || data.judgmentDate,
-    judgmentAnnouncementDate: data.judgmentAnnouncementDate?.toDate?.() || data.judgmentAnnouncementDate,
-    completionDate: data.completionDate?.toDate?.() || data.completionDate,
-    createdAt: data.createdAt?.toDate?.() || data.createdAt,
-    updatedAt: data.updatedAt?.toDate?.() || data.updatedAt,
-  };
-}
+  const currentResult = await getOfficeDocument(
+    LEVELS_COL,
+    currentLevelId,
+    officeId
+  );
 
-// ==================== UPDATE ====================
+  if (currentResult.data.caseId !== caseId) {
+    throw new Error("المستوى الحالي لا ينتمي إلى هذه القضية");
+  }
 
-/**
- * Update litigation level status and details
- */
-export async function updateLitigationLevel(levelId, updates) {
-  const levelRef = doc(db, LEVELS_COL, levelId);
+  const batch = writeBatch(db);
+  const newLevelRef = doc(collection(db, LEVELS_COL));
 
-  const updatePayload = {
-    ...updates,
+  batch.update(currentResult.ref, {
+    isActive: false,
     updatedAt: serverTimestamp(),
+  });
+
+  batch.set(newLevelRef, {
+    ...newLevelData,
+    caseId,
+    officeId,
+    order:
+      newLevelData.order ??
+      ((currentResult.data.order ?? 0) + 1),
+    isActive: true,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  batch.update(caseResult.ref, {
+    activeLevelId: newLevelRef.id,
+    currentLevel:
+      newLevelData.levelName ??
+      newLevelData.name ??
+      "",
+    currentStatus: newLevelData.status ?? "active",
+    updatedAt: serverTimestamp(),
+  });
+
+  await batch.commit();
+
+  return {
+    id: newLevelRef.id,
+    caseId,
+    officeId,
+    ...newLevelData,
+    isActive: true,
   };
+}
 
-  // Convert date fields to Timestamps
-  if (updates.filingDate && typeof updates.filingDate === "string") {
-    updatePayload.filingDate = Timestamp.fromDate(new Date(updates.filingDate));
-  }
-  if (updates.judgmentDate && typeof updates.judgmentDate === "string") {
-    updatePayload.judgmentDate = Timestamp.fromDate(new Date(updates.judgmentDate));
-  }
-  if (updates.judgmentAnnouncementDate && typeof updates.judgmentAnnouncementDate === "string") {
-    updatePayload.judgmentAnnouncementDate = Timestamp.fromDate(new Date(updates.judgmentAnnouncementDate));
+/**
+ * جلب مستويات القضية مفلترة بالمكتب.
+ */
+export async function getLitigationLevelsByCase(
+  caseId,
+  officeId
+) {
+  if (!caseId || !officeId) {
+    throw new Error("caseId و officeId مطلوبان");
   }
 
-  await updateDoc(levelRef, updatePayload);
+  const q = query(
+    collection(db, LEVELS_COL),
+    where("officeId", "==", officeId),
+    where("caseId", "==", caseId)
+  );
 
-  // If status changed, update case currentStatus
-  if (updates.status) {
-    const levelSnap = await getDoc(levelRef);
-    if (levelSnap.exists()) {
-      const levelData = levelSnap.data();
-      await updateDoc(doc(db, CASES_COL, levelData.caseId), {
-        currentStatus: updates.status,
-        updatedAt: serverTimestamp(),
-      });
-    }
+  const snapshot = await getDocs(q);
+
+  return snapshot.docs
+    .map((levelDoc) => ({
+      id: levelDoc.id,
+      ...levelDoc.data(),
+    }))
+    .filter((item) => item.officeId === officeId)
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+
+/**
+ * جلب مستوى القضية النشط.
+ */
+export async function getActiveLitigationLevel(
+  caseId,
+  officeId
+) {
+  if (!caseId || !officeId) {
+    throw new Error("caseId و officeId مطلوبان");
   }
+
+  const levels = await getLitigationLevelsByCase(caseId, officeId);
+  return levels.find((lvl) => lvl.isActive === true) || null;
+}
+
+/**
+ * جلب مستوى بواسطة معرّفه.
+ */
+export async function getLitigationLevelById(
+  levelId,
+  officeId
+) {
+  const result = await getOfficeDocument(
+    LEVELS_COL,
+    levelId,
+    officeId
+  );
+
+  return {
+    id: result.snapshot.id,
+    ...result.data,
+  };
+}
+
+/**
+ * تعديل مستوى تقاضٍ.
+ */
+export async function updateLitigationLevel(
+  levelId,
+  updates,
+  officeId
+) {
+  const result = await getOfficeDocument(
+    LEVELS_COL,
+    levelId,
+    officeId
+  );
+
+  const safeUpdates = { ...updates };
+  delete safeUpdates.officeId;
+  delete safeUpdates.caseId;
+  delete safeUpdates.id;
+
+  await updateDoc(result.ref, {
+    ...safeUpdates,
+    updatedAt: serverTimestamp(),
+  });
 
   return true;
 }
 
 /**
- * Mark a level as having a judgment issued
+ * تسجيل صدور الحكم.
  */
-export async function markJudgmentIssued(levelId, judgmentData) {
-  const levelRef = doc(db, LEVELS_COL, levelId);
+export async function markJudgmentIssued(
+  levelId,
+  officeId,
+  judgmentData = {}
+) {
+  const result = await getOfficeDocument(
+    LEVELS_COL,
+    levelId,
+    officeId
+  );
 
-  await updateDoc(levelRef, {
-    status: "judgment_issued",
-    judgmentDate: serverTimestamp(),
-    judgmentResult: judgmentData.result || null,
-    judgmentSummary: judgmentData.summary || "",
+  await updateDoc(result.ref, {
+    ...judgmentData,
+    judgmentIssued: true,
+    judgmentIssuedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
-
-  // Update case status
-  const levelSnap = await getDoc(levelRef);
-  if (levelSnap.exists()) {
-    const levelData = levelSnap.data();
-    await updateDoc(doc(db, CASES_COL, levelData.caseId), {
-      currentStatus: "judgment_issued",
-      status: judgmentData.result === "accepted" ? "closed" : "active",
-      updatedAt: serverTimestamp(),
-    });
-  }
 
   return true;
 }
 
 /**
- * Mark a level as having judgment announced
+ * تسجيل إعلان الحكم.
  */
-export async function markJudgmentAnnounced(levelId) {
-  return updateLitigationLevel(levelId, {
-    status: "judgment_announced",
-    judgmentAnnouncementDate: new Date().toISOString(),
+export async function markJudgmentAnnounced(
+  levelId,
+  officeId,
+  announcementData = {}
+) {
+  const result = await getOfficeDocument(
+    LEVELS_COL,
+    levelId,
+    officeId
+  );
+
+  await updateDoc(result.ref, {
+    ...announcementData,
+    judgmentAnnounced: true,
+    judgmentAnnouncedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   });
+
+  return true;
 }
 
 /**
- * Increment session count for a level
+ * زيادة عدد جلسات المستوى.
  */
-export async function incrementLevelSessionCount(levelId) {
-  await updateDoc(doc(db, LEVELS_COL, levelId), {
+export async function incrementLevelSessionCount(
+  levelId,
+  officeId
+) {
+  const result = await getOfficeDocument(
+    LEVELS_COL,
+    levelId,
+    officeId
+  );
+
+  await updateDoc(result.ref, {
     sessionCount: increment(1),
     updatedAt: serverTimestamp(),
   });
+
+  return true;
 }
 
-// ==================== DELETE ====================
-
 /**
- * Delete a litigation level (use with caution)
+ * حذف مستوى تقاضٍ.
  */
-export async function deleteLitigationLevel(levelId) {
-  await deleteDoc(doc(db, LEVELS_COL, levelId));
-}
-
-// ==================== REAL-TIME ====================
-
-/**
- * Subscribe to litigation levels for a case
- */
-export function subscribeToLitigationLevels(caseId, callback) {
-  const q = query(
-    collection(db, LEVELS_COL),
-    where("caseId", "==", caseId),
-    orderBy("order", "asc")
+export async function deleteLitigationLevel(
+  levelId,
+  officeId
+) {
+  const result = await getOfficeDocument(
+    LEVELS_COL,
+    levelId,
+    officeId
   );
 
-  return onSnapshot(q, (snapshot) => {
-    const levels = snapshot.docs.map((docSnap) => {
-      const data = docSnap.data();
-      return {
-        id: docSnap.id,
-        ...data,
-        filingDate: data.filingDate?.toDate?.() || data.filingDate,
-        judgmentDate: data.judgmentDate?.toDate?.() || data.judgmentDate,
-        judgmentAnnouncementDate: data.judgmentAnnouncementDate?.toDate?.() || data.judgmentAnnouncementDate,
-        completionDate: data.completionDate?.toDate?.() || data.completionDate,
-        createdAt: data.createdAt?.toDate?.() || data.createdAt,
-        updatedAt: data.updatedAt?.toDate?.() || data.updatedAt,
-      };
-    });
-    callback(levels);
-  });
+  await deleteDoc(result.ref);
+
+  return true;
 }
 
-import { onSnapshot } from "firebase/firestore";
+/**
+ * الاشتراك المباشر في مستويات القضية مفلتراً بالمكتب.
+ */
+export function subscribeToLitigationLevels(
+  caseId,
+  officeId,
+  callback,
+  onError = console.error
+) {
+  if (!caseId || !officeId) {
+    onError(new Error("caseId و officeId مطلوبان"));
+    return () => {};
+  }
+
+  const q = query(
+    collection(db, LEVELS_COL),
+    where("officeId", "==", officeId),
+    where("caseId", "==", caseId)
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const levels = snapshot.docs
+        .map((levelDoc) => ({
+          id: levelDoc.id,
+          ...levelDoc.data(),
+        }))
+        .filter((item) => item.officeId === officeId)
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+      callback(levels);
+    },
+    onError
+  );
+}
 
 export default {
   createInitialLitigationLevel,

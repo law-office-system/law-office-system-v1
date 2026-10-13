@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
-  collection, getDocs, query, where, limit, startAfter, orderBy,
+  collection, getDocs, getDoc, query, where, limit, startAfter, orderBy,
   deleteDoc, doc, documentId
 } from "firebase/firestore";
 import { Trash2 } from "lucide-react";
@@ -131,7 +131,7 @@ export default function Cases() {
   const lastDocRef = useRef(null);
   const searchTimeoutRef = useRef(null);
 
-  const isAdmin = userData?.role === "admin" || userData?.role === "superadmin";
+  const isAdmin = userData?.role === "admin" || userData?.role === "super_admin" || userData?.role === "superadmin";
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -201,7 +201,7 @@ export default function Cases() {
 
       if (isInitial && !hasSynced.current) {
         hasSynced.current = true;
-        await syncNotifications(data, userData.officeId);
+        await syncNotifications(data, [], [], userData.officeId);
       }
     } catch (error) {
       console.error("Error loading cases:", error);
@@ -242,17 +242,20 @@ export default function Cases() {
 
         const newCache = { ...clientsMap };
 
-        for (let i = 0; i < idsArray.length; i += 30) {
-          const chunk = idsArray.slice(i, i + 30);
-          const q = query(
-            collection(db, "clientProfiles"), 
-            where(documentId(), "in", chunk)
-          );
-          const snap = await getDocs(q);
-          snap.forEach((doc) => { 
-            newCache[doc.id] = doc.data().fullName || "موكل"; 
-          });
-        }
+        // ✅ جلب فردي: أي مستند مرفوض يتخطى بدون إيقاف الباقي
+        await Promise.all(
+          idsArray.map(async (id) => {
+            try {
+              const snap = await getDoc(doc(db, "clientProfiles", id));
+              if (!snap.exists()) return;
+              const data = snap.data();
+              if (data.officeId !== userData.officeId) return;
+              newCache[id] = data.fullName || "موكل";
+            } catch {
+              // skip
+            }
+          })
+        );
 
         setClientsMap(newCache);
       } catch (error) {
@@ -292,11 +295,18 @@ export default function Cases() {
   const handleDeleteCase = async (e, caseId, caseSerial) => {
     e.stopPropagation();
     e.preventDefault();
-    
+
+    // ✅ FIX: تحقق إن القضية تخص مكتب المستخدم قبل الحذف
+    const caseToDelete = cases.find(c => c.id === caseId);
+    if (caseToDelete && caseToDelete.officeId !== userData?.officeId) {
+      alert("❌ غير مسموح بحذف قضية من مكتب آخر");
+      return;
+    }
+
     if (!window.confirm(`هل أنت متأكد من حذف القضية رقم ${caseSerial || caseId}؟\n\n⚠️ هذا الإجراء لا يمكن التراجع عنه!`)) {
       return;
     }
-    
+
     try {
       await deleteDoc(doc(db, "cases", caseId));
       setCases(prev => prev.filter(c => c.id !== caseId));

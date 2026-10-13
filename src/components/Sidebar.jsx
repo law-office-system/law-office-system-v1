@@ -7,7 +7,8 @@ import {
   X, Scale, ChevronRight,
   Crown, User, Settings,
   FileArchive,  // ← المستندات
-  FileText      // ← 🆕 المحرر
+  FileText,     // ← 🆕 المحرر
+  UserCog       // ← 🆕 إدارة أعضاء المكتب
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import useNotifications from "../hooks/useNotifications";
@@ -146,6 +147,10 @@ export default function Sidebar({ open, setOpen, isMobile }) {
     { path: "/judgments", label: "الأحكام", icon: Gavel },
     { path: "/admin-tasks", label: "الأعمال الإدارية", icon: ClipboardList },
     { path: "/clients", label: "العملاء", icon: Users },
+    // 🆕 إدارة أعضاء المكتب — تظهر لمدير المكتب فقط
+    ...(userData?.role === "admin"
+      ? [{ path: "/users", label: "أعضاء المكتب", icon: UserCog }]
+      : []),
     { path: "/finance", label: "المالية", icon: DollarSign },
     { 
       path: "/chat", 

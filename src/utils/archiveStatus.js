@@ -9,6 +9,8 @@
 //   3) الحالة بأي صيغة: إنجليزي (كبير/صغير) أو عربي أو مرادفات
 // ============================================================
 
+import { updateDoc } from "firebase/firestore";
+
 const ARCHIVED_STATUSES = [
   "archived", "مؤرشفة", "مؤرشف",
   "closed", "منتهية", "منتهي", "ended", "done", "terminated",
@@ -35,3 +37,37 @@ export const isExecutionCase = (c) => {
 
 // القضية النشطة = أي قضية ليست مؤرشفة وليست في مرحلة التنفيذ
 export const isActiveCase = (c) => !isArchivedCase(c) && !isExecutionCase(c);
+
+// ============================================================
+// أرشفة قضية — تحديث الحالة والأعلام مرة واحدة وبشكل متسق
+// الاستخدام: await archiveCase(caseRef, { archivedBy: userData.uid });
+// ============================================================
+export const archiveCase = async (caseRef, extra = {}) => {
+  if (!caseRef) throw new Error("caseRef مطلوب");
+
+  await updateDoc(caseRef, {
+    status: "CLOSED",
+    archived: true,
+    isArchived: true,
+    archivedAt: extra.archivedAt || new Date(),
+    ...(extra.archivedBy ? { archivedBy: extra.archivedBy } : {}),
+    updatedAt: new Date(),
+  });
+};
+
+// ============================================================
+// استعادة قضية من الأرشيف
+// الاستخدام: await unarchiveCase(caseRef, { restoredBy: userData.uid });
+// ============================================================
+export const unarchiveCase = async (caseRef, extra = {}) => {
+  if (!caseRef) throw new Error("caseRef مطلوب");
+
+  await updateDoc(caseRef, {
+    status: "ACTIVE",
+    archived: false,
+    isArchived: false,
+    restoredAt: extra.restoredAt || new Date(),
+    ...(extra.restoredBy ? { restoredBy: extra.restoredBy } : {}),
+    updatedAt: new Date(),
+  });
+};
