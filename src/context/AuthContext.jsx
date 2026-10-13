@@ -1,10 +1,10 @@
 import { createContext, useContext, useState, useEffect, useRef } from "react";
-import { 
-  onAuthStateChanged, 
+import {
+  onAuthStateChanged,
   signOut,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  updateProfile
+  updateProfile,
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth } from "../firebaseAuth";
@@ -22,10 +22,24 @@ export function AuthProvider({ children }) {
   const [authLoading, setAuthLoading] = useState(true);
   const [userDataLoading, setUserDataLoading] = useState(true);
 
-  // ✅ Prevent double execution in StrictMode / dev
   const initializedRef = useRef(false);
 
-  // ✅ Login function
+  // إعادة تحميل بيانات المستخدم (تُستخدم بعد إعداد مكتب مستخدم الهاتف)
+  const reloadUserData = async (uid) => {
+    try {
+      const target = uid || auth.currentUser?.uid;
+      if (!target) return null;
+      const snap = await getDoc(doc(db, "users", target));
+      if (snap.exists()) {
+        setUserData(snap.data());
+        return snap.data();
+      }
+    } catch (e) {
+      console.error("reloadUserData error:", e);
+    }
+    return null;
+  };
+
   const login = async (email, password) => {
     try {
       const result = await signInWithEmailAndPassword(auth, email, password);
@@ -36,15 +50,10 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // ✅ Register function
   const register = async (email, password, name, role = "lawyer", officeId = null) => {
     try {
       const result = await createUserWithEmailAndPassword(auth, email, password);
-
-      // Update profile
       await updateProfile(result.user, { displayName: name });
-
-      // Create user document in Firestore
       await setDoc(doc(db, "users", result.user.uid), {
         uid: result.user.uid,
         email,
@@ -53,7 +62,6 @@ export function AuthProvider({ children }) {
         officeId,
         createdAt: new Date().toISOString(),
       });
-
       return { success: true, user: result.user };
     } catch (error) {
       console.error("Register error:", error);
@@ -61,7 +69,6 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // ✅ Logout function
   const logout = async () => {
     try {
       await signOut(auth);
@@ -75,42 +82,30 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
-    // ✅ Prevent double execution in development (StrictMode)
-    if (initializedRef.current) {
-      console.log("⚠️ AuthProvider already initialized, skipping...");
-      return;
-    }
+    if (initializedRef.current) return;
     initializedRef.current = true;
 
-    console.log("🔥 AuthProvider: Initializing auth listener...");
-
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log("🔥 AuthProvider: onAuthStateChanged fired", user ? `UID: ${user.uid}` : "No user");
-
       if (user) {
         setCurrentUser(user);
         setAuthLoading(false);
-
-        // جلب بيانات المستخدم من Firestore
-        console.log("🔥 AuthProvider: Fetching userData from Firestore...");
         setUserDataLoading(true);
 
         try {
           const userDoc = await getDoc(doc(db, "users", user.uid));
-          console.log("🔥 AuthProvider: userDoc fetched", userDoc.exists() ? "EXISTS" : "NOT FOUND");
 
           if (userDoc.exists()) {
-            const data = userDoc.data();
-            console.log("🔥 AuthProvider: userData loaded:", data);
-            setUserData(data);
+            setUserData(userDoc.data());
+          } else if (sessionStorage.getItem("registering") === "1") {
+            // Register.jsx هو الكاتب الوحيد أثناء التسجيل البريدي
+            setUserData(null);
           } else {
-            console.warn("⚠️ AuthProvider: User document not found, auto-creating...");
-
-            // Auto-create user document from Auth data
+            // إنشاء تلقائي — يدعم الهاتف (بدون email)
             const fallbackData = {
               uid: user.uid,
               name: user.displayName || "مستخدم",
-              email: user.email,
+              email: user.email || null,
+              phoneNumber: user.phoneNumber || null,
               role: "client",
               officeId: "",
               emailVerified: user.emailVerified,
@@ -119,22 +114,19 @@ export function AuthProvider({ children }) {
 
             try {
               await setDoc(doc(db, "users", user.uid), fallbackData);
-              console.log("✅ AuthProvider: Auto-created user document:", fallbackData);
               setUserData(fallbackData);
             } catch (createErr) {
-              console.error("❌ AuthProvider: Failed to auto-create user document:", createErr);
+              console.error("Failed to auto-create user document:", createErr);
               setUserData(null);
             }
           }
         } catch (err) {
-          console.error("❌ AuthProvider: Error fetching user data:", err);
+          console.error("Error fetching user data:", err);
           setUserData(null);
         } finally {
-          console.log("🔥 AuthProvider: Setting userDataLoading = false");
           setUserDataLoading(false);
         }
       } else {
-        console.log("🔥 AuthProvider: No user, resetting state");
         setCurrentUser(null);
         setUserData(null);
         setAuthLoading(false);
@@ -142,10 +134,7 @@ export function AuthProvider({ children }) {
       }
     });
 
-    return () => {
-      console.log("🔥 AuthProvider: Cleanup - unsubscribing auth listener");
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
   const value = {
@@ -157,10 +146,10 @@ export function AuthProvider({ children }) {
     loading: authLoading || userDataLoading,
     authLoading,
     userDataLoading,
-    // ✅ Auth functions
     login,
     register,
     logout,
+    reloadUserData,
   };
 
   return (

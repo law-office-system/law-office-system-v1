@@ -1,0 +1,246 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ═══════════ دوال مساعدة ═══════════
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function myRole() {
+      return userData().role;
+    }
+
+    function myOffice() {
+      return userData().officeId;
+    }
+
+    function isSuperAdmin() {
+      return signedIn() && myRole() == 'super_admin';
+    }
+
+    function isAdmin() {
+      return signedIn() && myRole() == 'admin';
+    }
+
+    function isLawyer() {
+      return signedIn() && myRole() == 'lawyer';
+    }
+
+    function isSecretary() {
+      return signedIn() && myRole() == 'secretary';
+    }
+
+    function isClient() {
+      return signedIn() && myRole() == 'client';
+    }
+
+    function staff() {
+      return isAdmin() || isLawyer() || isSecretary();
+    }
+
+    function isOfficeOwner(officeId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/offices/$(officeId))
+        && get(/databases/$(database)/documents/offices/$(officeId)).data.ownerId == request.auth.uid;
+    }
+
+    // ═══════════ المستخدمون ═══════════
+    match /users/{userId} {
+      allow read: if signedIn() && (
+        request.auth.uid == userId
+        || isSuperAdmin()
+        || (staff() && resource.data.officeId == myOffice())
+      );
+
+      // R1: admin فقط لمن يملك المكتب — ومنع انتحار الأدوار
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && (
+          !request.resource.data.keys().hasAny(['role'])
+          || request.resource.data.role in ['client', 'lawyer', 'secretary']
+          || (request.resource.data.role == 'admin'
+              && request.resource.data.officeId is string
+              && isOfficeOwner(request.resource.data.officeId))
+        );
+
+      // R2 + R6: تأسيس role/officeId مرة واحدة + قفل emailVerified و uid
+      allow update: if isSuperAdmin()
+        || (signedIn()
+          && request.auth.uid == userId
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'emailVerified'])
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'officeId'])
+            || (!resource.data.keys().hasAny(['role'])
+                && !resource.data.keys().hasAny(['officeId'])
+                && request.resource.data.role in ['client', 'lawyer', 'secretary'])
+          ));
+
+      allow delete: if isSuperAdmin()
+        || (isAdmin() && resource.data.officeId == myOffice());
+    }
+
+    // ═══════════ المكاتب ═══════════
+    match /offices/{officeId} {
+      // R3: أي مسجل يقرأ — لازم للانضمام بكود الدعوة
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid;
+
+      allow update: if isSuperAdmin()
+        || isOfficeOwner(officeId)
+        || (signedIn() && myOffice() == officeId && isAdmin());
+
+      allow delete: if isSuperAdmin();
+    }
+
+    // ═══════════ الإشعارات (أي عمق) ═══════════
+    match /notifications/{doc=**} {
+      allow read: if signedIn() && (
+        isSuperAdmin()
+        || resource.data.userId == request.auth.uid
+        || resource.data.toUserId == request.auth.uid
+      );
+
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid;
+
+      allow update, delete: if isSuperAdmin()
+        || (signedIn()
+          && (resource.data.userId == request.auth.uid
+              || resource.data.toUserId == request.auth.uid));
+    }
+
+    // ═══════════ الغرف المشتركة ═══════════
+    function roomMember(roomId) {
+      return signedIn() && exists(
+        /databases/$(database)/documents/sharedRooms/$(roomId)/members/$(request.auth.uid)
+      );
+    }
+
+    function myRoomRole(roomId) {
+      return get(/databases/$(database)/documents/sharedRooms/$(roomId)/members/$(request.auth.uid)).data.role;
+    }
+
+    function isRoomOwner(roomId) {
+      return signedIn() && (
+        myRoomRole(roomId) == 'owner'
+        || get(/databases/$(database)/documents/sharedRooms/$(roomId)).data.adminId == request.auth.uid
+      );
+    }
+
+    function isRoomAdmin(roomId) {
+      return isRoomOwner(roomId) || myRoomRole(roomId) == 'admin';
+    }
+
+    // القراءة/الكتابة على وثيقة الغرفة
+    match /sharedRooms/{roomId} {
+      allow read: if signedIn() && (
+        isSuperAdmin()
+        || roomMember(roomId)
+        || resource.data.officeA == myOffice()
+        || resource.data.officeB == myOffice()
+      );
+
+      allow create: if signedIn() && (
+        request.resource.data.adminId == request.auth.uid
+        || (staff() && (
+          request.resource.data.officeA == myOffice()
+          || request.resource.data.officeB == myOffice()))
+      );
+
+      allow update, delete: if isSuperAdmin()
+        || isRoomOwner(roomId)
+        || (staff() && (
+          resource.data.officeA == myOffice()
+          || resource.data.officeB == myOffice()));
+    }
+
+    match /sharedRooms/{roomId}/members/{memberId} {
+      allow read: if roomMember(roomId) || isSuperAdmin();
+      allow create: if isRoomAdmin(roomId) || isSuperAdmin();
+      allow update: if isSuperAdmin() || (
+        isRoomAdmin(roomId)
+        && !(memberId == request.auth.uid && request.resource.data.role == 'owner')
+      );
+      allow delete: if isSuperAdmin()
+        || isRoomAdmin(roomId)
+        || request.auth.uid == memberId;
+    }
+
+    match /sharedRooms/{roomId}/{collection}/{docId} {
+      allow read, create: if collection != 'members'
+        && (roomMember(roomId) || isSuperAdmin());
+      allow update, delete: if collection != 'members'
+        && (isSuperAdmin()
+          || isRoomAdmin(roomId)
+          || (roomMember(roomId) && resource.data.senderId == request.auth.uid));
+    }
+
+    // ═══════════ الرسائل المشتركة (جذرية) ═══════════
+    match /sharedMessages/{msgId} {
+      allow read: if signedIn() && (
+        isSuperAdmin()
+        || roomMember(resource.data.roomId)
+      );
+
+      allow create: if signedIn() && (
+        isSuperAdmin()
+        || roomMember(request.resource.data.roomId)
+      );
+
+      allow update, delete: if isSuperAdmin()
+        || (signedIn() && resource.data.senderId == request.auth.uid);
+    }
+
+    // ═══════════ باقي المجموعات الجذرية ═══════════
+    match /{collection}/{docId} {
+      allow read: if signedIn() && (
+        resource.data.officeId == myOffice()
+        || isSuperAdmin()
+        || (isClient() && resource.data.clientId == request.auth.uid)
+      );
+
+      allow create: if signedIn() && (
+        isSuperAdmin()
+        || (request.resource.data.officeId == myOffice()
+          && (isAdmin() || isLawyer()
+            || (isSecretary() && collection == 'documents')))
+      );
+
+      allow update, delete: if signedIn() && (
+        isSuperAdmin()
+        || (resource.data.officeId == myOffice()
+          && (isAdmin() || isLawyer()))
+      );
+    }
+
+    // ═══════════ R4: المسارات المتداخلة العميقة ═══════════
+    match /{collection}/{docId}/{sub=**} {
+      allow read: if signedIn() && (
+        isSuperAdmin()
+        || get(/databases/$(database)/documents/$(collection)/$(docId)).data.officeId == myOffice()
+        || (isClient()
+          && get(/databases/$(database)/documents/$(collection)/$(docId)).data.clientId == request.auth.uid)
+      );
+
+      allow create: if signedIn() && (
+        isSuperAdmin()
+        || (get(/databases/$(database)/documents/$(collection)/$(docId)).data.officeId == myOffice()
+          && (isAdmin() || isLawyer()))
+      );
+
+      allow update, delete: if signedIn() && (
+        isSuperAdmin()
+        || (get(/databases/$(database)/documents/$(collection)/$(docId)).data.officeId == myOffice()
+          && (isAdmin() || isLawyer()))
+      );
+    }
+  }
+}

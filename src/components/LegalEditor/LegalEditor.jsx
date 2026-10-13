@@ -15,6 +15,8 @@ import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import { FontFamily } from '@tiptap/extension-font-family';
 import Shape from './ShapeExtension';
+import TemplatesModal from './TemplatesModal';
+import VerticalRuler from './VerticalRuler';
 import { FontSize, PageBreak, LineHeight, ParagraphSpacing, Indent } from './customExtensions';
 import { db } from '../../firebaseDb';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
@@ -51,8 +53,8 @@ const useIsMobile = () => {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// ═══ INTERACTIVE RULER — Per-Paragraph + Page Margins
-// ═══ NOW WITH TOUCH SUPPORT FOR MOBILE
+// ═══ INTERACTIVE RULER (HORIZONTAL) — Page + Paragraph margins
+// ═══ مع الوراثة: الفقرة من غير هوامش خاصة بتعرض هوامش الصفحة
 // ═══════════════════════════════════════════════════════════════
 const RULER_WIDTH_CM = 21;
 const RULER_PX = 794;
@@ -63,6 +65,7 @@ const InteractiveRuler = ({
   marginLeft,
   onMarginChange,
   paragraphMode,
+  hasCustomMargins = false,
 }) => {
   const rulerRef = useRef(null);
   const [dragging, setDragging] = useState(null);
@@ -70,7 +73,6 @@ const InteractiveRuler = ({
   const rightPos = RULER_WIDTH_CM - marginRight;
   const leftPos = marginLeft;
 
-  // ✅ UNIFIED: Handle both mouse and touch start
   const handleStart = (side, e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -105,10 +107,8 @@ const InteractiveRuler = ({
 
     const onEnd = () => setDragging(null);
 
-    // Mouse events
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onEnd);
-    // Touch events ✅
     document.addEventListener('touchmove', onMove, { passive: false });
     document.addEventListener('touchend', onEnd);
 
@@ -131,12 +131,12 @@ const InteractiveRuler = ({
         position: 'relative',
         userSelect: 'none',
         cursor: dragging ? 'ew-resize' : 'default',
-        touchAction: 'none', // ✅ Prevent scroll while dragging
+        touchAction: 'none',
       }}
     >
       <div className="ruler-track" />
 
-      {/* Writing area highlight */}
+      {/* Writing area — أحمر فقط لو الفقرة ليها هوامش خاصة فعلاً */}
       <div
         className="ruler-writing-area"
         style={{
@@ -145,11 +145,11 @@ const InteractiveRuler = ({
           left: `${(leftPos / RULER_WIDTH_CM) * 100}%`,
           width: `${((rightPos - leftPos) / RULER_WIDTH_CM) * 100}%`,
           height: '100%',
-          background: paragraphMode
+          background: hasCustomMargins
             ? 'rgba(220, 38, 38, 0.12)'
             : 'rgba(37, 99, 235, 0.08)',
-          borderTop: `2px solid ${paragraphMode ? 'rgba(220,38,38,0.4)' : 'rgba(37,99,235,0.3)'}`,
-          borderBottom: `2px solid ${paragraphMode ? 'rgba(220,38,38,0.4)' : 'rgba(37,99,235,0.3)'}`,
+          borderTop: `2px solid ${hasCustomMargins ? 'rgba(220,38,38,0.4)' : 'rgba(37,99,235,0.3)'}`,
+          borderBottom: `2px solid ${hasCustomMargins ? 'rgba(220,38,38,0.4)' : 'rgba(37,99,235,0.3)'}`,
           pointerEvents: 'none',
         }}
       />
@@ -161,7 +161,6 @@ const InteractiveRuler = ({
         </span>
       ))}
 
-      {/* Right margin handle — MOUSE + TOUCH ✅ */}
       <div
         className={`ruler-handle ruler-handle-right ${dragging === 'right' ? 'dragging' : ''}`}
         style={{ left: `${(rightPos / RULER_WIDTH_CM) * 100}%` }}
@@ -170,12 +169,11 @@ const InteractiveRuler = ({
         title={`الهامش الأيمن: ${marginRight.toFixed(1)} سم`}
       >
         <div className="ruler-triangle ruler-triangle-right"
-          style={{ borderColor: paragraphMode ? 'transparent transparent #dc2626 transparent' : undefined }}
+          style={{ borderColor: hasCustomMargins ? 'transparent transparent #dc2626 transparent' : undefined }}
         />
         <div className="ruler-handle-label">{marginRight.toFixed(1)}</div>
       </div>
 
-      {/* Left margin handle — MOUSE + TOUCH ✅ */}
       <div
         className={`ruler-handle ruler-handle-left ${dragging === 'left' ? 'dragging' : ''}`}
         style={{ left: `${(leftPos / RULER_WIDTH_CM) * 100}%` }}
@@ -184,13 +182,12 @@ const InteractiveRuler = ({
         title={`الهامش الأيسر: ${marginLeft.toFixed(1)} سم`}
       >
         <div className="ruler-triangle ruler-triangle-left"
-          style={{ borderColor: paragraphMode ? 'transparent transparent #dc2626 transparent' : undefined }}
+          style={{ borderColor: hasCustomMargins ? 'transparent transparent #dc2626 transparent' : undefined }}
         />
         <div className="ruler-handle-label">{marginLeft.toFixed(1)}</div>
       </div>
 
-      {/* Mode indicator */}
-      {paragraphMode && (
+      {paragraphMode && hasCustomMargins && (
         <div className="ruler-mode-indicator">
           هوامش الفقرة المحددة
         </div>
@@ -256,19 +253,25 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
   const [selectedFont, setSelectedFont] = useState('Segoe UI');
   const [selectedFontSize, setSelectedFontSize] = useState('16');
   const [showNameModal, setShowNameModal] = useState(false);
-  const [pageZoom, setPageZoom] = useState(1); // ✅ Zoom level
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
+  const [pageZoom, setPageZoom] = useState(1);
 
-  // ═══ Page margins (global) ═══
+  // ═══ Page margins (global) — الأربعة ═══
   const [pageMarginRight, setPageMarginRight] = useState(2.5);
   const [pageMarginLeft, setPageMarginLeft] = useState(2.5);
+  const [pageMarginTop, setPageMarginTop] = useState(2.5);
+  const [pageMarginBottom, setPageMarginBottom] = useState(2.5);
 
-  // ═══ Paragraph mode state ═══
+  // ═══ Paragraph mode — null = وراثة من الصفحة ═══
   const [paragraphMode, setParagraphMode] = useState(false);
-  const [selectedParagraphMargins, setSelectedParagraphMargins] = useState({ marginRight: 0, marginLeft: 0 });
+  const [selectedParagraphMargins, setSelectedParagraphMargins] = useState({
+    marginRight: null,
+    marginLeft: null,
+    marginTop: null,
+    marginBottom: null,
+  });
 
-  // ═══ Store paragraph position for margin updates ═══
   const paragraphPosRef = useRef(null);
-
   const fileInputRef = useRef(null);
   const editorContentRef = useRef(null);
   const isMobile = useIsMobile();
@@ -281,6 +284,8 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
         dropcursor: false,
+        link: false,       // ✅ بنستورده لوحده تحت
+        underline: false,  // ✅ بنستورده لوحده تحت
       }),
       Underline,
       TextAlign.configure({
@@ -416,9 +421,13 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
       if (targetNode) {
         const attrs = targetNode.attrs;
         setParagraphMode(true);
+        // ✅ الوراثة: null = اعرض هوامش الصفحة
+        // ✅ paraMarginTop/Bottom — أسماء مخصصة عشان ميتصادموش مع خصائص ParagraphSpacing
         setSelectedParagraphMargins({
-          marginRight: attrs.marginRight || 0,
-          marginLeft: attrs.marginLeft || 0,
+          marginRight: attrs.marginRight ?? null,
+          marginLeft: attrs.marginLeft ?? null,
+          marginTop: attrs.paraMarginTop ?? null,
+          marginBottom: attrs.paraMarginBottom ?? null,
         });
         paragraphPosRef.current = targetPos;
       } else {
@@ -480,10 +489,15 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
           if (data.fontSize) setSelectedFontSize(data.fontSize);
           if (data.marginRight !== undefined) setPageMarginRight(data.marginRight);
           if (data.marginLeft !== undefined) setPageMarginLeft(data.marginLeft);
+          if (data.marginTop !== undefined) setPageMarginTop(data.marginTop);
+          if (data.marginBottom !== undefined) setPageMarginBottom(data.marginBottom);
           setLastSaved(data.updatedAt?.toDate() || new Date());
         }
       } catch (error) {
-        console.error('❌ خطأ في التحميل:', error);
+        // وثيقة جديدة (مش موجودة) = مش خطأ — نتجاهل permission-denied/not-found فقط
+        if (error?.code !== 'permission-denied' && error?.code !== 'not-found') {
+          console.error('❌ خطأ في التحميل:', error);
+        }
       } finally {
         setIsLoading(false);
       }
@@ -523,18 +537,24 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
         fontSize: selectedFontSize,
         marginRight: pageMarginRight,
         marginLeft: pageMarginLeft,
+        marginTop: pageMarginTop,
+        marginBottom: pageMarginBottom,
         updatedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
       }, { merge: true });
       setSaveStatus('تم الحفظ ✅');
       setLastSaved(new Date());
-      if (onSave) onSave({ title: docTitle, contentJSON, contentHTML, marginRight: pageMarginRight, marginLeft: pageMarginLeft });
+      if (onSave) onSave({
+        title: docTitle, contentJSON, contentHTML,
+        marginRight: pageMarginRight, marginLeft: pageMarginLeft,
+        marginTop: pageMarginTop, marginBottom: pageMarginBottom,
+      });
       setTimeout(() => setSaveStatus('جاهز'), 2000);
     } catch (error) {
       console.error('❌ خطأ في الحفظ:', error);
       setSaveStatus('فشل الحفظ ❌');
     }
-  }, [editor, tenantId, documentId, userId, selectedFont, selectedFontSize, pageMarginRight, pageMarginLeft, onSave]);
+  }, [editor, tenantId, documentId, userId, selectedFont, selectedFontSize, pageMarginRight, pageMarginLeft, pageMarginTop, pageMarginBottom, onSave]);
 
   const requestSave = useCallback(() => {
     if (title === 'وثيقة جديدة' || !title.trim()) {
@@ -551,6 +571,18 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
       doSave(newName);
     }
   };
+
+  // 🆕 تطبيق نموذج جاهز
+  const applyTemplate = useCallback((tpl) => {
+    if (!editor) return;
+    editor.commands.setContent(tpl.content);
+    editor.commands.focus('start');
+    if (title === 'وثيقة جديدة' || !title.trim()) {
+      setTitle(tpl.name);
+    }
+    setSaveStatus('تم تحميل النموذج 📄');
+    setTimeout(() => setSaveStatus('جاهز'), 2000);
+  }, [editor, title]);
 
   // ─── حفظ تلقائي ───
   const debouncedContent = useDebounce(editor?.getJSON(), 5000);
@@ -577,8 +609,8 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [requestSave]);
 
-  // ═══ Margin change handler — Page OR Paragraph ═══
-  const handleMarginChange = useCallback(({ marginRight: mr, marginLeft: ml }) => {
+  // ═══ Margin change — Page OR Paragraph (أفقي + رأسي) ═══
+  const handleMarginChange = useCallback(({ marginRight: mr, marginLeft: ml, marginTop: mt, marginBottom: mb }) => {
     if (!editor) return;
 
     if (paragraphMode && paragraphPosRef.current !== null) {
@@ -589,15 +621,25 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
       if (node && ['paragraph', 'heading'].includes(node.type.name)) {
         const tr = state.tr.setNodeMarkup(pos, undefined, {
           ...node.attrs,
-          marginRight: mr,
-          marginLeft: ml,
+          marginRight: mr !== undefined ? mr : node.attrs.marginRight,
+          marginLeft: ml !== undefined ? ml : node.attrs.marginLeft,
+          // ⚠️ paraMargin* — مش marginTop/marginBottom عشان خصائص ParagraphSpacing
+          paraMarginTop: mt !== undefined ? mt : node.attrs.paraMarginTop,
+          paraMarginBottom: mb !== undefined ? mb : node.attrs.paraMarginBottom,
         });
         editor.view.dispatch(tr);
-        setSelectedParagraphMargins({ marginRight: mr, marginLeft: ml });
+        setSelectedParagraphMargins(prev => ({
+          marginRight: mr !== undefined ? mr : prev.marginRight,
+          marginLeft: ml !== undefined ? ml : prev.marginLeft,
+          marginTop: mt !== undefined ? mt : prev.marginTop,
+          marginBottom: mb !== undefined ? mb : prev.marginBottom,
+        }));
       }
     } else {
-      setPageMarginRight(mr);
-      setPageMarginLeft(ml);
+      if (mr !== undefined) setPageMarginRight(mr);
+      if (ml !== undefined) setPageMarginLeft(ml);
+      if (mt !== undefined) setPageMarginTop(mt);
+      if (mb !== undefined) setPageMarginBottom(mb);
     }
   }, [editor, paragraphMode]);
 
@@ -614,19 +656,28 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
         ...node.attrs,
         marginRight: null,
         marginLeft: null,
+        paraMarginTop: null,
+        paraMarginBottom: null,
       });
       editor.view.dispatch(tr);
     }
 
-    setParagraphMode(false);
-    setSelectedParagraphMargins({ marginRight: 0, marginLeft: 0 });
-    paragraphPosRef.current = null;
+    setParagraphMode(true);
+    setSelectedParagraphMargins({ marginRight: null, marginLeft: null, marginTop: null, marginBottom: null });
   }, [editor]);
 
   // ✅ Zoom controls for mobile
   const zoomIn = () => setPageZoom(z => Math.min(z + 0.1, 1.5));
   const zoomOut = () => setPageZoom(z => Math.max(z - 0.1, 0.5));
   const zoomReset = () => setPageZoom(1);
+
+  // 🆕 هل للفقرة المحددة هوامش خاصة فعلاً؟ (لو لأ → وراثة زرقاء)
+  const hasCustomMargins = paragraphMode && (
+    selectedParagraphMargins.marginRight != null ||
+    selectedParagraphMargins.marginLeft != null ||
+    selectedParagraphMargins.marginTop != null ||
+    selectedParagraphMargins.marginBottom != null
+  );
 
   if (isLoading) {
     return (
@@ -641,6 +692,8 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
       <style>{`
         .legal-editor-content.ProseMirror {
           min-height: 297mm !important;
+          padding-top: ${pageMarginTop * CM_TO_PX}px !important;
+          padding-bottom: ${pageMarginBottom * CM_TO_PX}px !important;
           padding-right: ${marginRightPx}px !important;
           padding-left: ${marginLeftPx}px !important;
           transform: scale(${pageZoom});
@@ -690,6 +743,13 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
         onCancel={() => setShowNameModal(false)}
       />
 
+      <TemplatesModal
+        isOpen={showTemplatesModal}
+        currentText={editor?.getText() || ''}
+        onApply={applyTemplate}
+        onCancel={() => setShowTemplatesModal(false)}
+      />
+
       <div className="editor-header">
         <input
           type="text"
@@ -706,7 +766,6 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
               آخر حفظ: {lastSaved.toLocaleTimeString('ar-EG')}
             </span>
           )}
-          {/* ✅ Mobile Zoom Controls */}
           {isMobile && (
             <div className="zoom-controls">
               <button onClick={zoomOut} className="zoom-btn" title="تصغير">−</button>
@@ -715,6 +774,14 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
               <button onClick={zoomReset} className="zoom-btn reset" title="إعادة">⟲</button>
             </div>
           )}
+          <button
+            onClick={() => setShowTemplatesModal(true)}
+            className="save-btn"
+            style={{ background: 'rgba(37, 99, 235, 0.15)', color: '#93c5fd', border: '1px solid rgba(37, 99, 235, 0.35)' }}
+            title="نماذج قانونية جاهزة"
+          >
+            📄 نماذج
+          </button>
           <button
             onClick={requestSave}
             className="save-btn"
@@ -726,11 +793,11 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
       </div>
 
       <Suspense fallback={
-        <div className="toolbar-loading" style={{ 
-          height: '48px', 
-          background: '#1e293b', 
-          display: 'flex', 
-          alignItems: 'center', 
+        <div className="toolbar-loading" style={{
+          height: '48px',
+          background: '#1e293b',
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'center',
           color: '#94a3b8',
           fontSize: '13px'
@@ -748,15 +815,36 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
         />
       </Suspense>
 
-      <InteractiveRuler
-        marginRight={paragraphMode ? selectedParagraphMargins.marginRight : pageMarginRight}
-        marginLeft={paragraphMode ? selectedParagraphMargins.marginLeft : pageMarginLeft}
-        onMarginChange={handleMarginChange}
-        paragraphMode={paragraphMode}
-      />
-
-      <div className="editor-container" ref={editorContentRef}>
-        <EditorContent editor={editor} />
+      {/* عمود الصفحة: المسطرتين + الصفحة بعرض موحد 794px */}
+      <div className="editor-canvas">
+        <div className="editor-page-column">
+          <div style={{ transform: `scale(${pageZoom})`, transformOrigin: 'top center' }}>
+            <InteractiveRuler
+              marginRight={paragraphMode ? (selectedParagraphMargins.marginRight ?? pageMarginRight) : pageMarginRight}
+              marginLeft={paragraphMode ? (selectedParagraphMargins.marginLeft ?? pageMarginLeft) : pageMarginLeft}
+              onMarginChange={handleMarginChange}
+              paragraphMode={paragraphMode}
+              hasCustomMargins={hasCustomMargins}
+            />
+          </div>
+          <div className="editor-container" ref={editorContentRef}>
+            <div className="editor-page-row">
+              <VerticalRuler
+                paragraphMode={paragraphMode}
+                hasCustomMargins={hasCustomMargins}
+                selectedParagraphMargins={selectedParagraphMargins}
+                pageMarginTop={pageMarginTop}
+                pageMarginBottom={pageMarginBottom}
+                onMarginChange={handleMarginChange}
+                onResetParagraphMargins={resetParagraphMargins}
+                pageZoom={pageZoom}
+              />
+              <div className="editor-page-holder">
+                <EditorContent editor={editor} />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="editor-footer">
@@ -764,13 +852,13 @@ const LegalEditor = ({ tenantId, documentId, userId, userName = 'محامٍ', on
         <span>📝 الكلمات: {editor?.getText().trim().split(" ").filter(w => w.length > 0).length || 0}</span>
         <span>🔤 الأحرف: {editor?.getText().length || 0}</span>
         <span>📄 الصفحات: ~{Math.ceil((editor?.getText().length || 0) / 1800)}</span>
-        <span style={{ color: paragraphMode ? '#dc2626' : '#2563eb', fontWeight: 600 }}>
+        <span style={{ color: hasCustomMargins ? '#dc2626' : '#2563eb', fontWeight: 600 }}>
           {paragraphMode
-            ? `📐 هوامش الفقرة: يمين ${selectedParagraphMargins.marginRight.toFixed(1)} سم | يسار ${selectedParagraphMargins.marginLeft.toFixed(1)} سم`
-            : `📐 هوامش الصفحة: يمين ${pageMarginRight.toFixed(1)} سم | يسار ${pageMarginLeft.toFixed(1)} سم`
+            ? `📐 الفقرة: يمين ${(selectedParagraphMargins.marginRight ?? pageMarginRight).toFixed(1)} | يسار ${(selectedParagraphMargins.marginLeft ?? pageMarginLeft).toFixed(1)} | أعلى ${(selectedParagraphMargins.marginTop ?? pageMarginTop).toFixed(1)} | أسفل ${(selectedParagraphMargins.marginBottom ?? pageMarginBottom).toFixed(1)} سم`
+            : `📐 الصفحة: يمين ${pageMarginRight.toFixed(1)} | يسار ${pageMarginLeft.toFixed(1)} | أعلى ${pageMarginTop.toFixed(1)} | أسفل ${pageMarginBottom.toFixed(1)} سم`
           }
         </span>
-        {paragraphMode && (
+        {hasCustomMargins && (
           <button
             onClick={resetParagraphMargins}
             className="reset-paragraph-margins-btn"
