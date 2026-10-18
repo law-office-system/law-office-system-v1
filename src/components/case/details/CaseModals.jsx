@@ -12,6 +12,8 @@ import AdminTaskForm from "../AdminTaskForm";
  */
 export default function CaseModals({
   id, caseData, sortedLevelSessions, colors,
+  // درجات التقاضي (تُمرَّر من CaseDetails — بما فيها الدرجة الافتراضية للقضايا القديمة)
+  levels, selectedLevelId,
   // جلسة
   showSessionForm, editingSession, onCloseSessionForm, onSaveSession,
   // قرار
@@ -30,6 +32,8 @@ export default function CaseModals({
           session={editingSession}
           caseId={id}
           caseData={caseData}
+          levels={levels}              // ✅ FIX: تمرير الدرجات الجاهزة بدل إعادة الجلب من Firestore
+          selectedLevelId={selectedLevelId} // ✅ FIX: الدرجة المختارة حاليًا في شريط الدرجات
           onClose={onCloseSessionForm}
           onSave={onSaveSession}
         />

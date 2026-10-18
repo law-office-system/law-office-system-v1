@@ -67,6 +67,7 @@ export default function JudgmentForm({
     obligations: '',
     appealDeadline: '',
     needsFollowUp: false,
+    followUpDeadline: '',   // ✅ NEW: تاريخ انتهاء المتابعة
     attachments: [],
     sessionId: '',
     sessionTitle: '',
@@ -93,6 +94,7 @@ export default function JudgmentForm({
         obligations: judgment.obligations || '',
         appealDeadline: judgment.appealDeadline ? new Date(judgment.appealDeadline).toISOString().split('T')[0] : '',
         needsFollowUp: judgment.needsFollowUp || false,
+        followUpDeadline: judgment.followUpDeadline ? new Date(judgment.followUpDeadline).toISOString().split('T')[0] : '',
         attachments: judgment.attachments || [],
         sessionId: judgment.sessionId || '',
         sessionTitle: judgment.sessionTitle || '',
@@ -164,8 +166,17 @@ export default function JudgmentForm({
 
     setLoading(true);
     try {
+      // ✅ حساب تاريخ انتهاء المتابعة تلقائيًا (30 يوم من تاريخ الحكم) إذا لم يُحدد
+      let followUpDeadline = formData.followUpDeadline;
+      if ((isOrder || isPreliminary) && formData.needsFollowUp && !followUpDeadline && formData.date) {
+        const d = new Date(formData.date);
+        d.setDate(d.getDate() + 30);
+        followUpDeadline = d.toISOString().split('T')[0];
+      }
+
       const dataToSave = {
         ...formData,
+        followUpDeadline,   // ✅ NEW
         tenantId,
         caseId,
       };
@@ -181,7 +192,7 @@ export default function JudgmentForm({
     } finally {
       setLoading(false);
     }
-  }, [formData, validate, onSave, onClose, tenantId, caseId]);
+  }, [formData, validate, onSave, onClose, tenantId, caseId, isOrder, isPreliminary]);
 
   const categoryConfig = {
     order:       { label: 'أمر المحكمة', subtitle: 'إجراء إداري/تنظيمي', color: colors.text.disabled, bg: 'rgba(107, 114, 128, 0.15)', border: 'rgba(107, 114, 128, 0.3)', icon: Clock },
@@ -482,7 +493,7 @@ export default function JudgmentForm({
           </div>
         </div>
 
-        {/* Follow Up (order/preliminary) */}
+        {/* ✅ Follow Up (order/preliminary) — مع تاريخ انتهاء المتابعة */}
         {(isOrder || isPreliminary) && (
           <div style={formSection.fieldGroup}>
             <label style={formSection.label}>حالة المتابعة</label>
@@ -512,11 +523,27 @@ export default function JudgmentForm({
                 يحتاج متابعة
               </button>
               {formData.needsFollowUp && (
-                <div style={formSection.inputWrapper}>
-                  <Calendar size={16} color={colors.accent.amber.main} style={formSection.inputIcon} />
-                  <input type="date" name="appealDeadline" value={formData.appealDeadline} onChange={handleChange}
-                    style={{ ...formSection.input, paddingRight: '40px' }} />
-                </div>
+                <>
+                  <div style={formSection.inputWrapper}>
+                    <Calendar size={16} color={colors.accent.amber.main} style={formSection.inputIcon} />
+                    <input type="date" name="appealDeadline" value={formData.appealDeadline} onChange={handleChange}
+                      style={{ ...formSection.input, paddingRight: '40px' }} />
+                  </div>
+                  {/* ✅ NEW: تاريخ انتهاء المتابعة */}
+                  <div style={formSection.inputWrapper}>
+                    <Calendar size={16} color={colors.accent.red.main} style={formSection.inputIcon} />
+                    <input 
+                      type="date" 
+                      name="followUpDeadline" 
+                      value={formData.followUpDeadline} 
+                      onChange={handleChange}
+                      style={{ ...formSection.input, paddingRight: '40px', borderColor: colors.accent.red.main + '50' }} 
+                    />
+                    <small style={{ color: colors.text.muted, fontSize: '11px', marginTop: '4px', display: 'block' }}>
+                      💡 تاريخ انتهاء المتابعة (افتراضي: 30 يوم من تاريخ الحكم)
+                    </small>
+                  </div>
+                </>
               )}
             </div>
           </div>

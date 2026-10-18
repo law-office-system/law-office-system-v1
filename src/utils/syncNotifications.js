@@ -6,7 +6,6 @@ import {
   doc,
   writeBatch,
   serverTimestamp,
-  documentId,
   getDoc,
 } from "firebase/firestore";
 
@@ -31,7 +30,6 @@ const getCachedClientNames = async (clientIds, officeId) => {
     return result;
   }
 
-  // إزالة المعرفات المكررة وغير الصالحة
   const uniqueIds = [
     ...new Set(
       clientIds.filter(
@@ -40,7 +38,6 @@ const getCachedClientNames = async (clientIds, officeId) => {
     ),
   ];
 
-  // قراءة الأسماء من الـ cache
   uniqueIds.forEach((id) => {
     const cacheKey = `${officeId}_${id}`;
     const cached = clientNamesCache.get(cacheKey);
@@ -71,10 +68,11 @@ const getCachedClientNames = async (clientIds, officeId) => {
         timestamp: now,
       });
     } catch (error) {
-      console.error(
-        "❌ Error fetching client names:",
-        error
-      );
+      // ✅ FIX: تجاهل permission-denied بصمت —
+      // مستند غير موجود أو موكل من مكتب شريك في قضية مشتركة = نتخطاه طبيعيًا
+      if (error?.code !== "permission-denied") {
+        console.error("❌ Error fetching client names:", error);
+      }
     }
   }
 
@@ -228,7 +226,7 @@ export const syncNotifications = async (
       };
     });
 
-    // 5. توليد الإشعارات
+    // 5. توليد الإشعارات (generateNotifications الجديد بفلاتر القضايا المنتهية والجلسات البائتة)
     const generatedNotifications = generateNotifications(
       casesWithNames,
       adminTasks,
@@ -275,6 +273,8 @@ export const syncNotifications = async (
     const MAX_BATCH = 450;
 
     // 7. حذف الإشعارات القديمة غير الموجودة في الناتج الجديد
+    //    (هنا يُمسح تلقائيًا أي إشعار "جلسة من سنة لقضية منتهية" لأن
+    //     generateNotifications الجديد لم يعد يُنتجه أصلًا)
     for (const [id, existing] of existingMap) {
       if (!generatedIds.has(id)) {
         if (opsCount >= MAX_BATCH) {
@@ -321,7 +321,8 @@ export const syncNotifications = async (
           existing.judgmentDate !==
             (newNotification.judgmentDate || null) ||
           existing.caseNumber !== newNotification.caseNumber ||
-          existing.caseCourt !== newNotification.court ||
+          existing.caseCourt !==
+            (newNotification.caseCourt || newNotification.court || null) ||
           JSON.stringify(existing.clientNames || []) !==
             JSON.stringify(newNotification.clientNames || []) ||
           JSON.stringify(existing.opponentNames || []) !==
@@ -345,7 +346,7 @@ export const syncNotifications = async (
               dueDate: newNotification.dueDate || null,
               judgmentDate: newNotification.judgmentDate || null,
               caseNumber: newNotification.caseNumber,
-              caseCourt: newNotification.court,
+              caseCourt: newNotification.caseCourt || newNotification.court || null,
               clientNames: newNotification.clientNames || [],
               opponentNames: newNotification.opponentNames || [],
               daysLate: newNotification.daysLate || null,

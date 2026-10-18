@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext.jsx';
 import { THEMES, ACCENT_OPTIONS } from '../styles/themes.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -6,9 +6,11 @@ import { usePermissions } from '../hooks/usePermissions';
 import { db } from '../firebaseDb.js';
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { Button, Card, Page, Section, Input } from '../components/ui';
-import { 
-  Palette, Building2, Bell, Users, Check, Save, Loader2, 
-  Phone, Mail, MapPin, User, Shield, Trash2, Plus, X
+import BackupTab from '../components/backup/BackupTab';
+import {
+  Palette, Building2, Bell, Users, Check, Save, Loader2,
+  Phone, Mail, MapPin, User, Shield, Trash2, Plus, X,
+  DatabaseBackup, Briefcase
 } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════
@@ -95,6 +97,9 @@ export default function OfficeSettings() {
   // ── Permissions tab state ──
   const [permissions, setPermissions] = useState(DEFAULT_PERMISSIONS);
 
+  // ── ✅ Tasks auto-delete tab state ──
+  const [taskAutoDelete, setTaskAutoDelete] = useState({ enabled: true, days: 30 });
+
   // ── Load office info ──
   useEffect(() => {
     if (!userData?.officeId) return;
@@ -116,6 +121,13 @@ export default function OfficeSettings() {
           }
           if (data.permissions) {
             setPermissions(mergePermissions(data.permissions));
+          }
+          // ✅ تحميل إعداد الحذف التلقائي
+          if (data.taskAutoDelete && typeof data.taskAutoDelete === 'object') {
+            setTaskAutoDelete({
+              enabled: data.taskAutoDelete.enabled !== false,
+              days: Number(data.taskAutoDelete.days) > 0 ? Number(data.taskAutoDelete.days) : 30,
+            });
           }
         }
       } catch (e) {
@@ -225,6 +237,25 @@ export default function OfficeSettings() {
     }
   };
 
+  // ── ✅ Save tasks auto-delete settings ──
+  const handleSaveTaskSettings = async () => {
+    if (!userData?.officeId) return;
+    setSaving(true);
+    try {
+      await setDoc(
+        doc(db, 'offices', userData.officeId),
+        { taskAutoDelete, updatedAt: new Date().toISOString() },
+        { merge: true }
+      );
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      console.error('Save task settings failed:', e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // 🔐 الحماية: الصفحة لمدير المكتب فقط
   if (!can("officeSettings", "view")) {
     return (
@@ -237,11 +268,13 @@ export default function OfficeSettings() {
   }
 
   const tabs = [
-    { id: 'appearance',    label: 'المظهر',     icon: Palette },
-    { id: 'general',       label: 'عام',      icon: Building2 },
-    { id: 'notifications', label: 'الإشعارات', icon: Bell },
-    { id: 'users',         label: 'المستخدمين', icon: Users },
-    { id: 'permissions',   label: 'الصلاحيات', icon: Shield },
+    { id: 'appearance',    label: 'المظهر',          icon: Palette },
+    { id: 'general',       label: 'عام',            icon: Building2 },
+    { id: 'notifications', label: 'الإشعارات',       icon: Bell },
+    { id: 'tasks',         label: 'الأعمال الإدارية', icon: Briefcase },
+    { id: 'users',         label: 'المستخدمين',      icon: Users },
+    { id: 'permissions',   label: 'الصلاحيات',       icon: Shield },
+    { id: 'backup',        label: 'النسخ الاحتياطي', icon: DatabaseBackup },
   ];
 
   return (
@@ -261,36 +294,41 @@ export default function OfficeSettings() {
               تخصيص مظهر وإعدادات مكتب المحاماة
             </p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {saved && (
-              <span style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                color: colors.accent.green.main, fontSize: 14, fontWeight: 500,
-              }}>
-                <Check size={16} /> تم الحفظ
-              </span>
-            )}
-            <Button
-              onClick={
-                activeTab === 'appearance' ? handleSaveTheme :
-                activeTab === 'general' ? handleSaveOfficeInfo :
-                activeTab === 'notifications' ? handleSaveNotifications :
-                activeTab === 'permissions' ? handleSavePermissions :
-                () => {}
-              }
-              disabled={saving}
-              variant="primary"
-              icon={saving ? Loader2 : Save}
-            >
-              {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
-            </Button>
-          </div>
+          {/* زرار الحفظ مش بيظهر في تاب النسخ الاحتياطي */}
+          {activeTab !== 'backup' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {saved && (
+                <span style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  color: colors.accent.green.main, fontSize: 14, fontWeight: 500,
+                }}>
+                  <Check size={16} /> تم الحفظ
+                </span>
+              )}
+              <Button
+                onClick={
+                  activeTab === 'appearance' ? handleSaveTheme :
+                  activeTab === 'general' ? handleSaveOfficeInfo :
+                  activeTab === 'notifications' ? handleSaveNotifications :
+                  activeTab === 'tasks' ? handleSaveTaskSettings :
+                  activeTab === 'permissions' ? handleSavePermissions :
+                  () => {}
+                }
+                disabled={saving}
+                variant="primary"
+                icon={saving ? Loader2 : Save}
+              >
+                {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
         <div style={{
           display: 'flex', gap: 4, marginBottom: 24,
           borderBottom: `1px solid ${colors.border.default}`,
+          overflowX: 'auto',
         }}>
           {tabs.map(tab => {
             const isActive = activeTab === tab.id;
@@ -312,6 +350,7 @@ export default function OfficeSettings() {
                   alignItems: 'center',
                   gap: 8,
                   transition: 'all 0.2s ease',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 <tab.icon size={16} />
@@ -328,8 +367,8 @@ export default function OfficeSettings() {
 
         {/* ── General Tab ── */}
         {activeTab === 'general' && (
-          <GeneralTab 
-            officeInfo={officeInfo} 
+          <GeneralTab
+            officeInfo={officeInfo}
             setOfficeInfo={setOfficeInfo}
             loading={officeLoading}
           />
@@ -337,15 +376,23 @@ export default function OfficeSettings() {
 
         {/* ── Notifications Tab ── */}
         {activeTab === 'notifications' && (
-          <NotificationsTab 
+          <NotificationsTab
             settings={notifSettings}
             setSettings={setNotifSettings}
           />
         )}
 
+        {/* ── ✅ Tasks Tab ── */}
+        {activeTab === 'tasks' && (
+          <TasksSettingsTab
+            settings={taskAutoDelete}
+            setSettings={setTaskAutoDelete}
+          />
+        )}
+
         {/* ── Users Tab ── */}
         {activeTab === 'users' && (
-          <UsersTab 
+          <UsersTab
             users={users}
             loading={usersLoading}
           />
@@ -359,8 +406,89 @@ export default function OfficeSettings() {
           />
         )}
 
+        {/* ── Backup Tab ── */}
+        {activeTab === 'backup' && (
+          <BackupTab />
+        )}
+
       </div>
     </Page>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ✅ TASKS AUTO-DELETE TAB — الأعمال الإدارية
+   ═══════════════════════════════════════════════════════════════ */
+function TasksSettingsTab({ settings, setSettings }) {
+  const { theme } = useTheme();
+  const { colors, radius } = theme;
+
+  const dayOptions = [
+    { value: 7,  label: 'أسبوع واحد (7 أيام)' },
+    { value: 14, label: 'أسبوعان (14 يوم)' },
+    { value: 30, label: 'شهر واحد (30 يوم)' },
+    { value: 60, label: 'شهران (60 يوم)' },
+    { value: 90, label: '3 أشهر (90 يوم)' },
+    { value: 180, label: '6 أشهر (180 يوم)' },
+    { value: 365, label: 'سنة كاملة (365 يوم)' },
+  ];
+
+  return (
+    <Card variant="default">
+      <h3 style={{ margin: '0 0 8px', fontSize: 16, color: colors.text.primary }}>
+        تنظيف الأعمال الإدارية المنجزة
+      </h3>
+      <p style={{ margin: '0 0 20px', fontSize: 13, color: colors.text.muted }}>
+        يتم فحص الأعمال المنجزة وحذفها تلقائيًا عند فتح صفحة الأعمال الإدارية —
+        أو احذفها يدويًا بزر "حذف المنجزة" من نفس الصفحة.
+      </p>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', maxWidth: 500, marginBottom: 20 }}>
+        <div>
+          <div style={{ fontSize: 14, color: colors.text.primary, fontWeight: 500 }}>
+            الحذف التلقائي للأعمال المنجزة
+          </div>
+          <div style={{ fontSize: 12, color: colors.text.muted, marginTop: 2 }}>
+            حذف العمل المنجز بعد مرور المدة المحددة عليه
+          </div>
+        </div>
+        <ToggleSwitch
+          checked={settings.enabled}
+          onChange={v => setSettings(prev => ({ ...prev, enabled: v }))}
+        />
+      </div>
+
+      {settings.enabled && (
+        <div style={{ maxWidth: 500 }}>
+          <div style={{ fontSize: 14, color: colors.text.primary, fontWeight: 500, marginBottom: 8 }}>
+            مدة الاحتفاظ بالأعمال المنجزة
+          </div>
+          <select
+            value={settings.days}
+            onChange={e => setSettings(prev => ({ ...prev, days: Number(e.target.value) }))}
+            style={{
+              width: '100%',
+              padding: '10px 14px',
+              background: colors.bg.input,
+              border: `1px solid ${colors.border.default}`,
+              borderRadius: 8,
+              color: colors.text.primary,
+              fontFamily: 'inherit',
+              fontSize: 14,
+              cursor: 'pointer',
+            }}
+          >
+            {dayOptions.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <p style={{ marginTop: 10, fontSize: 12, color: colors.text.muted }}>
+            💡 مثال: لو اخترت "شهر واحد"، أي عمل تم إنجازه منذ أكثر من 30 يومًا
+            سيُحذف تلقائيًا عند فتح صفحة الأعمال الإدارية.
+          </p>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -572,8 +700,8 @@ function NotificationsTab({ settings, setSettings }) {
                 {item.desc}
               </div>
             </div>
-            <ToggleSwitch 
-              checked={settings[item.key]} 
+            <ToggleSwitch
+              checked={settings[item.key]}
               onChange={v => setSettings(p => ({ ...p, [item.key]: v }))}
             />
           </div>
@@ -656,8 +784,8 @@ function UsersTab({ users, loading }) {
   const getInitials = (name) => {
     if (!name) return '?';
     const parts = name.split(' ');
-    return parts.length > 1 
-      ? parts[0][0] + parts[parts.length - 1][0] 
+    return parts.length > 1
+      ? parts[0][0] + parts[parts.length - 1][0]
       : name.slice(0, 2);
   };
 

@@ -16,6 +16,29 @@ import { useAuth } from '../context/AuthContext';
 
 import { db } from "../firebaseDb";
 
+// ✅ المقارن الموحّد: الأحدث أولاً ← الأولوية ← موعد الاستحقاق
+const toMillis = (x) => {
+  if (!x) return 0;
+  if (x?.toDate) return x.toDate().getTime();
+  const d = new Date(x);
+  return isNaN(d) ? 0 : d.getTime();
+};
+
+function sortTasks(data) {
+  const priorityOrder = { high: 0, medium: 1, low: 2 };
+  data.sort((a, b) => {
+    // 1) الأحدث أولاً
+    const c = toMillis(b.createdAt) - toMillis(a.createdAt);
+    if (c !== 0) return c;
+    // 2) الأولوية
+    const p = (priorityOrder[a.priority] ?? 1) - (priorityOrder[b.priority] ?? 1);
+    if (p !== 0) return p;
+    // 3) الأقرب استحقاقًا
+    return new Date(a.dueDate || 0) - new Date(b.dueDate || 0);
+  });
+  return data;
+}
+
 export function useAdminTasks(caseId = null) {
   const { userData } = useAuth();
   const officeId = userData?.officeId;
@@ -55,14 +78,8 @@ export function useAdminTasks(caseId = null) {
           ...doc.data()
         }));
 
-        // Sort by priority then due date
-        data.sort((a, b) => {
-          const priorityOrder = { high: 0, medium: 1, low: 2 };
-          if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
-            return priorityOrder[a.priority] - priorityOrder[b.priority];
-          }
-          return new Date(a.dueDate || 0) - new Date(b.dueDate || 0);
-        });
+        // ✅ الأحدث أولاً
+        sortTasks(data);
 
         if (isMounted) {
           setTasks(data);
@@ -95,23 +112,17 @@ export function useAdminTasks(caseId = null) {
         updatedAt: serverTimestamp(),
       });
 
-      // Optimistic update
-      const newTask = { 
-        id: docRef.id, 
-        ...taskData, 
+      // ✅ Optimistic update — الجديد في قمة القائمة مباشرة
+      const newTask = {
+        id: docRef.id,
+        ...taskData,
         caseId: caseId || taskData.caseId || 'general',
         officeId,
         status: taskData.status || 'pending',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-      setTasks(prev => [...prev, newTask].sort((a, b) => {
-        const priorityOrder = { high: 0, medium: 1, low: 2 };
-        if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
-          return priorityOrder[a.priority] - priorityOrder[b.priority];
-        }
-        return new Date(a.dueDate || 0) - new Date(b.dueDate || 0);
-      }));
+      setTasks(prev => sortTasks([newTask, ...prev]));
 
       return { id: docRef.id, ...taskData };
     } catch (err) {
@@ -128,7 +139,7 @@ export function useAdminTasks(caseId = null) {
       });
 
       // Optimistic update
-      setTasks(prev => prev.map(t => 
+      setTasks(prev => prev.map(t =>
         t.id === taskId ? { ...t, ...updates, updatedAt: new Date() } : t
       ));
     } catch (err) {
@@ -158,9 +169,9 @@ export function useAdminTasks(caseId = null) {
       });
 
       // Optimistic update
-      setTasks(prev => prev.map(t => 
-        t.id === taskId 
-          ? { ...t, status: newStatus, completedAt: newStatus === 'completed' ? new Date() : null, updatedAt: new Date() } 
+      setTasks(prev => prev.map(t =>
+        t.id === taskId
+          ? { ...t, status: newStatus, completedAt: newStatus === 'completed' ? new Date() : null, updatedAt: new Date() }
           : t
       ));
     } catch (err) {
@@ -188,13 +199,8 @@ export function useAdminTasks(caseId = null) {
         ...doc.data()
       }));
 
-      data.sort((a, b) => {
-        const priorityOrder = { high: 0, medium: 1, low: 2 };
-        if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
-          return priorityOrder[a.priority] - priorityOrder[b.priority];
-        }
-        return new Date(a.dueDate || 0) - new Date(b.dueDate || 0);
-      });
+      // ✅ الأحدث أولاً
+      sortTasks(data);
 
       setTasks(data);
     } catch (err) {
@@ -205,13 +211,13 @@ export function useAdminTasks(caseId = null) {
     }
   }, [caseId, officeId]);
 
-  return { 
-    tasks, 
-    loading, 
-    error, 
-    addTask, 
-    updateTask, 
-    deleteTask, 
+  return {
+    tasks,
+    loading,
+    error,
+    addTask,
+    updateTask,
+    deleteTask,
     toggleTaskStatus,
     refresh,
   };

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useAdminTasks } from "../../hooks/useAdminTasks";
-import { Link2, Calendar, Briefcase, Clock } from "lucide-react";
+import { Link2, Calendar, Briefcase } from "lucide-react";
 import AdminTaskForm from "./AdminTaskForm";
 import AdminTaskCard from "./AdminTaskCard";
 import Card from "../ui/Card";
@@ -112,6 +112,8 @@ export default function AdminTasksSection({ caseId, sessions = [], tasks: extern
                 <AdminTaskCard
                   task={task}
                   onToggle={() => toggleTaskStatus(task.id, task.status === "completed" ? "pending" : "completed")}
+                  // ✅ أزرار الحالة السريعة أعلى البطاقة (معلقة / قيد التنفيذ / منجزة)
+                  onStatusChange={(id, status) => toggleTaskStatus(id, status)}
                   onEdit={() => handleEdit(task)}
                   onDelete={() => handleDelete(task.id)}
                 />

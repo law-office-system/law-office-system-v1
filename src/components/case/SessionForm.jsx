@@ -85,7 +85,14 @@ const JUDGMENT_TYPES = [
   { value: 'partial', label: 'جزئي', color: '#f59e0b' },
 ];
 
-export default function SessionForm({ session = null, caseId, caseData = {}, onClose, onSave }) {
+// ✅ FIX: يقبل الآن levels / selectedLevelId كخاصيتين اختياريتين من CaseDetails.
+// إن لم تُمرَّرا، يعود لجلب الدرجات من Firestore كما كان سابقًا (fallback).
+export default function SessionForm({
+  session = null, caseId, caseData = {},
+  levels: propLevels = null,
+  selectedLevelId: propSelectedLevelId = null,
+  onClose, onSave
+}) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [expandedSections, setExpandedSections] = useState({
@@ -113,7 +120,7 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
     nextSessionDate: '',
     nextSessionTime: '',
     nextSessionLocation: caseData.court || '',
-    autoCreateNextSession: true,
+    autoCreateNextSession: false,   // ✅ لا إنشاء تلقائي — يفعّله المستخدم بعد إدخال التاريخ
     judgmentType: '',
     judgmentSummary: '',
     judgmentAppealable: true,
@@ -123,11 +130,17 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
     litigationLevelId: '',  // ✅ درجة التقاضي
   });
 
-  // ✅ جلب درجات التقاضي للقضية
+  // ✅ جلب درجات التقاضي للقضية (من الـ props إن وُجدت، وإلا من Firestore)
   const [levels, setLevels] = useState([]);
   const [levelsLoading, setLevelsLoading] = useState(true);
 
   useEffect(() => {
+    if (propLevels) {
+      setLevels(propLevels);
+      setLevelsLoading(false);
+      return;
+    }
+
     const fetchLevels = async () => {
       if (!caseId) return;
       try {
@@ -145,7 +158,7 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
       }
     };
     fetchLevels();
-  }, [caseId]);
+  }, [caseId, propLevels]);
 
   // ─── Init ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -168,7 +181,8 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
         judgmentSummary: session.judgmentSummary || '',
         judgmentAppealable: session.judgmentAppealable !== false,
         appealDeadline: session.appealDeadline || '',
-        litigationLevelId: session.litigationLevelId || '',  // ✅
+        // ✅ FIX: اقرأ litigationLevelId أو levelId (الاسم الموحّد الجديد)
+        litigationLevelId: session.litigationLevelId || session.levelId || '',
       }));
       if (session.decisionType === 'judgment') {
         setExpandedSections(prev => ({ ...prev, judgment: true }));
@@ -185,6 +199,21 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
       }));
     }
   }, [session, caseData]);
+
+  // ✅ FIX: اختيار تلقائي للدرجة عند الإضافة (وليس التعديل):
+  // الدرجة المختارة حاليًا في شريط الدرجات ← الدرجة النشطة ← أول درجة
+  useEffect(() => {
+    if (session) return; // في وضع التعديل نحترم قيمة الجلسة المحمّلة
+    if (levelsLoading || levels.length === 0) return;
+    if (formData.litigationLevelId) return;
+    const preferred =
+      levels.find(l => l.id === propSelectedLevelId) ||
+      levels.find(l => l.isActive) ||
+      levels[0];
+    if (preferred) {
+      setFormData(prev => ({ ...prev, litigationLevelId: preferred.id }));
+    }
+  }, [levels, levelsLoading, session, propSelectedLevelId]);
 
   // ─── Auto-fill court/department/location from selected level ───
   useEffect(() => {
@@ -219,11 +248,7 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
         updates.judgmentSummary = '';
       }
 
-      if (decisionMeta.hasNextSession && !formData.nextSessionDate) {
-        const nextDate = new Date();
-        nextDate.setDate(nextDate.getDate() + 30);
-        updates.nextSessionDate = nextDate.toISOString().split('T')[0];
-      }
+      // ✅ لا تعبئة تلقائية لتاريخ الجلسة القادمة — يُدخل يدويًا دائمًا
 
       setFormData(prev => ({ ...prev, ...updates }));
     }
@@ -320,7 +345,9 @@ export default function SessionForm({ session = null, caseId, caseData = {}, onC
         suggestedStage: formData.suggestedStage || '',
         suggestedTask: formData.suggestedTask || '',
         stageLabel: STAGE_LABELS[formData.suggestedStage] || '',
+        // ✅ نفس القيمة بالاسمين القديم والجديد حتى لا يضيع الربط أينما قُرئت
         litigationLevelId: formData.litigationLevelId,
+        levelId: formData.litigationLevelId,
         caseId,
         tenantId: caseData.tenantId || '',
         updatedAt: new Date().toISOString(),

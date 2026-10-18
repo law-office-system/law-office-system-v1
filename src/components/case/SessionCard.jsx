@@ -197,7 +197,8 @@ export default function SessionCard({
             </h4>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              <MetaItem icon={Calendar} iconColor={colors.accent.blue.light} label={formatDate(session.nextSessionDate || session.date)} />
+              {/* ✅ FIX: اعرض تاريخ انعقاد الجلسة الفعلي أولًا، وnextSessionDate احتياط فقط */}
+              <MetaItem icon={Calendar} iconColor={colors.accent.blue.light} label={formatDate(session.date || session.nextSessionDate)} />
               {session.time && <MetaItem icon={Clock} iconColor={colors.accent.purple.light} label={formatTime(session.time)} highlight />}
               {session.location && <MetaItem icon={MapPin} iconColor={colors.accent.amber.light} label={session.location} />}
               {session.roll && <MetaItem icon={Landmark} iconColor={colors.accent.green.main} label={`رول: ${session.roll}`} />}

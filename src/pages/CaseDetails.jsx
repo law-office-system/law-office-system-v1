@@ -173,7 +173,9 @@ export default function CaseDetails() {
               date: normalizedDate,
               decisionDetails: s.decisionDetails || s.decision || '',
               decisionType: s.decisionType || 'pending',
-              levelId: s.levelId || activeLevel?.id || null,
+              // ✅ FIX: اقرأ الحقلين (levelId الجديد + litigationLevelId القديم)
+              // حتى تُصلح تلقائياً الجلسات المحفوظة سابقاً بالاسم القديم
+              levelId: s.levelId || s.litigationLevelId || activeLevel?.id || null,
             };
           });
 
@@ -250,8 +252,13 @@ export default function CaseDetails() {
   }, [caseData?.clients]);
 
   useEffect(() => {
-    if (!id) return;
-    const q = query(collection(db, "judgments"), where("caseId", "==", id));
+    if (!id || !userData?.officeId) return;
+    // ✅ officeId في الفلتر — مطلوب لتوافق قواعد Firestore (وليس ترفيهًا)
+    const q = query(
+      collection(db, "judgments"),
+      where("officeId", "==", userData.officeId),
+      where("caseId", "==", id)
+    );
     const unsub = onSnapshot(
       q,
       (snapshot) => {
@@ -267,11 +274,16 @@ export default function CaseDetails() {
       unsub();
       unsubscribersRef.current = unsubscribersRef.current.filter(u => u !== unsub);
     };
-  }, [id]);
+  }, [id, userData?.officeId]);
 
   useEffect(() => {
-    if (!id) return;
-    const q = query(collection(db, "adminTasks"), where("caseId", "==", id));
+    if (!id || !userData?.officeId) return;
+    // ✅ officeId في الفلتر — مطلوب لتوافق قواعد Firestore
+    const q = query(
+      collection(db, "adminTasks"),
+      where("officeId", "==", userData.officeId),
+      where("caseId", "==", id)
+    );
     const unsub = onSnapshot(
       q,
       (snapshot) => {
@@ -287,7 +299,7 @@ export default function CaseDetails() {
       unsub();
       unsubscribersRef.current = unsubscribersRef.current.filter(u => u !== unsub);
     };
-  }, [id]);
+  }, [id, userData?.officeId]);
 
   // 📁 LOAD DOCUMENTS FOR THIS CASE
   const loadCaseDocuments = useCallback(async () => {
@@ -447,19 +459,21 @@ export default function CaseDetails() {
     try {
       const now = new Date().toISOString();
       const baseSession = editingSession || {};
+      const originalDate = editingSession ? (baseSession.date || '') : null;
 
-      const originalDate = editingSession
-        ? (baseSession.date || '')
-        : null;
+      // ✅ احترم اختيار المستخدم من القائمة المنسدلة ثم الدرجة المختارة ثم النشطة
+      const targetLevelId = formData.litigationLevelId || selectedLevel?.id || activeLevel?.id || null;
 
+      // ✅ الفورم هو المرجع (معبّأ بالأصلية عند التعديل) — يسمح بنقل موعد الجلسة
       const sessionData = {
         ...baseSession,
         id: baseSession.id || crypto.randomUUID(),
         title: formData.title,
-        date: originalDate || formData.date,
-        nextSessionDate: editingSession
-          ? baseSession.nextSessionDate
-          : (formData.nextSessionDate || null),
+        date: formData.date || originalDate,
+        // ✅ احتفظ برابط الجلسة المقبلة المحفوظ عند التعديل
+        nextSessionDate: formData.nextSessionDate || baseSession.nextSessionDate || null,
+        nextSessionTime: formData.nextSessionTime || baseSession.nextSessionTime || '',
+        nextSessionLocation: formData.nextSessionLocation || baseSession.nextSessionLocation || '',
         time: formData.time,
         location: formData.location,
         roll: formData.roll,
@@ -473,7 +487,9 @@ export default function CaseDetails() {
         suggestedStage: formData.suggestedStage || '',
         suggestedTask: formData.suggestedTask || '',
         stageLabel: formData.stageLabel || '',
-        levelId: selectedLevel?.id || activeLevel?.id || null,
+        // ✅ نفس القيمة بالاسمين حتى لا يضيع الربط أينما قُرئت
+        levelId: targetLevelId,
+        litigationLevelId: targetLevelId,
         createdAt: baseSession.createdAt || now,
         createdBy: baseSession.createdBy || userData?.uid || null,
         updatedAt: now,
@@ -493,45 +509,86 @@ export default function CaseDetails() {
         updatedSessions = [...safeSessions, sessionData];
       }
 
-      const shouldCreateNext = formData.nextSessionDate &&
-        formData.nextSessionDate !== (originalDate || formData.date) &&
-        ['adjourned', 'adjourned_notice', 'referred', 'expert', 'absence'].includes(formData.decisionType);
+      // ✅ إنشاء/تحديث الجلسة المقبلة — بشروط صارمة ضد التكرار:
+      // 1) يجب أن يكون الخيار مفعّلًا (وليس مجرد وجود تاريخ)
+      // 2) يجب أن يختلف تاريخها عن تاريخ الجلسة الحالية
+      // 3) يجب ألا توجد أي جلسة أخرى بنفس التاريخ (فحص شامل بلا استثناءات)
+      const decisionCreatesNext = ['adjourned', 'adjourned_notice', 'referred', 'expert', 'absence'].includes(formData.decisionType);
+      const wantsNext = formData.autoCreateNextSession !== false && !!formData.nextSessionDate;
+      const nextDate = formData.nextSessionDate;
+      const currentDate = formData.date || originalDate;
+      const shouldCreateNext = decisionCreatesNext && wantsNext && !!nextDate && nextDate !== currentDate;
 
       if (shouldCreateNext) {
-        const alreadyExists = updatedSessions.some(s =>
-          (s.date === formData.nextSessionDate || s.nextSessionDate === formData.nextSessionDate)
-          && s.id !== sessionData.id
-        );
-        if (!alreadyExists) {
-          const nextSession = {
-            id: crypto.randomUUID(),
-            title: formData.nextSessionTitle || sessionData.decisionDetails || sessionData.decisionLabel || sessionData.decisionType || "جلسة مؤجلة",
-            date: formData.nextSessionDate,
-            nextSessionDate: null,
-            time: formData.nextSessionTime || formData.time || '',
-            location: formData.nextSessionLocation || formData.location || '',
-            court: formData.court || sessionData.location || '',
-            roll: formData.roll || '',
-            description: '',
-            notes: `جلسة قادمة تلقائية نتيجة قرار: ${sessionData.decisionLabel || sessionData.decisionType}`,
-            attachments: [],
-            decisionType: 'pending',
-            decisionDetails: '',
-            decisionDate: '',
-            decisionLabel: '',
-            suggestedStage: '',
-            suggestedTask: '',
-            stageLabel: '',
-            levelId: selectedLevel?.id || activeLevel?.id || null,
-            createdAt: now,
-            createdBy: userData?.uid || null,
-            updatedAt: now,
-          };
-          updatedSessions = [...updatedSessions, nextSession];
+        // أولاً: ابحث عن جلسة مرتبطة سابقًا (عند التعديل) لتحديثها بدل إنشاء مكرر
+        const linkedSession = editingSession
+          ? safeSessions.find(s =>
+              s.id !== sessionData.id &&
+              (s.date === baseSession.nextSessionDate || s.date === nextDate))
+          : null;
+
+        if (linkedSession) {
+          updatedSessions = updatedSessions.map(s =>
+            s.id === linkedSession.id
+              ? {
+                  ...linkedSession,
+                  title: formData.nextSessionTitle || linkedSession.title || sessionData.decisionLabel || sessionData.decisionType || "جلسة مؤجلة",
+                  date: nextDate,
+                  time: formData.nextSessionTime || linkedSession.time || '',
+                  location: formData.nextSessionLocation || linkedSession.location || '',
+                  levelId: targetLevelId,
+                  litigationLevelId: targetLevelId,
+                  updatedAt: now,
+                }
+              : s
+          );
+        } else {
+          // ثانياً: فحص شامل — لا تُنشئ إطلاقًا إن وُجدت أي جلسة بنفس التاريخ
+          const alreadyExists = updatedSessions.some(s => s.date === nextDate);
+
+          if (!alreadyExists) {
+            const nextSession = {
+              id: crypto.randomUUID(),
+              title: formData.nextSessionTitle || sessionData.decisionDetails || sessionData.decisionLabel || sessionData.decisionType || "جلسة مؤجلة",
+              date: nextDate,
+              nextSessionDate: null,
+              time: formData.nextSessionTime || formData.time || '',
+              location: formData.nextSessionLocation || formData.location || '',
+              court: formData.court || sessionData.location || '',
+              roll: formData.roll || '',
+              description: '',
+              notes: `جلسة قادمة نتيجة قرار: ${sessionData.decisionLabel || sessionData.decisionType}`,
+              attachments: [],
+              decisionType: 'pending',
+              decisionDetails: '',
+              decisionDate: '',
+              decisionLabel: '',
+              suggestedStage: '',
+              suggestedTask: '',
+              stageLabel: '',
+              // ✅ الجلسة المقبلة ترث نفس درجة التقاضي
+              levelId: targetLevelId,
+              litigationLevelId: targetLevelId,
+              createdAt: now,
+              createdBy: userData?.uid || null,
+              updatedAt: now,
+            };
+            updatedSessions = [...updatedSessions, nextSession];
+          }
         }
       }
 
       await updateDoc(doc(db, "cases", id), { sessions: updatedSessions });
+
+      // ✅ تحديث عدّاد جلسات الدرجة (لا ينطبق على الدرجة الافتراضية الوهمية legacy_*)
+      if (!editingSession && targetLevelId && !String(targetLevelId).startsWith('legacy_')) {
+        try {
+          const { incrementLevelSessionCount } = await import("../services/litigationLevels");
+          await incrementLevelSessionCount(targetLevelId, userData?.officeId);
+        } catch (cntErr) {
+          console.warn("تعذر تحديث عدّاد جلسات الدرجة:", cntErr);
+        }
+      }
 
       if (!editingSession && sessionData.suggestedTask) {
         try {
@@ -542,7 +599,7 @@ export default function CaseDetails() {
             description: `مهمة تلقائية من جلسة: ${sessionData.title}`,
             status: 'pending',
             priority: 'high',
-            levelId: selectedLevel?.id || activeLevel?.id || null,
+            levelId: targetLevelId,
             createdAt: now,
             createdBy: userData?.uid || null,
             tenantId: caseData?.tenantId || userData?.tenantId || '',
@@ -865,6 +922,8 @@ export default function CaseDetails() {
         caseData={caseData}
         sortedLevelSessions={sortedLevelSessions}
         colors={colors}
+        levels={levels}                    // ✅ FIX: تمرير الدرجات (بما فيها الوهمية للقضايا القديمة)
+        selectedLevelId={selectedLevel?.id} // ✅ FIX: الدرجة المختارة حاليًا في شريط الدرجات
         showSessionForm={showSessionForm}
         editingSession={editingSession}
         onCloseSessionForm={closeSessionForm}

@@ -1,9 +1,9 @@
-import { parseDate } from "./date";
-import { CASE_STATUS } from "../constants/caseStatus";
+import { parseDate } from "../utils/date";
+// ✅ المصدر الوحيد لحالة القضية — يبتلع كل الصيغ القديمة
+import { getCaseStatus, CASE_STATUS } from "../constants/caseStatusUnified";
 
-// ============================================================
-// ✅ توليد الإشعارات — مع مراعاة إعدادات المكتب
-// ============================================================
+// ✅ نافذة الالتقاط: جلسة فائتة أقدم من هذا الحد = أرشيف تاريخي، لا إشعار
+const LATE_WINDOW_DAYS = 30;
 
 export const generateNotifications = (cases, adminTasks = [], judgments = [], settings = {}) => {
   const now = new Date();
@@ -12,7 +12,6 @@ export const generateNotifications = (cases, adminTasks = [], judgments = [], se
   const notifications = [];
   const seen = new Set();
 
-  // ── Default settings (all enabled if not provided) ──
   const {
     sessionReminder = true,
     taskAssigned = true,
@@ -21,16 +20,14 @@ export const generateNotifications = (cases, adminTasks = [], judgments = [], se
   } = settings;
 
   // ───────────────────────────────────────────────
-  // 1️⃣ الجلسات المتأخرة (late) 🔴
+  // 1️⃣ الجلسات (late) 🔴
   // ───────────────────────────────────────────────
   if (sessionReminder) {
-    const activeCases = cases.filter(
-      (c) =>
-        c.status === CASE_STATUS.ACTIVE ||
-        c.status === "نشطة" ||
-        c.status === "ACTIVE" ||
-        c.status === "active"
-    );
+    // ✅ نشطة فقط عبر المصدر الموحد — القضية المنتهية/المؤرشفة/الملغاة لا تولّد إطلاقًا
+    const activeCases = cases.filter((c) => {
+      const st = getCaseStatus(c);
+      return st === CASE_STATUS.ACTIVE || st === CASE_STATUS.PENDING || st === CASE_STATUS.EXECUTION;
+    });
 
     activeCases.forEach((c) => {
       const sessions = c.sessions || [];
@@ -43,18 +40,23 @@ export const generateNotifications = (cases, adminTasks = [], judgments = [], se
       const clientNames = c.clientNames || [];
       const opponentNames = c.opponentNames || [];
 
-      // فلترة الجلسات: استبعد المكتملة والملغاة واللي فيها قرار
+      // ✅ انتهاء القضية فعليًا: أحدث جلسة عليها حكم نهائي → لا جلسات متأخرة إطلاقًا
+      const sortedDesc = [...sessions]
+        .map((s) => ({ s, d: parseDate(s.date || s.nextSessionDate) }))
+        .filter((x) => x.d)
+        .sort((a, b) => b.d - a.d);
+      if (sortedDesc.length > 0 && sortedDesc[0].s.decisionType === "judgment") return;
+
+      // فلترة الجلسات القابلة للتنبيه
       const validSessions = sessions.filter((s) => {
-        if (s.decisionType && s.decisionType !== 'pending') return false;
+        if (s.decisionType && s.decisionType !== "pending") return false;
         if (s.decision && s.decision.trim() !== "") return false;
         if (s.status === "completed" || s.status === "مكتملة") return false;
         if (s.status === "cancelled" || s.status === "ملغاة") return false;
         return true;
       });
-
       if (!validSessions.length) return;
 
-      // 🆕 NEW: Check reminderHours — only notify if within reminder window
       const reminderMs = reminderHours * 60 * 60 * 1000;
 
       let closestLate = null;
@@ -63,16 +65,20 @@ export const generateNotifications = (cases, adminTasks = [], judgments = [], se
       validSessions.forEach((s) => {
         const sessionDate = parseDate(s.nextSessionDate || s.date);
         if (!sessionDate) return;
-
         sessionDate.setHours(0, 0, 0, 0);
-        const diffDays = Math.floor((sessionDate - now) / (1000 * 60 * 60 * 24));
 
-        // 🆕 NEW: Only include if past due OR within reminder window
         const diffMs = sessionDate - now;
-        const isPastDue = diffDays < 0;
-        const isWithinReminder = diffMs > 0 && diffMs <= reminderMs;
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-        if ((isPastDue || isWithinReminder) && diffDays > closestLateDiff) {
+        // ✅ لا إشعار إطلاقًا لجلسة فائتة منذ أكثر من 30 يومًا (أرشيف تاريخي)
+        if (diffDays < -LATE_WINDOW_DAYS) return;
+
+        // ✅ جلسة مستقبلية بعيدة: لا إشعار الآن (ستُنبه قبلها بـ reminderHours)
+        if (diffDays > 0) return;
+
+        // متأخرة فعلاً (اليوم أو أمس أو قبل)
+        const isPastDue = diffDays <= 0;
+        if (isPastDue && diffDays > closestLateDiff) {
           closestLateDiff = diffDays;
           closestLate = s;
         }
@@ -82,25 +88,30 @@ export const generateNotifications = (cases, adminTasks = [], judgments = [], se
 
       const sessionDateStr = closestLate.nextSessionDate || closestLate.date;
       const key = `${caseId}-late-${sessionDateStr}`;
-
       if (seen.has(key)) return;
       seen.add(key);
+
+      const daysLate = Math.max(0, Math.floor((now - parseDate(sessionDateStr)) / (1000 * 60 * 60 * 24)));
 
       notifications.push({
         id: key,
         type: "late",
         caseId,
         caseNumber,
+        caseCourt: court,   // ✅ الاسم الذي تقرأه الصفحة
         court,
         caseType,
         sessionDate: sessionDateStr,
+        daysLate,
         sessionRoll: closestLate.roll || "",
         sessionDecision: closestLate.decisionDetails || closestLate.decision || "",
         sessionDecisionType: closestLate.decisionType || "",
         sessionAction: closestLate.action || "",
         clientNames,
         opponentNames,
-        message: `⚠️ جلسة متأخرة: القضية رقم ${caseNumber} - ${court} - كانت بتاريخ ${sessionDateStr}`,
+        message: diffDaysLate(sessionDateStr, now)
+          ? `⚠️ جلسة متأخرة: القضية رقم ${caseNumber} - ${court} - كانت بتاريخ ${sessionDateStr}`
+          : `⏰ جلسة قادمة قريبًا: القضية رقم ${caseNumber} - ${court} - بتاريخ ${sessionDateStr}`,
       });
     });
   }
@@ -114,26 +125,26 @@ export const generateNotifications = (cases, adminTasks = [], judgments = [], se
 
       const dueDate = parseDate(task.dueDate);
       if (!dueDate) return;
-
       dueDate.setHours(0, 0, 0, 0);
-      if (dueDate >= now) return; // مش متأخرة
+      if (dueDate >= now) return;
 
       const caseId = task.caseId || "general";
       const key = `task-${task.id}`;
-
       if (seen.has(key)) return;
       seen.add(key);
 
-      const caseData = caseId !== "general"
-        ? cases.find((c) => c.id === caseId)
-        : null;
+      const caseData = caseId !== "general" ? cases.find((c) => c.id === caseId) : null;
+      // ✅ عمل مرتبط بقضية منتهية = لا يستحق إشعار تأخير
+      if (caseData) {
+        const st = getCaseStatus(caseData);
+        if (st === CASE_STATUS.CLOSED || st === CASE_STATUS.ARCHIVED || st === CASE_STATUS.CANCELLED) return;
+      }
 
       const caseNumber = caseData
         ? caseData.caseNumber || (caseData.caseSerial ? `${caseData.caseSerial}/${caseData.caseYear}` : "-")
         : task.caseNumber || "-";
       const court = caseData?.court || task.court || "";
       const clientNames = caseData?.clientNames || task.clientNames || [];
-
       const daysLate = Math.floor((now - dueDate) / (1000 * 60 * 60 * 24));
 
       notifications.push({
@@ -141,6 +152,7 @@ export const generateNotifications = (cases, adminTasks = [], judgments = [], se
         type: "admin_task",
         caseId,
         caseNumber,
+        caseCourt: court,
         court,
         caseType: caseData?.caseType || "",
         taskId: task.id,
@@ -155,22 +167,28 @@ export const generateNotifications = (cases, adminTasks = [], judgments = [], se
   }
 
   // ───────────────────────────────────────────────
-  // 3️⃣ الأحكام/الأوامر اللي تحتاج متابعة (judgment) 🟣
+  // 3️⃣ الأحكام التي تحتاج متابعة (judgment) 🟣
   // ───────────────────────────────────────────────
   if (caseStatusChange) {
     judgments.forEach((judgment) => {
       if (!judgment.needsFollowUp) return;
 
+      // ✅ انتهاء المتابعة: إذا حدد تاريخ انتهاء وفاته، لا إشعار
+      if (judgment.followUpDeadline) {
+        const deadline = parseDate(judgment.followUpDeadline);
+        if (deadline && deadline < now) return;
+      } else if (judgment.appealDeadline) {
+        // احتياطي: استخدام appealDeadline كموعد انتهاء إذا لم يُحدد followUpDeadline
+        const deadline = parseDate(judgment.appealDeadline);
+        if (deadline && deadline < now) return;
+      }
+
       const caseId = judgment.caseId || "general";
       const key = `judgment-${judgment.id}`;
-
       if (seen.has(key)) return;
       seen.add(key);
 
-      const caseData = caseId !== "general"
-        ? cases.find((c) => c.id === caseId)
-        : null;
-
+      const caseData = caseId !== "general" ? cases.find((c) => c.id === caseId) : null;
       const caseNumber = caseData
         ? caseData.caseNumber || (caseData.caseSerial ? `${caseData.caseSerial}/${caseData.caseYear}` : "-")
         : judgment.caseNumber || "-";
@@ -178,17 +196,16 @@ export const generateNotifications = (cases, adminTasks = [], judgments = [], se
       const clientNames = caseData?.clientNames || judgment.clientNames || [];
 
       const categoryLabel =
-        judgment.category === "preliminary"
-          ? "حكم تمهيدي"
-          : judgment.category === "order"
-          ? "أمر"
-          : "حكم";
+        judgment.category === "preliminary" ? "حكم تمهيدي"
+        : judgment.category === "order" ? "أمر"
+        : "حكم";
 
       notifications.push({
         id: key,
         type: "judgment",
         caseId,
         caseNumber,
+        caseCourt: court,
         court,
         caseType: caseData?.caseType || "",
         judgmentId: judgment.id,
@@ -202,9 +219,7 @@ export const generateNotifications = (cases, adminTasks = [], judgments = [], se
     });
   }
 
-  // ───────────────────────────────────────────────
-  // ✅ ترتيب: الأقدم أولاً (حسب التاريخ)
-  // ───────────────────────────────────────────────
+  // ── ترتيب: الأقدم أولاً ──
   notifications.sort((a, b) => {
     const getDate = (n) => {
       if (n.type === "late") return parseDate(n.sessionDate);
@@ -217,3 +232,10 @@ export const generateNotifications = (cases, adminTasks = [], judgments = [], se
 
   return notifications;
 };
+
+// هل التاريخ فائت؟ (لصياغة الرسالة)
+function diffDaysLate(dateStr, now) {
+  const d = parseDate(dateStr);
+  if (!d) return true;
+  return d < now;
+}

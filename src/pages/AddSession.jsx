@@ -167,6 +167,7 @@ export default function AddSession() {
           action: form.decision,
           notes: form.notes,
           litigationLevelId: form.litigationLevelId,  // ✅ ربط الجلسة بالدرجة
+          levelId: form.litigationLevelId,            // ✅ FIX: نفس القيمة بالاسم الموحّد levelId
           createdAt: new Date().toISOString(),
           createdBy: userData?.uid || null,
         }),

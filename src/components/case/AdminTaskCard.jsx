@@ -1,251 +1,196 @@
 import React from 'react';
 import { useTheme } from '../../context/ThemeContext.jsx';
-import { 
-  CheckCircle2, Circle, Clock, AlertCircle, 
+import {
+  CheckCircle2, Circle, Clock,
   Edit2, Trash2, User, Calendar, Tag, ArrowRight, FolderOpen
 } from 'lucide-react';
 
 const statusConfig = {
-  pending: {
-    label: 'معلقة',
-    icon: Circle,
-    color: 'var(--theme-accent-amber-main)',
-    bgColor: 'var(--theme-accent-amber-bg)',
-    borderColor: 'var(--theme-accent-amber-border)',
-  },
-  'in-progress': {
-    label: 'قيد التنفيذ',
-    icon: Clock,
-    color: 'var(--theme-accent-blue-light)',
-    bgColor: 'var(--theme-accent-blue-bg)',
-    borderColor: 'var(--theme-accent-blue-border)',
-  },
-  completed: {
-    label: 'منجزة',
-    icon: CheckCircle2,
-    color: 'var(--theme-accent-green-main)',
-    bgColor: 'var(--theme-accent-green-bg)',
-    borderColor: 'var(--theme-accent-green-border)',
-  },
-  overdue: {
-    label: 'متأخرة',
-    icon: AlertCircle,
-    color: 'var(--theme-accent-red-main)',
-    bgColor: 'var(--theme-accent-red-bg)',
-    borderColor: 'var(--theme-accent-red-border)',
-  },
+  pending:       { label: 'معلقة',      colorKey: 'amber',  icon: Circle },
+  'in-progress': { label: 'قيد التنفيذ', colorKey: 'blue',   icon: Clock },
+  completed:     { label: 'منجزة',      colorKey: 'green',  icon: CheckCircle2 },
 };
+
+const QUICK_STATUSES = [
+  { value: 'pending',     label: 'معلقة' },
+  { value: 'in-progress', label: 'قيد التنفيذ' },
+  { value: 'completed',   label: 'منجزة' },
+];
 
 const priorityConfig = {
-  high: { 
-    label: 'عالية', 
-    color: 'var(--theme-accent-red-main)', 
-    bg: 'var(--theme-accent-red-bg)',
-    border: 'var(--theme-accent-red-border)'
-  },
-  medium: { 
-    label: 'متوسطة', 
-    color: 'var(--theme-accent-amber-main)', 
-    bg: 'var(--theme-accent-amber-bg)',
-    border: 'var(--theme-accent-amber-border)'
-  },
-  low: { 
-    label: 'منخفضة', 
-    color: 'var(--theme-accent-green-main)', 
-    bg: 'var(--theme-accent-green-bg)',
-    border: 'var(--theme-accent-green-border)'
-  },
+  high:   { label: 'عالية',  colorKey: 'red' },
+  medium: { label: 'متوسطة', colorKey: 'amber' },
+  low:    { label: 'منخفضة', colorKey: 'green' },
 };
 
-export default function AdminTaskCard({ task, caseInfo, onEdit, onDelete, onToggleStatus }) {
+function QuickIcon({ value, colors }) {
+  if (value === 'completed') return <CheckCircle2 size={11} color={colors.accent.green.main} />;
+  if (value === 'in-progress') return <Clock size={11} color={colors.accent.blue.light} />;
+  return <Circle size={11} color={colors.accent.amber.main} />;
+}
+
+export default function AdminTaskCard({ task, caseInfo, onEdit, onDelete, onToggle, onStatusChange }) {
   const { theme } = useTheme();
   const { colors } = theme;
+  const A = colors.accent;
 
-  const status = statusConfig[task.status] || statusConfig.pending;
-  const StatusIcon = status.icon;
-  const priority = priorityConfig[task.priority] || priorityConfig.medium;
+  const statusKey = task.status === 'completed' ? 'completed' : task.status === 'in-progress' ? 'in-progress' : 'pending';
+  const status = statusConfig[statusKey];
+  const sc = A[status.colorKey]; // ألوان الحالة من الثيم
+  const pc = A[(priorityConfig[task.priority] || priorityConfig.medium).colorKey];
 
-  const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'completed';
-  const isCompleted = task.status === 'completed';
+  const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && statusKey !== 'completed';
+  const isCompleted = statusKey === 'completed';
 
-  const handleToggle = () => {
-    const newStatus = isCompleted ? 'pending' : 'completed';
-    onToggleStatus?.(task.id, newStatus);
+  const stop = (fn) => (e) => { e.stopPropagation(); fn?.(); };
+  const handleQuickStatus = (e, value) => {
+    e.stopPropagation();
+    if (value !== statusKey) onStatusChange?.(task.id, value);
   };
-
-  const handleEdit = () => {
-    onEdit?.(task);
-  };
-
-  const handleDelete = () => {
-    if (window.confirm('هل أنت متأكد من حذف هذا العمل الإداري؟')) {
-      onDelete?.(task.id);
-    }
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ar-EG', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
+  const formatDate = (d) => d ? new Date(d).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 
   return (
-    <div 
-      style={{
-        ...styles.card(colors),
-        borderRight: isOverdue ? `4px solid ${colors.accent.red.main}` : '4px solid transparent',
-        opacity: isCompleted ? 0.7 : 1,
-      }}
-    >
-      {/* Case Header */}
+    <div style={{
+      background: colors.bg.card,
+      border: `1px solid ${colors.border.default}`,
+      borderRadius: 12,
+      overflow: 'hidden',
+      marginBottom: 8,
+      borderRight: isOverdue ? `3px solid ${A.red.main}` : '3px solid transparent',
+      opacity: isCompleted ? 0.75 : 1,
+      transition: 'all 0.2s ease',
+    }}>
+      {/* ترويسة القضية — مضغوطة */}
       {caseInfo && (
-        <div style={styles.caseHeader(colors)}>
-          <FolderOpen size={14} color={colors.accent.blue.light} />
-          <span style={styles.caseTitle(colors)}>{caseInfo.title}</span>
-          {caseInfo.number && (
-            <span style={styles.caseNumber(colors)}>(رقم: {caseInfo.number})</span>
-          )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: colors.bg.page, borderBottom: `1px solid ${colors.border.default}` }}>
+          <FolderOpen size={12} color={A.blue.light} />
+          <span style={{ fontSize: 11, fontWeight: 600, color: A.blue.light, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '60%' }}>
+            {caseInfo.title}
+          </span>
+          <span style={{ fontSize: 10, color: colors.text.muted, whiteSpace: 'nowrap' }}>
+            (رقم: {caseInfo.number || '—'}{caseInfo.year ? ` · سنة ${caseInfo.year}` : ''})
+          </span>
+          <ArrowRight size={11} color={colors.text.muted} style={{ marginRight: 'auto' }} />
         </div>
       )}
       {task.caseId === 'general' && (
-        <div style={styles.caseHeader(colors)}>
-          <FolderOpen size={14} color={colors.text.muted} />
-          <span style={{ ...styles.caseTitle(colors), color: colors.text.muted }}>
-            عمل عام (غير مرتبط بقضية)
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: colors.bg.page, borderBottom: `1px solid ${colors.border.default}` }}>
+          <FolderOpen size={12} color={colors.text.muted} />
+          <span style={{ fontSize: 11, fontWeight: 600, color: colors.text.muted }}>عمل عام</span>
         </div>
       )}
 
-      <div style={styles.cardInner}>
-        {/* Top Row: Toggle + Title + Actions */}
-        <div style={styles.topRow}>
-          {/* Status Toggle */}
+      <div style={{ padding: '8px 12px 9px' }}>
+        {/* الصف 1: دائرة + العنوان + أولوية + أزرار */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
           <button
-            onClick={handleToggle}
+            onClick={stop(() => onToggle?.(task.id, isCompleted ? 'pending' : 'completed'))}
+            title={isCompleted ? 'إلغاء الإنجاز' : 'تأكيد الإنجاز يدويًا'}
             style={{
-              ...styles.toggleBtn,
-              background: isCompleted ? colors.accent.green.bg : colors.bg.hover,
+              flexShrink: 0, marginTop: 0, padding: 5, borderRadius: 7, border: 'none', cursor: 'pointer',
+              background: isCompleted ? A.green.bg : colors.bg.hover,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
-            title={isCompleted ? 'تحديد كمعلق' : 'تحديد كمنجز'}
           >
-            {isCompleted ? (
-              <CheckCircle2 size={22} color={colors.accent.green.main} strokeWidth={2.5} />
-            ) : (
-              <Circle size={22} color={colors.text.muted} strokeWidth={2} />
-            )}
+            {isCompleted
+              ? <CheckCircle2 size={18} color={A.green.main} strokeWidth={2.5} />
+              : <Circle size={18} color={isOverdue ? A.red.main : colors.text.muted} strokeWidth={2} />}
           </button>
 
-          {/* Title & Priority */}
-          <div style={styles.titleSection}>
-            <div style={styles.titleRow}>
-              <h4 style={{
-                ...styles.title,
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{
+                fontSize: 13, fontWeight: 600, lineHeight: 1.4, wordBreak: 'break-word',
                 textDecoration: isCompleted ? 'line-through' : 'none',
                 color: isCompleted ? colors.text.disabled : colors.text.primary,
               }}>
                 {task.title}
-              </h4>
+              </span>
               <span style={{
-                ...styles.priorityBadge,
-                background: priority.bg,
-                color: priority.color,
-                border: `1px solid ${priority.border}`,
+                padding: '1px 7px', borderRadius: 20, fontSize: 9, fontWeight: 700, flexShrink: 0,
+                background: pc.bg, color: pc.main, border: `1px solid ${pc.main}30`,
               }}>
-                {priority.label}
+                {(priorityConfig[task.priority] || priorityConfig.medium).label}
               </span>
             </div>
-
             {task.description && (
-              <p style={{
-                ...styles.description,
-                color: isCompleted ? colors.text.disabled : colors.text.muted,
-              }}>
+              <p style={{ fontSize: 11, margin: '2px 0 0 0', lineHeight: 1.4, wordBreak: 'break-word', color: isCompleted ? colors.text.disabled : colors.text.muted }}>
                 {task.description}
               </p>
             )}
           </div>
 
-          {/* Actions */}
-          <div style={styles.actions}>
+          <div style={{ display: 'flex', gap: 0, flexShrink: 0 }}>
             {onEdit && (
-              <button
-                onClick={handleEdit}
-                style={styles.actionBtn(colors)}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = colors.accent.blue.bg;
-                  e.currentTarget.style.color = colors.accent.blue.light;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = colors.text.muted;
-                }}
-                title="تعديل"
-              >
-                <Edit2 size={16} />
+              <button onClick={stop(() => onEdit(task))} title="تعديل" style={iconBtn(colors)}>
+                <Edit2 size={14} />
               </button>
             )}
             {onDelete && (
-              <button
-                onClick={handleDelete}
-                style={styles.actionBtn(colors)}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = colors.accent.red.bg;
-                  e.currentTarget.style.color = colors.accent.red.light;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = colors.text.muted;
-                }}
-                title="حذف"
-              >
-                <Trash2 size={16} />
+              <button onClick={stop(() => { if (window.confirm('حذف هذا العمل الإداري؟')) onDelete(task.id); })} title="حذف" style={iconBtn(colors)}>
+                <Trash2 size={14} />
               </button>
             )}
           </div>
         </div>
 
-        {/* Bottom Row: Meta Info */}
-        <div style={styles.metaRow}>
-          {/* Status Badge */}
-          <div style={{
-            ...styles.metaBadge,
-            background: status.bgColor,
-            border: `1px solid ${status.borderColor}`,
-          }}>
-            <StatusIcon size={13} color={status.color} strokeWidth={2.5} />
-            <span style={{ color: status.color, fontWeight: 600 }}>{status.label}</span>
-          </div>
-
-          {/* Due Date */}
-          {task.dueDate && (
-            <div style={{
-              ...styles.metaItem(colors),
-              color: isOverdue ? colors.accent.red.main : colors.text.muted,
+        {/* الصف 2: حالات سريعة + بيانات — في سطر واحد مضغوط */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6, marginRight: 33, flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
+          {/* الحالات السريعة = مؤشر الحالة الوحيد (لا شارة مكررة) */}
+          {onStatusChange ? (
+            <>
+              {QUICK_STATUSES.map((s) => {
+                const active = statusKey === s.value;
+                const c = A[statusConfig[s.value].colorKey];
+                return (
+                  <button key={s.value} onClick={(e) => handleQuickStatus(e, s.value)} style={{
+                    padding: '2px 9px', borderRadius: 20, fontSize: 10, fontWeight: 700,
+                    fontFamily: 'inherit', cursor: 'pointer', transition: 'all 0.15s ease',
+                    border: `1px solid ${active ? c.main : colors.border.default}`,
+                    background: active ? c.bg : 'transparent',
+                    color: active ? c.main : colors.text.muted,
+                    display: 'flex', alignItems: 'center', gap: 3,
+                  }}>
+                    {active && <QuickIcon value={s.value} colors={colors} />}
+                    {s.label}
+                  </button>
+                );
+              })}
+            </>
+          ) : (
+            /* داخل صفحة القضية (بلا onStatusChange): شارة الحالة العادية */
+            <span style={{
+              display: 'flex', alignItems: 'center', gap: 4, padding: '2px 9px', borderRadius: 20,
+              fontSize: 10, fontWeight: 700, background: sc.bg, border: `1px solid ${sc.main}30`, color: sc.main,
             }}>
-              <Calendar size={13} color={isOverdue ? colors.accent.red.main : colors.text.muted} />
-              <span>{formatDate(task.dueDate)}</span>
-              {isOverdue && <span style={styles.overdueLabel(colors)}>متأخر</span>}
-            </div>
+              <status.icon size={11} strokeWidth={2.5} />
+              {status.label}
+            </span>
           )}
 
-          {/* Assigned To */}
+          {isOverdue && (
+            <span style={{ background: A.red.bg, color: A.red.main, padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>
+              متأخر — لم يُنجز
+            </span>
+          )}
+
+          {task.dueDate && (
+            <span style={metaChip(colors, isOverdue ? A.red.main : colors.text.muted)}>
+              <Calendar size={11} color={isOverdue ? A.red.main : colors.text.muted} />
+              {formatDate(task.dueDate)}
+            </span>
+          )}
           {task.assignedTo && (
-            <div style={styles.metaItem(colors)}>
-              <User size={13} color={colors.text.muted} />
-              <span>{task.assignedTo}</span>
-            </div>
+            <span style={metaChip(colors, colors.text.muted)}>
+              <User size={11} color={colors.text.muted} />
+              {task.assignedTo}
+            </span>
           )}
-
-          {/* Category */}
           {task.category && (
-            <div style={styles.metaItem(colors)}>
-              <Tag size={13} color={colors.text.muted} />
-              <span>{task.category}</span>
-            </div>
+            <span style={metaChip(colors, colors.text.muted)}>
+              <Tag size={11} color={colors.text.muted} />
+              {task.category}
+            </span>
           )}
         </div>
       </div>
@@ -253,138 +198,13 @@ export default function AdminTaskCard({ task, caseInfo, onEdit, onDelete, onTogg
   );
 }
 
-// ✅ Styles factory — بتستقبل colors من الثيم
-const styles = {
-  card: (colors) => ({
-    background: colors.bg.card,
-    border: `1px solid ${colors.border.default}`,
-    borderRadius: '16px',
-    overflow: 'hidden',
-    transition: 'all 0.2s ease',
-    marginBottom: '12px',
-  }),
-  caseHeader: (colors) => ({
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '10px 20px',
-    background: colors.bg.page,
-    borderBottom: `1px solid ${colors.border.default}`,
-  }),
-  caseTitle: (colors) => ({
-    fontSize: '13px',
-    fontWeight: '600',
-    color: colors.accent.blue.light,
-  }),
-  caseNumber: (colors) => ({
-    fontSize: '12px',
-    color: colors.text.muted,
-    fontWeight: '500',
-  }),
-  cardInner: {
-    padding: '16px 20px',
-  },
-  topRow: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '14px',
-  },
-  toggleBtn: {
-    flexShrink: 0,
-    marginTop: '2px',
-    padding: '8px',
-    borderRadius: '10px',
-    border: 'none',
-    background: 'none',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  titleSection: {
-    flex: 1,
-    minWidth: 0,
-  },
-  titleRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    flexWrap: 'wrap',
-    marginBottom: '6px',
-  },
-  title: {
-    fontSize: '15px',
-    fontWeight: '600',
-    margin: 0,
-    lineHeight: 1.4,
-    wordBreak: 'break-word',
-  },
-  priorityBadge: {
-    padding: '3px 10px',
-    borderRadius: '20px',
-    fontSize: '11px',
-    fontWeight: '700',
-    flexShrink: 0,
-  },
-  description: {
-    fontSize: '13px',
-    margin: '0 0 10px 0',
-    lineHeight: 1.5,
-    wordBreak: 'break-word',
-  },
-  actions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    flexShrink: 0,
-  },
-  actionBtn: (colors) => ({
-    padding: '8px',
-    borderRadius: '10px',
-    border: 'none',
-    background: 'transparent',
-    color: colors.text.muted,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  }),
-  metaRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    marginTop: '12px',
-    marginRight: '46px',
-    flexWrap: 'wrap',
-  },
-  metaBadge: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '5px 12px',
-    borderRadius: '20px',
-    fontSize: '12px',
-    fontWeight: '600',
-  },
-  metaItem: (colors) => ({
-    display: 'flex',
-    alignItems: 'center',
-    gap: '5px',
-    fontSize: '12px',
-    color: colors.text.muted,
-    padding: '4px 10px',
-    background: colors.bg.hover,
-    borderRadius: '8px',
-  }),
-  overdueLabel: (colors) => ({
-    background: colors.accent.red.bg,
-    color: colors.accent.red.main,
-    padding: '2px 8px',
-    borderRadius: '6px',
-    fontSize: '11px',
-    fontWeight: '700',
-    marginRight: '4px',
-  }),
-};
+const iconBtn = (colors) => ({
+  padding: 5, borderRadius: 7, border: 'none', background: 'transparent',
+  color: colors.text.muted, cursor: 'pointer',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+});
+
+const metaChip = (colors, color) => ({
+  display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color,
+  padding: '2px 7px', background: colors.bg.hover, borderRadius: 6,
+});

@@ -1,10 +1,9 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import {
   collection,
-  onSnapshot,
   query,
   where,
-  orderBy,
   doc,
   updateDoc,
   writeBatch,
@@ -13,18 +12,17 @@ import {
 } from "firebase/firestore";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebaseDb";
-import { generateNotifications } from "../utils/generateNotifications";
 
 export default function useNotifications() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const { user, userData } = useAuth();
+  const location = useLocation();
 
   const currentUserId = user?.uid;
   const officeId = userData?.officeId;
 
-  // 🆕 NEW: Notification settings from office doc
   const [notifSettings, setNotifSettings] = useState({
     sessionReminder: true,
     taskAssigned: true,
@@ -33,106 +31,82 @@ export default function useNotifications() {
     reminderHours: 24,
   });
 
-  // 🆕 NEW: Load notification settings from Firestore
+  // تحميل إعدادات الإشعارات من مستند المكتب
   useEffect(() => {
     if (!officeId) return;
     let cancelled = false;
-
     const loadSettings = async () => {
       try {
         const snap = await getDoc(doc(db, "offices", officeId));
-        if (!cancelled && snap.exists()) {
-          const data = snap.data();
-          if (data.notifications) {
-            setNotifSettings(prev => ({ ...prev, ...data.notifications }));
-          }
+        if (!cancelled && snap.exists() && snap.data().notifications) {
+          setNotifSettings((prev) => ({ ...prev, ...snap.data().notifications }));
         }
       } catch (e) {
         console.warn("Failed to load notification settings:", e.message);
       }
     };
-
     loadSettings();
     return () => { cancelled = true; };
   }, [officeId]);
 
-  // ✅ جلب الإشعارات من Firestore
-  useEffect(() => {
+  // ✅ الجلب الوحيد: getDocs — بلا مستمع دائم (لا يثقل النظام)
+  const fetchNotifications = useCallback(async (force = false) => {
     if (!officeId) {
       setNotifications([]);
       setLoading(false);
       return;
     }
 
-    const q = query(
-      collection(db, "notifications"),
-      where("officeId", "==", officeId),
-      orderBy("createdAt", "desc")
-    );
-
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
+    try {
+      const q = query(
+        collection(db, "notifications"),
+        where("officeId", "==", officeId)
+      );
+      const snap = await getDocs(q);
+      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      // ✅ ترتيب محلي: الأحدث أولاً — يتحمل المستندات القديمة بلا createdAt
+      data.sort((a, b) => {
+        const ta = a.createdAt?.toMillis?.() || (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+        const tb = b.createdAt?.toMillis?.() || (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+        return tb - ta;
+      });
       setNotifications(data);
+    } catch (e) {
+      console.error("Error fetching notifications:", e);
+    } finally {
       setLoading(false);
-    });
-
-    return () => unsub();
+      setRefreshing(false);
+    }
   }, [officeId]);
 
-  // ✅ توليد الإشعارات في الوقت الفعلي — مع مراعاة الإعدادات
+  // ✅ تحديث تلقائي عند الدخول للصفحة: يولّد من المصدر ثم يجلب —
+  //    في كل مرة تدخل فيها لصفحة الإشعارات (حتى لو خرجت وسجلت قرارًا وعدت)
+  useEffect(() => {
+    if (location.pathname === "/notifications") {
+      refreshNotifications().catch(() => fetchNotifications(true));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  // ✅ زر التحديث: إعادة التوليد من المصدر ثم إعادة الجلب — إجباري
   const refreshNotifications = useCallback(async () => {
     if (!officeId) return;
-
     setRefreshing(true);
     try {
-      // 1. جلب القضايا
-      const casesQuery = query(
-        collection(db, "cases"),
-        where("officeId", "==", officeId)
-      );
-      const casesSnap = await getDocs(casesQuery);
-      const cases = casesSnap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-
-      // 2. جلب الأعمال الإدارية
-      const tasksQuery = query(
-        collection(db, "adminTasks"),
-        where("officeId", "==", officeId)
-      );
-      const tasksSnap = await getDocs(tasksQuery);
-      const adminTasks = tasksSnap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-
-      // 3. جلب الأحكام
-      const judgmentsQuery = query(
-        collection(db, "judgments"),
-        where("officeId", "==", officeId)
-      );
-      const judgmentsSnap = await getDocs(judgmentsQuery);
-      const judgments = judgmentsSnap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-
-      // 🆕 NEW: Pass notification settings to generator
-      const generatedNotifications = generateNotifications(
-        cases,
-        adminTasks,
-        judgments,
-        notifSettings  // ← جديد
-      );
-
-      // 5. مزامنة مع Firestore
       const { syncNotifications } = await import("../utils/syncNotifications");
-      await syncNotifications(cases, adminTasks, judgments, officeId);
+      const casesSnap = await getDocs(query(collection(db, "cases"), where("officeId", "==", officeId)));
+      const tasksSnap = await getDocs(query(collection(db, "adminTasks"), where("officeId", "==", officeId)));
+      const judgmentsSnap = await getDocs(query(collection(db, "judgments"), where("officeId", "==", officeId)));
 
+      await syncNotifications(
+        casesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+        tasksSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+        judgmentsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+        officeId
+      );
+
+      // إجبار إعادة الجلب بعد التوليد
+      await fetchNotifications(true);
       console.log("✅ Notifications refreshed successfully!");
     } catch (err) {
       console.error("❌ Error refreshing notifications:", err);
@@ -140,9 +114,9 @@ export default function useNotifications() {
     } finally {
       setRefreshing(false);
     }
-  }, [officeId, notifSettings]);
+  }, [officeId, fetchNotifications]);
 
-  // ✅ isReadBy: كل مستخدم لحاله
+  // ── اشتقاقات ──
   const unreadCount = notifications.filter((n) => {
     const readBy = n.isReadBy || {};
     return !readBy[currentUserId];
@@ -150,7 +124,6 @@ export default function useNotifications() {
 
   const hasNotifications = unreadCount > 0;
 
-  // ✅ عدد كل نوع
   const countsByType = useMemo(() => {
     const counts = { late: 0, admin_task: 0, judgment: 0, total: 0 };
     notifications.forEach((n) => {
@@ -160,12 +133,18 @@ export default function useNotifications() {
     return counts;
   }, [notifications]);
 
+  // ✅ قراءة فردية/جماعية بنظام isReadBy لكل مستخدم
   const markAsRead = async (id) => {
     if (!currentUserId) return;
     try {
       await updateDoc(doc(db, "notifications", id), {
         [`isReadBy.${currentUserId}`]: true,
       });
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.id === id ? { ...n, isReadBy: { ...(n.isReadBy || {}), [currentUserId]: true } } : n
+        )
+      );
     } catch (err) {
       console.error("Error marking as read:", err);
     }
@@ -173,12 +152,8 @@ export default function useNotifications() {
 
   const markAllAsRead = async () => {
     if (!currentUserId) return;
-    const unread = notifications.filter((n) => {
-      const readBy = n.isReadBy || {};
-      return !readBy[currentUserId];
-    });
+    const unread = notifications.filter((n) => !(n.isReadBy || {})[currentUserId]);
     if (unread.length === 0) return;
-
     const batch = writeBatch(db);
     unread.forEach((n) => {
       batch.update(doc(db, "notifications", n.id), {
@@ -186,7 +161,15 @@ export default function useNotifications() {
       });
     });
     await batch.commit();
+    setNotifications((prev) =>
+      prev.map((n) => ({ ...n, isReadBy: { ...(n.isReadBy || {}), [currentUserId]: true } }))
+    );
   };
+
+  // ✅ حذف إشعار من القائمة المحلية (بعد الحذف من Firestore)
+  const removeNotification = useCallback((id) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
 
   return {
     notifications,
@@ -199,7 +182,8 @@ export default function useNotifications() {
     countsByType,
     markAsRead,
     markAllAsRead,
+    removeNotification,
     refreshNotifications,
-    notifSettings,  // 🆕 NEW: expose settings
+    notifSettings,
   };
 }

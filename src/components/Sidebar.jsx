@@ -48,76 +48,14 @@ export default function Sidebar({ open, setOpen, isMobile }) {
   // 🆕 Multi-Tenant: Chat unread count (per-office isolation)
   const [unreadChats, setUnreadChats] = useState(0);
 
-  // 🆕 Listen for shared rooms and count unread messages (multi-tenant scoped)
+  // ✅ إيقاف مؤقت لمستمع رسائل الجذر — سبب مزدوج:
+  // 1) الخصوصية: قراءة sharedMessages بقاعدة list مع عضوية صارمة مستحيلة
+  //    في Firestore (أي قاعدة تعتمد resource.data تُرفض في استعلام list)
+  // 2) نظافة الكونسول: كان يرمي "Missing or insufficient permissions"
+  // 🔄 سيُعاد تفعيل الشارة بعد ترحيل الرسائل إلى
+  //    subcollection: sharedRooms/{roomId}/messages (العضوية من المسار تعمل مع list)
   useEffect(() => {
-    if (!userData?.uid || !userData?.officeId) {
-      setUnreadChats(0);
-      return;
-    }
-
-    let unsubscribes = [];
-    let counts = {};
-    let isActive = true;
-
-    const loadFirebase = async () => {
-      const { db } = await import("../firebaseDb");
-      const { collection, query, where, onSnapshot, getDocs } = await import("firebase/firestore");
-
-      // Get shared rooms for this office (multi-tenant isolation)
-      const qA = query(
-        collection(db, "sharedRooms"),
-        where("officeA", "==", userData.officeId)
-      );
-      const qB = query(
-        collection(db, "sharedRooms"),
-        where("officeB", "==", userData.officeId)
-      );
-
-      const [snapA, snapB] = await Promise.all([getDocs(qA), getDocs(qB)]);
-      const roomIds = [...new Set([
-        ...snapA.docs.map(d => d.id),
-        ...snapB.docs.map(d => d.id)
-      ])];
-
-      if (roomIds.length === 0) {
-        if (isActive) setUnreadChats(0);
-        return;
-      }
-
-      // Listen for unread messages in each room
-      roomIds.forEach((roomId) => {
-        const q = query(
-          collection(db, "sharedMessages"),
-          where("roomId", "==", roomId),
-          where("senderId", "!=", userData.uid)
-        );
-
-        const unsub = onSnapshot(q, (snap) => {
-          let roomUnread = 0;
-          snap.docs.forEach((docSnap) => {
-            const msg = docSnap.data();
-            // Multi-tenant: only count if not seen by current user
-            if (!msg.seenBy?.includes(userData.uid)) {
-              roomUnread++;
-            }
-          });
-          counts[roomId] = roomUnread;
-
-          // Recalculate total
-          const totalUnread = Object.values(counts).reduce((sum, count) => sum + count, 0);
-          if (isActive) setUnreadChats(totalUnread);
-        }, (err) => console.error("Messages listener error:", err));
-
-        unsubscribes.push(unsub);
-      });
-    };
-
-    loadFirebase();
-
-    return () => {
-      isActive = false;
-      unsubscribes.forEach(unsub => unsub());
-    };
+    setUnreadChats(0);
   }, [userData?.uid, userData?.officeId]);
 
   // 🚨 لا تظهر Sidebar على الصفحات العامة
