@@ -167,6 +167,7 @@ export default function AuthPage({ initialTab = "email", initialMode = "login" }
           email: cleanMail,
           role: "admin",
           officeId,
+          joinMethod: "email",        // ✅ التعديل 1: إنشاء مكتب بالبريد
           emailVerified: false,
           createdAt: Timestamp.now(),
         });
@@ -188,6 +189,7 @@ export default function AuthPage({ initialTab = "email", initialMode = "login" }
           email: cleanMail,
           role: "client",
           officeId: snap.docs[0].id,
+          joinMethod: "email",        // ✅ التعديل 2: الانضمام بالبريد
           emailVerified: false,
           createdAt: Timestamp.now(),
         });
@@ -306,6 +308,7 @@ export default function AuthPage({ initialTab = "email", initialMode = "login" }
           phoneNumber: phoneUser.phoneNumber,
           role: "admin",
           officeId,
+          joinMethod: "phone",        // ✅ التعديل 3: إنشاء مكتب بالهاتف
           emailVerified: true,
           createdAt: Timestamp.now(),
         });
@@ -323,6 +326,7 @@ export default function AuthPage({ initialTab = "email", initialMode = "login" }
           phoneNumber: phoneUser.phoneNumber,
           role: "client",
           officeId: snap.docs[0].id,
+          joinMethod: "phone",        // ✅ التعديل 4: الانضمام بالهاتف
           emailVerified: true,
           createdAt: Timestamp.now(),
         });

@@ -39,7 +39,6 @@ export default function Topbar({ open, setOpen }) {
     <div style={styles.topbar}>
       {/* جهة اليمين */}
       <div style={styles.left}>
-        {/* ✅ زر القائمة يظهر في كل الصفحات (بما فيها الدردشة) */}
         <button onClick={() => setOpen(!open)} style={styles.menuBtn}>
           <FaBars size={20} />
         </button>
@@ -48,7 +47,7 @@ export default function Topbar({ open, setOpen }) {
 
       {/* جهة اليسار */}
       <div style={styles.right}>
-        {/* ✅ زرار المكتب — رمز فقط */}
+        {/* زرار المكتب */}
         <button 
           onClick={() => navigate("/office")} 
           style={styles.iconBtn}
@@ -57,11 +56,15 @@ export default function Topbar({ open, setOpen }) {
           <FaBuilding size={18} />
         </button>
 
-        {/* اسم المستخدم */}
-        <div style={styles.userName}>
-          <FaUserCircle size={16} style={{ marginLeft: "6px" }} />
+        {/* ✅ اسم المستخدم — الآن زرار يفتح البيانات الشخصية */}
+        <button 
+          onClick={() => navigate("/profile")} 
+          style={styles.userNameBtn}
+          title="البيانات الشخصية"
+        >
+          <FaUserCircle size={16} />
           {!isMobile && getUserDisplayName()}
-        </div>
+        </button>
 
         {/* Role badge */}
         {!isMobile && (
@@ -128,7 +131,8 @@ const styles = {
     transition: "all 0.2s",
   },
 
-  userName: { 
+  // ✅ زرار الاسم — نفس شكل القديم بس button مع cursor
+  userNameBtn: { 
     display: "flex",
     alignItems: "center",
     background: "#f8fafc",
@@ -138,7 +142,10 @@ const styles = {
     fontSize: "13px",
     fontWeight: "500",
     color: "#1e293b",
-    gap: "4px",
+    gap: "6px",
+    cursor: "pointer",
+    transition: "all 0.2s",
+    fontFamily: "inherit",
   },
 
   divider: { width: "1px", height: "20px", background: "#e2e8f0" },

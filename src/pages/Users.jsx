@@ -45,7 +45,17 @@ export default function Users() {
 
         if (cancelled) return;
 
-        setUsers(usersSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        const allUsers = usersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+        // ✅ إظهار المنضمين بالبريد الإلكتروني فقط
+        // (joinMethod للمستخدمين الجدد + وجود بريد فعلي للمستخدمين الحاليين)
+        const emailOnlyUsers = allUsers.filter(
+          (u) =>
+            u.joinMethod === "email" ||
+            (u.email && u.email.trim() !== "")
+        );
+
+        setUsers(emailOnlyUsers);
         setOffice(officeSnap.exists() ? officeSnap.data() : null);
       } catch (error) {
         console.error("Fetch Users Error:", error);
