@@ -17,9 +17,21 @@ import {
 } from "firebase/firestore";
 
 import { db } from "../firebaseDb";
+import { buildCaseNotificationSummary } from "../utils/caseNotificationSummary";
 
 const LEVELS_COL = "litigation_levels";
 const CASES_COL = "cases";
+
+function buildSummaryUpdate(caseId, caseData, overrides = {}) {
+  return {
+    ...buildCaseNotificationSummary({
+      id: caseId,
+      ...caseData,
+      ...overrides,
+    }),
+    updatedAt: serverTimestamp(),
+  };
+}
 
 /**
  * التحقق من وجود المستند وانتمائه للمكتب الحالي.
@@ -96,6 +108,9 @@ export async function createInitialLitigationLevel(
     activeLevelId: levelRef.id,
     currentLevel: levelData.levelName ?? levelData.name ?? "",
     currentStatus: levelData.status ?? "active",
+    notificationSummary: buildSummaryUpdate(caseId, caseResult.data, {
+      currentStatus: levelData.status ?? "active",
+    }),
     updatedAt: serverTimestamp(),
   });
 
@@ -169,6 +184,9 @@ export async function createNextLitigationLevel(
       newLevelData.name ??
       "",
     currentStatus: newLevelData.status ?? "active",
+    notificationSummary: buildSummaryUpdate(caseId, caseResult.data, {
+      currentStatus: newLevelData.status ?? "active",
+    }),
     updatedAt: serverTimestamp(),
   });
 

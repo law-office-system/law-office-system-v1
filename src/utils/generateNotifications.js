@@ -5,12 +5,13 @@ import { getCaseStatus, CASE_STATUS } from "../constants/caseStatusUnified";
 // ✅ نافذة الالتقاط: جلسة فائتة أقدم من هذا الحد = أرشيف تاريخي، لا إشعار
 const LATE_WINDOW_DAYS = 30;
 
-export const generateNotifications = (cases, adminTasks = [], judgments = [], settings = {}) => {
+export const generateNotifications = (cases = [], adminTasks = [], judgments = [], settings = {}) => {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
 
   const notifications = [];
   const seen = new Set();
+  const casesById = new Map(cases.map((caseItem) => [caseItem.id, caseItem]));
 
   const {
     sessionReminder = true,
@@ -56,8 +57,6 @@ export const generateNotifications = (cases, adminTasks = [], judgments = [], se
         return true;
       });
       if (!validSessions.length) return;
-
-      const reminderMs = reminderHours * 60 * 60 * 1000;
 
       let closestLate = null;
       let closestLateDiff = -Infinity;
@@ -133,7 +132,7 @@ export const generateNotifications = (cases, adminTasks = [], judgments = [], se
       if (seen.has(key)) return;
       seen.add(key);
 
-      const caseData = caseId !== "general" ? cases.find((c) => c.id === caseId) : null;
+      const caseData = caseId !== "general" ? casesById.get(caseId) : null;
       // ✅ عمل مرتبط بقضية منتهية = لا يستحق إشعار تأخير
       if (caseData) {
         const st = getCaseStatus(caseData);
@@ -188,7 +187,7 @@ export const generateNotifications = (cases, adminTasks = [], judgments = [], se
       if (seen.has(key)) return;
       seen.add(key);
 
-      const caseData = caseId !== "general" ? cases.find((c) => c.id === caseId) : null;
+      const caseData = caseId !== "general" ? casesById.get(caseId) : null;
       const caseNumber = caseData
         ? caseData.caseNumber || (caseData.caseSerial ? `${caseData.caseSerial}/${caseData.caseYear}` : "-")
         : judgment.caseNumber || "-";

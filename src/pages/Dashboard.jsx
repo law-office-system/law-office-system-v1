@@ -67,30 +67,33 @@ function useDashboardStyles(theme) {
       filters: { display: "flex", gap: 8, flexWrap: "wrap" },
       filterBtn: { ...theme.button.secondary, borderRadius: radius.sm },
       activeFilter: { ...theme.button.base, background: A.bg, color: A.dark, border: `1px solid ${A.main}`, borderRadius: radius.sm, boxShadow: shadows.glow(A.main) },
-      grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 },
-      card: { ...theme.card, overflow: "hidden", cursor: "pointer", boxShadow: shadows.sm, transition: transitions.slow, position: "relative" },
+      grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16, alignItems: "stretch" },
+      card: { ...theme.card, overflow: "hidden", cursor: "pointer", boxShadow: shadows.sm, transition: transitions.slow, position: "relative", display: "flex", flexDirection: "column", height: "100%", minWidth: 0 },
       cardUrgent: { border: `2px solid ${cs.urgent.border}`, boxShadow: `0 4px 20px ${cs.urgent.text}14` },
       cardTopBar: { height: 4, transition: "background 0.3s ease" },
-      cardContent: { padding: 20 },
-      cardHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12, flexWrap: "wrap", gap: 8 },
-      caseNumber: { margin: 0, fontSize: 16, fontWeight: 700, color: c.text.primary },
-      levelChip: { ...statusBadge({ bg: A.bg, text: A.main, border: `${A.main}30` }), fontSize: 12, fontWeight: 500, marginRight: 8 },
+      cardContent: { padding: 20, display: "flex", flexDirection: "column", flex: 1, minWidth: 0, textAlign: "right", direction: "rtl" },
+      cardHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "nowrap", gap: 10, width: "100%", minHeight: 32 },
+      caseNumber: { margin: 0, fontSize: 16, fontWeight: 700, color: c.text.primary, flex: 1, minWidth: 0, lineHeight: 1.7, overflowWrap: "anywhere", textAlign: "right" },
+      levelChip: { ...statusBadge({ bg: A.bg, text: A.main, border: `${A.main}30` }), display: "inline-flex", fontSize: 12, fontWeight: 500, marginRight: 8, whiteSpace: "nowrap" },
       urgentBanner: { display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: cs.urgent.bg, borderRadius: radius.sm, marginBottom: 12, color: cs.urgent.text, fontSize: 13, fontWeight: 700, border: `1px solid ${cs.urgent.border}` },
-      caseInfo: { marginBottom: 12 },
-      infoRow: { display: "flex", alignItems: "center", gap: 8, padding: "6px 0", fontSize: 14 },
-      infoIcon: { fontSize: 16, opacity: 0.7 },
-      infoLabel: { color: c.text.muted, fontWeight: 500, minWidth: 60 },
-      infoValue: { color: c.text.primary, fontWeight: 600 },
-      datesBox: { background: c.bg.hover, borderRadius: radius.sm, padding: 12, marginBottom: 16, border: `1px solid ${c.border.default}` },
-      dateRow: { display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 13 },
+      caseInfo: { marginBottom: 14, display: "flex", flexDirection: "column", gap: 2, width: "100%" },
+      infoRow: { display: "grid", gridTemplateColumns: "20px 64px minmax(0, 1fr)", alignItems: "start", columnGap: 8, padding: "5px 0", fontSize: 14, width: "100%" },
+      infoIcon: { fontSize: 16, opacity: 0.7, lineHeight: 1.7, textAlign: "center" },
+      infoLabel: { color: c.text.muted, fontWeight: 500, minWidth: 0, whiteSpace: "nowrap", lineHeight: 1.7 },
+      infoValue: { color: c.text.primary, fontWeight: 600, minWidth: 0, lineHeight: 1.7, overflowWrap: "anywhere", textAlign: "right" },
+      datesBox: { background: c.bg.hover, borderRadius: radius.sm, padding: 12, marginBottom: 16, border: `1px solid ${c.border.default}`, width: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 4 },
+      dateRow: { display: "flex", alignItems: "flex-start", gap: 8, padding: "5px 0", fontSize: 13, width: "100%" },
       dateRowUrgent: { background: cs.urgent.bg, margin: "-4px -8px", padding: 8, borderRadius: 6, border: `1px solid ${cs.urgent.border}` },
       dateRowPast: { opacity: 0.8 },
-      dateIcon: { fontSize: 14, opacity: 0.6 },
-      dateLabel: { color: c.text.muted, fontWeight: 500, minWidth: 55, flexShrink: 0 },
-      dateValue: { color: c.text.primary, fontWeight: 600, flex: 1, minWidth: 0, overflowWrap: "anywhere", lineHeight: 1.6 },
-      cardActions: { display: "flex", gap: 8, paddingTop: 12, borderTop: `1px solid ${c.border.default}` },
-      viewBtn: { ...theme.button.base, flex: 1, background: c.bg.card, color: c.text.primary, border: `1px solid ${c.border.default}` },
-      editBtn: { ...theme.button.secondary, flex: 1 },
+      dateIcon: { fontSize: 14, opacity: 0.6, flex: "0 0 18px", lineHeight: 1.8, textAlign: "center" },
+      dateLabel: { color: c.text.muted, fontWeight: 500, flexShrink: 0, lineHeight: 1.8, whiteSpace: "nowrap" },
+      dateValue: { color: c.text.primary, fontWeight: 600, minWidth: 0, overflowWrap: "anywhere", lineHeight: 1.8, fontVariantNumeric: "tabular-nums" },
+      dateContent: { flex: 1, minWidth: 0 },
+      datePrimary: { display: "flex", alignItems: "baseline", gap: 4, flexWrap: "wrap", width: "100%" },
+      dateTitle: { color: c.text.primary, fontWeight: 500, lineHeight: 1.65, marginTop: 2, overflowWrap: "anywhere", textAlign: "right" },
+      cardActions: { display: "flex", gap: 8, paddingTop: 12, borderTop: `1px solid ${c.border.default}`, marginTop: "auto", width: "100%" },
+      viewBtn: { ...theme.button.base, flex: 1, background: c.bg.card, color: c.text.primary, border: `1px solid ${c.border.default}`, whiteSpace: "nowrap", minHeight: 40 },
+      editBtn: { ...theme.button.secondary, flex: 1, whiteSpace: "nowrap", minHeight: 40 },
       emptyState: { textAlign: "center", padding: "80px 20px", color: c.text.muted },
       toast: { position: "fixed", bottom: 24, right: 24, background: c.bg.card, color: c.text.primary, padding: "16px 20px", borderRadius: radius.lg, boxShadow: shadows.md, zIndex: 1000, display: "flex", alignItems: "center", gap: 12, maxWidth: 400, border: `1px solid ${A.main}30`, animation: "slideIn 0.4s ease" },
       closeToast: { background: "transparent", border: "none", color: c.text.muted, cursor: "pointer", fontWeight: "bold", fontSize: 16, marginRight: "auto" },
@@ -216,7 +219,7 @@ export default function Dashboard() {
       [CASE_STATUS.CLOSED]:    { label: "منتهية", ...s.cs.closed },
     };
     const x = map[normalizeStatus(status)] || map[CASE_STATUS.ACTIVE];
-    return <span style={s.statusBadge(x)}>{x.label}</span>;
+    return <span style={{ ...s.statusBadge(x), flexShrink: 0 }}>{x.label}</span>;
   }, [normalizeStatus, s]);
 
   // ── useEffects ──
@@ -557,7 +560,7 @@ export default function Dashboard() {
       </div>
 
       {/* شبكة القضايا */}
-      <div style={s.grid}>
+      <div className="dashboard-grid" style={s.grid}>
         {sortedCases.map(c => {
           const upcomingSession = getUpcomingSession(c.sessions);
           const upcoming = upcomingSession?.parsedDate || null;
@@ -574,7 +577,7 @@ export default function Dashboard() {
               onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.boxShadow = theme.shadows.md; }}
               onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = theme.shadows.sm; }}>
               <div style={{ ...s.cardTopBar, background: urgent ? s.cs.urgent.text : theme.currentAccent.main }} />
-              <div style={s.cardContent}>
+              <div className="dashboard-case-content" style={s.cardContent}>
                 <div style={s.cardHeader}>
                   <h3 style={s.caseNumber}>
                     {Icons.gavel} ق رقم: {c.caseSerial || c.caseNumber || lv.caseNumber || "-"} / {c.caseYear || lv.caseYear || "-"}
@@ -590,10 +593,10 @@ export default function Dashboard() {
                 <div style={s.caseInfo}>
                   <Row s={s} icon={Icons.person} label="الموكل" value={clientNames || "..."} />
                   <Row s={s} icon={Icons.building} label="المحكمة" value={c.court || lv.court || "-"} />
-                  {(c.circuit || lv.circuit) && <Row s={s} icon="⚡" label="الدائرة" value={c.circuit || lv.circuit} />}
+                  <Row s={s} icon="⚡" label="الدائرة" value={c.circuit || lv.circuit || "-"} />
                 </div>
                 <div style={s.datesBox}>
-                  <DateRow s={s} icon={Icons.calendar} label="الجلسة القادمة" date={upcoming} title={upcomingTitle} urgent={urgent} inlineLabel />
+                  <DateRow s={s} icon={Icons.calendar} label="الجلسة القادمة" date={upcoming} title={upcomingTitle} urgent={urgent} />
                   {previous && <DateRow s={s} icon={Icons.clock} label="الجلسة السابقة" date={previous} past />}
                 </div>
                 <div style={s.cardActions}>
@@ -644,19 +647,25 @@ function Row({ s, icon, label, value }) {
   );
 }
 
-function DateRow({ s, icon, label, date, title, urgent, past, inlineLabel = false }) {
+function DateRow({ s, icon, label, date, title, urgent, past }) {
+  const valueStyle = {
+    ...s.dateValue,
+    ...(urgent ? { color: s.cs.urgent.text, fontWeight: 700 } : {}),
+    ...(past ? { color: s.dateLabel.color } : {}),
+  };
+
   return (
     <div style={{ ...s.dateRow, ...(urgent ? s.dateRowUrgent : {}), ...(past ? s.dateRowPast : {}) }}>
       <span style={s.dateIcon}>{icon}</span>
-      {!inlineLabel && <span style={s.dateLabel}>{label}:</span>}
-      <span style={{ ...s.dateValue, ...(urgent ? { color: s.cs.urgent.text, fontWeight: 700 } : {}), ...(past ? { color: s.dateLabel.color } : {}) }}>
-        {date ? (
-          <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <span>{inlineLabel ? `${label}: ` : ""}{formatDate(date)}</span>
-            {title && <span>{title}</span>}
-          </span>
-        ) : inlineLabel ? `${label}: لا يوجد` : "لا يوجد"}
-      </span>
+      <div style={s.dateContent}>
+        <div style={s.datePrimary}>
+          <span style={s.dateLabel}>{label}:</span>
+          <span style={valueStyle}>{date ? formatDate(date) : "لا يوجد"}</span>
+        </div>
+        {title && (
+          <div style={s.dateTitle} title={title}>{title}</div>
+        )}
+      </div>
     </div>
   );
 }
@@ -666,6 +675,8 @@ const responsiveStyles = `
   @media (max-width: 768px) {
     .dashboard-stats-bar { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
     .dashboard-stats-bar > div { justify-content: center !important; }
+    .dashboard-grid { grid-template-columns: minmax(0, 1fr) !important; }
+    .dashboard-case-content { padding: 16px !important; }
   }
   @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 `;

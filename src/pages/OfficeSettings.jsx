@@ -7,6 +7,7 @@ import { db } from '../firebaseDb.js';
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { Button, Card, Page, Section, Input } from '../components/ui';
 import BackupTab from '../components/backup/BackupTab';
+import { backfillAllCaseNotificationSummaries } from '../services/backfillCaseNotificationSummaries';
 import {
   Palette, Building2, Bell, Users, Check, Save, Loader2,
   Phone, Mail, MapPin, User, Shield, Trash2, Plus, X,
@@ -88,6 +89,14 @@ export default function OfficeSettings() {
     caseStatusChange: true,
     newMessage: true,
     reminderHours: 24,
+  });
+  const [summaryBackfill, setSummaryBackfill] = useState({
+    running: false,
+    processed: 0,
+    updated: 0,
+    skipped: 0,
+    done: false,
+    error: '',
   });
 
   // ── Users tab state ──
@@ -215,6 +224,49 @@ export default function OfficeSettings() {
       console.error('Save notifications failed:', e);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // ── تعبئة ملخصات إشعارات القضايا الحالية على دفعات ──
+  const handleBackfillSummaries = async () => {
+    if (!userData?.officeId || summaryBackfill.running) return;
+
+    setSummaryBackfill({
+      running: true,
+      processed: 0,
+      updated: 0,
+      skipped: 0,
+      done: false,
+      error: '',
+    });
+
+    try {
+      const result = await backfillAllCaseNotificationSummaries(
+        userData.officeId,
+        {
+          pageSize: 50,
+          onProgress: (progress) => {
+            setSummaryBackfill((previous) => ({
+              ...previous,
+              ...progress,
+              running: !progress.done,
+            }));
+          },
+        }
+      );
+
+      setSummaryBackfill({
+        running: false,
+        ...result,
+        error: '',
+      });
+    } catch (error) {
+      console.error('Notification summary backfill failed:', error);
+      setSummaryBackfill((previous) => ({
+        ...previous,
+        running: false,
+        error: 'توقفت التعبئة. يمكنك إعادة المحاولة؛ القضايا المكتملة لن تُعاد كتابتها.',
+      }));
     }
   };
 
@@ -379,6 +431,8 @@ export default function OfficeSettings() {
           <NotificationsTab
             settings={notifSettings}
             setSettings={setNotifSettings}
+            summaryBackfill={summaryBackfill}
+            onBackfill={handleBackfillSummaries}
           />
         )}
 
@@ -669,7 +723,7 @@ function GeneralTab({ officeInfo, setOfficeInfo, loading }) {
 /* ═══════════════════════════════════════════════════════════════
    NOTIFICATIONS TAB
    ═══════════════════════════════════════════════════════════════ */
-function NotificationsTab({ settings, setSettings }) {
+function NotificationsTab({ settings, setSettings, summaryBackfill, onBackfill }) {
   const { theme } = useTheme();
   const { colors } = theme;
 
@@ -739,6 +793,41 @@ function NotificationsTab({ settings, setSettings }) {
             <option value={48}>48 ساعة</option>
           </select>
         </div>
+      </div>
+
+      {/* تعبئة أولية فقط؛ لا تغيّر قواعد الإشعارات أو مصدر مزامنتها الحالي */}
+      <div style={{ marginTop: 24, paddingTop: 20, borderTop: `1px solid ${colors.border.default}` }}>
+        <div style={{ fontSize: 14, color: colors.text.primary, fontWeight: 500 }}>
+          تجهيز ملخصات إشعارات القضايا
+        </div>
+        <div style={{ fontSize: 12, color: colors.text.muted, marginTop: 4, lineHeight: 1.7 }}>
+          تعبئة القضايا الحالية على دفعات. لا تؤثر في الجلسات أو الإشعارات الحالية.
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 14 }}>
+          <Button
+            onClick={onBackfill}
+            disabled={summaryBackfill.running}
+            variant="secondary"
+            icon={summaryBackfill.running ? Loader2 : DatabaseBackup}
+          >
+            {summaryBackfill.running ? 'جاري تجهيز القضايا...' : 'بدء تجهيز القضايا الحالية'}
+          </Button>
+          {(summaryBackfill.processed > 0 || summaryBackfill.done) && (
+            <span style={{ fontSize: 12, color: colors.text.muted }}>
+              تمت معالجة {summaryBackfill.processed} قضية، وتحديث {summaryBackfill.updated}، وتخطي {summaryBackfill.skipped}
+            </span>
+          )}
+        </div>
+        {summaryBackfill.done && !summaryBackfill.error && (
+          <div style={{ marginTop: 10, fontSize: 13, color: colors.accent.green.main }}>
+            اكتملت تعبئة ملخصات قضايا المكتب.
+          </div>
+        )}
+        {summaryBackfill.error && (
+          <div style={{ marginTop: 10, fontSize: 13, color: colors.accent.red.main }}>
+            {summaryBackfill.error}
+          </div>
+        )}
       </div>
     </Card>
   );

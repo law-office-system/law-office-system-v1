@@ -49,32 +49,32 @@ const getCachedClientNames = async (clientIds, officeId) => {
     }
   });
 
-  // ✅ جلب فردي: كل مستند بيتقيّم لوحده — المرفوض أو المكتب الآخر يتخطى بدون إيقاف الباقي
-  for (const id of uncachedIds) {
-    try {
-      const snap = await getDoc(doc(db, "clientProfiles", id));
-      if (!snap.exists()) continue;
+  // جلب المستندات المستقلة بالتوازي، مع تقييم كل مستند على حدة.
+  await Promise.all(
+    uncachedIds.map(async (id) => {
+      try {
+        const snap = await getDoc(doc(db, "clientProfiles", id));
+        if (!snap.exists()) return;
 
-      const data = snap.data();
-      if (data.officeId !== officeId) continue;
+        const data = snap.data();
+        if (data.officeId !== officeId) return;
 
-      const name = data.fullName || data.name || "موكل";
-      const cacheKey = `${officeId}_${id}`;
+        const name = data.fullName || data.name || "موكل";
+        const cacheKey = `${officeId}_${id}`;
 
-      result[id] = name;
-
-      clientNamesCache.set(cacheKey, {
-        name,
-        timestamp: now,
-      });
-    } catch (error) {
-      // ✅ FIX: تجاهل permission-denied بصمت —
-      // مستند غير موجود أو موكل من مكتب شريك في قضية مشتركة = نتخطاه طبيعيًا
-      if (error?.code !== "permission-denied") {
-        console.error("❌ Error fetching client names:", error);
+        result[id] = name;
+        clientNamesCache.set(cacheKey, {
+          name,
+          timestamp: now,
+        });
+      } catch (error) {
+        // مستند مرفوض أو موكل من مكتب شريك لا يوقف باقي المزامنة.
+        if (error?.code !== "permission-denied") {
+          console.error("❌ Error fetching client names:", error);
+        }
       }
-    }
-  }
+    })
+  );
 
   return result;
 };
@@ -156,15 +156,31 @@ export const deleteNotificationsForSession = async (
 // المزامنة الرئيسية للإشعارات
 // ============================================================
 export const syncNotifications = async (
-  cases,
-  adminTasks = [],
-  judgments = [],
+  cases = null,
+  adminTasks = null,
+  judgments = null,
   officeId
 ) => {
   if (!officeId) {
     console.warn(
       "⚠️ Notification sync skipped: officeId is missing"
     );
+    return;
+  }
+
+  // وجود المصفوفة يعني أن المصدر حُمّل فعلًا ويمكن مزامنة نوعه وحذف القديم منه.
+  // أما null فتعني أن المصدر لم يُحمّل، ولذلك يجب ترك إشعاراته دون تغيير.
+  const syncCases = Array.isArray(cases);
+  const syncTasks = Array.isArray(adminTasks);
+  const syncJudgments = Array.isArray(judgments);
+
+  const shouldManageType = (type) =>
+    (type === "late" && syncCases) ||
+    (type === "admin_task" && syncTasks) ||
+    (type === "judgment" && syncJudgments);
+
+  if (!syncCases && !syncTasks && !syncJudgments) {
+    console.warn("⚠️ Notification sync skipped: no source data provided");
     return;
   }
 
@@ -229,8 +245,8 @@ export const syncNotifications = async (
     // 5. توليد الإشعارات (generateNotifications الجديد بفلاتر القضايا المنتهية والجلسات البائتة)
     const generatedNotifications = generateNotifications(
       casesWithNames,
-      adminTasks,
-      judgments,
+      syncTasks ? adminTasks : [],
+      syncJudgments ? judgments : [],
       settings
     );
 
@@ -261,50 +277,32 @@ export const syncNotifications = async (
     existingSnapshot.docs.forEach((notificationDoc) => {
       const data = notificationDoc.data();
 
+      // لا ندير إلا إشعارات الأنواع التي حُمّل مصدرها في هذه المزامنة.
+      // الرسائل والإشعارات اليدوية والمستندات بلا معرف منطقي تبقى كما هي.
+      if (!data.id || !shouldManageType(data.type)) return;
+
       existingMap.set(data.id, {
-        firestoreId: notificationDoc.id,
         ...data,
+        firestoreId: notificationDoc.id,
       });
     });
 
-    const batch = writeBatch(db);
-
-    let opsCount = 0;
+    const operations = [];
     const MAX_BATCH = 450;
 
-    // 7. حذف الإشعارات القديمة غير الموجودة في الناتج الجديد
-    //    (هنا يُمسح تلقائيًا أي إشعار "جلسة من سنة لقضية منتهية" لأن
-    //     generateNotifications الجديد لم يعد يُنتجه أصلًا)
+    // 7. حذف القديم فقط داخل الأنواع التي حُمّل مصدرها.
     for (const [id, existing] of existingMap) {
       if (!generatedIds.has(id)) {
-        if (opsCount >= MAX_BATCH) {
-          console.warn(
-            "⚠️ Batch limit reached while deleting notifications"
-          );
-          break;
-        }
-
-        batch.delete(
-          doc(db, "notifications", existing.firestoreId)
-        );
-
-        opsCount++;
+        operations.push({
+          method: "delete",
+          ref: doc(db, "notifications", existing.firestoreId),
+        });
       }
     }
 
-    // 8. إضافة الإشعارات الجديدة وتحديث المتغير منها
+    // 8. إضافة الإشعارات الجديدة وتحديث المتغير منها.
     for (const newNotification of generatedForOffice) {
-      if (opsCount >= MAX_BATCH) {
-        console.warn(
-          "⚠️ Batch limit reached; remaining notifications skipped"
-        );
-        break;
-      }
-
-      if (!newNotification.id) {
-        console.warn(
-          "⚠️ Skipping notification without an ID"
-        );
+      if (!newNotification.id || !shouldManageType(newNotification.type)) {
         continue;
       }
 
@@ -314,12 +312,9 @@ export const syncNotifications = async (
         const needsUpdate =
           existing.message !== newNotification.message ||
           existing.type !== newNotification.type ||
-          existing.sessionDate !==
-            (newNotification.sessionDate || null) ||
-          existing.dueDate !==
-            (newNotification.dueDate || null) ||
-          existing.judgmentDate !==
-            (newNotification.judgmentDate || null) ||
+          existing.sessionDate !== (newNotification.sessionDate || null) ||
+          existing.dueDate !== (newNotification.dueDate || null) ||
+          existing.judgmentDate !== (newNotification.judgmentDate || null) ||
           existing.caseNumber !== newNotification.caseNumber ||
           existing.caseCourt !==
             (newNotification.caseCourt || newNotification.court || null) ||
@@ -327,62 +322,71 @@ export const syncNotifications = async (
             JSON.stringify(newNotification.clientNames || []) ||
           JSON.stringify(existing.opponentNames || []) !==
             JSON.stringify(newNotification.opponentNames || []) ||
-          existing.daysLate !==
-            (newNotification.daysLate || null) ||
-          existing.taskTitle !==
-            (newNotification.taskTitle || null) ||
-          existing.judgmentTitle !==
-            (newNotification.judgmentTitle || null) ||
+          existing.daysLate !== (newNotification.daysLate || null) ||
+          existing.taskTitle !== (newNotification.taskTitle || null) ||
+          existing.judgmentTitle !== (newNotification.judgmentTitle || null) ||
           existing.judgmentCategory !==
             (newNotification.judgmentCategory || null);
 
         if (needsUpdate) {
-          batch.update(
-            doc(db, "notifications", existing.firestoreId),
-            {
+          operations.push({
+            method: "update",
+            ref: doc(db, "notifications", existing.firestoreId),
+            data: {
               message: newNotification.message,
               type: newNotification.type,
               sessionDate: newNotification.sessionDate || null,
               dueDate: newNotification.dueDate || null,
               judgmentDate: newNotification.judgmentDate || null,
               caseNumber: newNotification.caseNumber,
-              caseCourt: newNotification.caseCourt || newNotification.court || null,
+              caseCourt:
+                newNotification.caseCourt || newNotification.court || null,
               clientNames: newNotification.clientNames || [],
               opponentNames: newNotification.opponentNames || [],
               daysLate: newNotification.daysLate || null,
               taskTitle: newNotification.taskTitle || null,
               judgmentTitle: newNotification.judgmentTitle || null,
-              judgmentCategory:
-                newNotification.judgmentCategory || null,
+              judgmentCategory: newNotification.judgmentCategory || null,
               updatedAt: serverTimestamp(),
-            }
-          );
-
-          opsCount++;
+            },
+          });
         }
       } else {
-        const newDocRef = doc(
-          collection(db, "notifications")
-        );
-
-        batch.set(newDocRef, {
-          ...newNotification,
-          officeId,
-          isReadBy: {},
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
+        operations.push({
+          method: "set",
+          ref: doc(collection(db, "notifications")),
+          data: {
+            ...newNotification,
+            officeId,
+            isReadBy: {},
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          },
         });
-
-        opsCount++;
       }
     }
 
-    // 9. تنفيذ التغييرات عند وجود عمليات
-    if (opsCount > 0) {
-      await batch.commit();
+    // 9. تنفيذ كل العمليات على دفعات؛ لا يتم تجاهل ما يتجاوز 450.
+    for (let index = 0; index < operations.length; index += MAX_BATCH) {
+      const batch = writeBatch(db);
+      const chunk = operations.slice(index, index + MAX_BATCH);
 
+      chunk.forEach((operation) => {
+        if (operation.method === "delete") {
+          batch.delete(operation.ref);
+        } else if (operation.method === "update") {
+          batch.update(operation.ref, operation.data);
+        } else {
+          batch.set(operation.ref, operation.data);
+        }
+      });
+
+      await batch.commit();
+    }
+
+    if (operations.length > 0) {
       console.log(
-        `✅ Notifications synced successfully: ${opsCount} operations`
+        `✅ Notifications synced successfully: ${operations.length} operations`
       );
     } else {
       console.log(
@@ -394,5 +398,6 @@ export const syncNotifications = async (
       "❌ Error syncing notifications:",
       error
     );
+    throw error;
   }
 };

@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useEffect, useCallback, useRef, lazy, Suspense, useState, memo } from "react";
+import { lazy, Suspense, memo } from "react";
 import { useAuth } from "./context/AuthContext";
 
 import Layout from "./components/Layout";
@@ -58,6 +58,7 @@ const OfficeSettings = lazy(() => import("./pages/OfficeSettings"));
 
 import './styles/chat-animations.css';
 import { AuthProvider } from "./context/AuthContext";
+import { NotificationsProvider } from "./context/NotificationsContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import "./App.css";
 
@@ -94,76 +95,6 @@ const LoadingScreen = memo(function LoadingScreen() {
   );
 });
 
-/* ================= OPTIMIZED NOTIFICATION SYNC ================= */
-function NotificationSync() {
-  const { userData } = useAuth();
-  const [isSyncing, setIsSyncing] = useState(false);
-  const lastSyncRef = useRef(0);
-  const syncTimeoutRef = useRef(null);
-
-  const checkAndSync = useCallback(async () => {
-    if (!userData?.officeId || isSyncing) return;
-
-    const now = Date.now();
-    if (now - lastSyncRef.current < 5 * 60 * 1000) return;
-
-    setIsSyncing(true);
-    try {
-      const { collection, query, where, getDocs } = await import("firebase/firestore");
-      const { db } = await import("./firebaseDb");
-      const { syncNotifications } = await import("./utils/syncNotifications");
-
-      const casesQuery = query(
-        collection(db, "cases"), 
-        where("officeId", "==", userData.officeId)
-      );
-      const snapshot = await getDocs(casesQuery);
-      const cases = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-
-      await syncNotifications(cases, [], [], userData.officeId);
-      lastSyncRef.current = Date.now();
-    } catch (err) {
-      console.error("❌ Notification sync failed:", err.message);
-    } finally {
-      setIsSyncing(false);
-    }
-  }, [userData?.officeId, isSyncing]);
-
-  useEffect(() => {
-    if (!userData?.officeId) return;
-
-    const initialTimer = setTimeout(() => {
-      checkAndSync();
-    }, 3000);
-
-    const interval = setInterval(() => {
-      if (!document.hidden) {
-        checkAndSync();
-      }
-    }, 15 * 60 * 1000);
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
-        syncTimeoutRef.current = setTimeout(() => {
-          checkAndSync();
-        }, 30000);
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      clearTimeout(initialTimer);
-      clearInterval(interval);
-      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [userData?.officeId, checkAndSync]);
-
-  return null;
-}
-
 /* ================= HOME REDIRECT (memo) ================= */
 const HomeRedirect = memo(function HomeRedirect() {
   const { user, userData, loading } = useAuth();
@@ -189,9 +120,9 @@ export default function App() {
       <AuthProvider>
         <ThemeProvider>
           <BrowserRouter>
-            <Suspense fallback={<LoadingScreen />}>
-              <NotificationSync />
-              <Routes>
+            <NotificationsProvider>
+              <Suspense fallback={<LoadingScreen />}>
+                <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -240,8 +171,9 @@ export default function App() {
                   <Route path="offices" element={<OfficesManagement />} />
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </Suspense>
+                </Routes>
+              </Suspense>
+            </NotificationsProvider>
           </BrowserRouter>
         </ThemeProvider>
       </AuthProvider>

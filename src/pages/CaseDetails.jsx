@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Shield, RotateCcw, LayoutGrid, Calendar, Gavel, Briefcase, FileArchive } from "lucide-react";
 import {
   doc, onSnapshot, getDoc, updateDoc, collection,
-  query, where, addDoc
+  query, where, addDoc, serverTimestamp
 } from "firebase/firestore";
 import CaseHeader from "../components/case/details/CaseHeader";
 import CaseOverviewTab from "../components/case/details/CaseOverviewTab";
@@ -16,6 +16,7 @@ import { useAuth } from "../context/AuthContext";
 import { db } from "../firebaseDb";
 import { useTheme } from "../context/ThemeContext.jsx";
 import { isAdminRole, normalizeDate, sortSessionsByDate, validateTenant } from "../utils/caseHelpers";
+import { buildCaseNotificationSummary } from "../utils/caseNotificationSummary";
 
 // ============================================================
 // صفحة تفاصيل القضية — نسخة مُعاد هيكلتها
@@ -385,6 +386,23 @@ export default function CaseDetails() {
   const safeClients = useMemo(() => caseData?.clients || [], [caseData?.clients]);
   const safeOpponents = useMemo(() => caseData?.opponents || [], [caseData?.opponents]);
 
+  // كتابة الجلسات وملخص إشعارها معًا؛ لا نحتاج قراءة إضافية أو كتابة منفصلة.
+  const updateSessionsWithSummary = useCallback(async (updatedSessions) => {
+    const notificationSummary = buildCaseNotificationSummary({
+      ...caseData,
+      id,
+      sessions: updatedSessions,
+    });
+
+    await updateDoc(doc(db, "cases", id), {
+      sessions: updatedSessions,
+      notificationSummary: {
+        ...notificationSummary,
+        updatedAt: serverTimestamp(),
+      },
+    });
+  }, [caseData, id]);
+
   const levelSessions = useMemo(() => {
     if (!selectedLevel) return [];
 
@@ -578,7 +596,7 @@ export default function CaseDetails() {
         }
       }
 
-      await updateDoc(doc(db, "cases", id), { sessions: updatedSessions });
+      await updateSessionsWithSummary(updatedSessions);
 
       // ✅ تحديث عدّاد جلسات الدرجة (لا ينطبق على الدرجة الافتراضية الوهمية legacy_*)
       if (!editingSession && targetLevelId && !String(targetLevelId).startsWith('legacy_')) {
@@ -615,18 +633,18 @@ export default function CaseDetails() {
       console.error("Error saving session:", err);
       setError("حدث خطأ أثناء حفظ الجلسة. يرجى المحاولة مرة أخرى.");
     }
-  }, [editingSession, safeSessions, id, selectedLevel, activeLevel, userData, caseData]);
+  }, [editingSession, safeSessions, id, selectedLevel, activeLevel, userData, caseData, updateSessionsWithSummary]);
 
   const handleDeleteSession = useCallback(async (sessionId) => {
     if (!window.confirm("هل تريد حذف هذه الجلسة وكل ما يتعلق بها نهائياً؟")) return;
     try {
       const updated = safeSessions.filter(s => s.id !== sessionId);
-      await updateDoc(doc(db, "cases", id), { sessions: updated });
+      await updateSessionsWithSummary(updated);
     } catch (err) {
       console.error("Error deleting session:", err);
       setError("حدث خطأ أثناء حذف الجلسة");
     }
-  }, [safeSessions, id]);
+  }, [safeSessions, updateSessionsWithSummary]);
 
   const handleEditSession = useCallback((session) => {
     setEditingSession(session);
@@ -742,7 +760,7 @@ export default function CaseDetails() {
         }
       }
 
-      await updateDoc(doc(db, "cases", id), { sessions: updatedSessions });
+      await updateSessionsWithSummary(updatedSessions);
 
       setShowDecisionForm(false);
       setLinkedSessionForDecision(null);
@@ -750,7 +768,7 @@ export default function CaseDetails() {
       console.error("Error saving decision:", err);
       setError("حدث خطأ أثناء حفظ القرار وإنشاء الجلسة القادمة");
     }
-  }, [linkedSessionForDecision, id, selectedLevel, activeLevel, userData, caseData, safeSessions]);
+  }, [linkedSessionForDecision, id, selectedLevel, activeLevel, userData, caseData, safeSessions, updateSessionsWithSummary]);
 
   const handleAddJudgmentFromSession = useCallback((session) => {
     setLinkedSessionForJudgment(session);
