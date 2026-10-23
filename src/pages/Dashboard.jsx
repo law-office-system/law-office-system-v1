@@ -86,8 +86,8 @@ function useDashboardStyles(theme) {
       dateRowUrgent: { background: cs.urgent.bg, margin: "-4px -8px", padding: 8, borderRadius: 6, border: `1px solid ${cs.urgent.border}` },
       dateRowPast: { opacity: 0.8 },
       dateIcon: { fontSize: 14, opacity: 0.6 },
-      dateLabel: { color: c.text.muted, fontWeight: 500, minWidth: 55 },
-      dateValue: { color: c.text.primary, fontWeight: 600 },
+      dateLabel: { color: c.text.muted, fontWeight: 500, minWidth: 55, flexShrink: 0 },
+      dateValue: { color: c.text.primary, fontWeight: 600, flex: 1, minWidth: 0, overflowWrap: "anywhere", lineHeight: 1.6 },
       cardActions: { display: "flex", gap: 8, paddingTop: 12, borderTop: `1px solid ${c.border.default}` },
       viewBtn: { ...theme.button.base, flex: 1, background: c.bg.card, color: c.text.primary, border: `1px solid ${c.border.default}` },
       editBtn: { ...theme.button.secondary, flex: 1 },
@@ -162,11 +162,32 @@ export default function Dashboard() {
   // ── دوال مساعدة ──
   const isUrgent = useCallback((d) => !!d && d >= today && d <= tomorrow, [today, tomorrow]);
 
-  const getUpcomingSessionDate = useCallback((sessions) => {
+  const getUpcomingSession = useCallback((sessions) => {
     if (!Array.isArray(sessions) || !sessions.length) return null;
-    const dates = sessions.map(x => parseDate(x.nextSessionDate || x.date)).filter(d => d && d >= today);
-    return dates.length ? dates.sort((a, b) => a - b)[0] : null;
+
+    return sessions
+      .map(session => ({
+        ...session,
+        parsedDate: parseDate(session.nextSessionDate || session.date),
+      }))
+      .filter(session => session.parsedDate && session.parsedDate >= today)
+      .sort((a, b) => a.parsedDate - b.parsedDate)[0] || null;
   }, [today]);
+
+  const getUpcomingSessionDate = useCallback(
+    (sessions) => getUpcomingSession(sessions)?.parsedDate || null,
+    [getUpcomingSession]
+  );
+
+  const getSessionTitle = useCallback((session) => {
+    if (!session) return "";
+    return String(
+      session.nextSessionTitle ||
+      session.sessionTitle ||
+      session.title ||
+      ""
+    ).trim();
+  }, []);
 
   const getPreviousSessionDate = useCallback((sessions) => {
     if (!Array.isArray(sessions) || !sessions.length) return null;
@@ -538,7 +559,9 @@ export default function Dashboard() {
       {/* شبكة القضايا */}
       <div style={s.grid}>
         {sortedCases.map(c => {
-          const upcoming = getUpcomingSessionDate(c.sessions);
+          const upcomingSession = getUpcomingSession(c.sessions);
+          const upcoming = upcomingSession?.parsedDate || null;
+          const upcomingTitle = getSessionTitle(upcomingSession);
           const previous = getPreviousSessionDate(c.sessions);
           const urgent = isUrgent(upcoming);
           const clientNames = Array.isArray(c.clients)
@@ -570,8 +593,8 @@ export default function Dashboard() {
                   {(c.circuit || lv.circuit) && <Row s={s} icon="⚡" label="الدائرة" value={c.circuit || lv.circuit} />}
                 </div>
                 <div style={s.datesBox}>
-                  <DateRow s={s} icon={Icons.calendar} label="القادمة" date={upcoming} urgent={urgent} />
-                  {previous && <DateRow s={s} icon={Icons.clock} label="السابقة" date={previous} past />}
+                  <DateRow s={s} icon={Icons.calendar} label="الجلسة القادمة" date={upcoming} title={upcomingTitle} urgent={urgent} inlineLabel />
+                  {previous && <DateRow s={s} icon={Icons.clock} label="الجلسة السابقة" date={previous} past />}
                 </div>
                 <div style={s.cardActions}>
                   <button style={s.viewBtn} onClick={e => { e.stopPropagation(); navigate(`/case/${c.id}`); }}>{Icons.view} فتح الملف</button>
@@ -621,13 +644,18 @@ function Row({ s, icon, label, value }) {
   );
 }
 
-function DateRow({ s, icon, label, date, urgent, past }) {
+function DateRow({ s, icon, label, date, title, urgent, past, inlineLabel = false }) {
   return (
     <div style={{ ...s.dateRow, ...(urgent ? s.dateRowUrgent : {}), ...(past ? s.dateRowPast : {}) }}>
       <span style={s.dateIcon}>{icon}</span>
-      <span style={s.dateLabel}>{label}:</span>
+      {!inlineLabel && <span style={s.dateLabel}>{label}:</span>}
       <span style={{ ...s.dateValue, ...(urgent ? { color: s.cs.urgent.text, fontWeight: 700 } : {}), ...(past ? { color: s.dateLabel.color } : {}) }}>
-        {date ? formatDate(date) : "لا يوجد"}
+        {date ? (
+          <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span>{inlineLabel ? `${label}: ` : ""}{formatDate(date)}</span>
+            {title && <span>{title}</span>}
+          </span>
+        ) : inlineLabel ? `${label}: لا يوجد` : "لا يوجد"}
       </span>
     </div>
   );
