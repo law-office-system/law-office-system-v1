@@ -47,15 +47,10 @@ export default function Users() {
 
         const allUsers = usersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-        // ✅ إظهار المنضمين بالبريد الإلكتروني فقط
-        // (joinMethod للمستخدمين الجدد + وجود بريد فعلي للمستخدمين الحاليين)
-        const emailOnlyUsers = allUsers.filter(
-          (u) =>
-            u.joinMethod === "email" ||
-            (u.email && u.email.trim() !== "")
-        );
-
-        setUsers(emailOnlyUsers);
+        // كل من ينتمي إلى المكتب يظهر هنا، حتى إذا لم يكن لديه بريد
+        // مسجل في ملفه أو joinMethod بالصيغة المتوقعة. الاستعلام أعلاه
+        // مقيّد بـ officeId، لذلك لا يؤدي ذلك إلى إظهار مستخدمي مكتب آخر.
+        setUsers(allUsers);
         setOffice(officeSnap.exists() ? officeSnap.data() : null);
       } catch (error) {
         console.error("Fetch Users Error:", error);
